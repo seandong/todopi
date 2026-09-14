@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `f767d79`（harness 初始化本身尚未提交；提交后更新本行）
+- Last commit: `f2a89d4` —— harness 初始化。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-sync /
   arch-rules（3 条通过、3 条不适用）/ typecheck（`not_applicable`）
 - `make test`: `not_applicable` —— 尚无 `tests/` 与 `src/`
@@ -46,6 +46,8 @@
 ## 更新约定
 
 - Current State 每次 clock-out 必须更新，至少包含 commit 与 `make check` 结果。
+  `Last commit` 写的是写这行时的 HEAD；`make clean-check` 校验它在当前历史中，
+  并校验最后一个 commit 确实带上了本文件。
 - 一个 session 结束时若 VCR < 1.0，必须在 In Progress 写明卡在哪一层、
   下一步要跑什么命令。
 - 本文件记录**状态**，不记录决策理由。理由写进 [DECISIONS.md](DECISIONS.md)。

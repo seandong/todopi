@@ -598,13 +598,22 @@ cmd_clean_check() {
       emit state-updated fail "工作区有改动但 $PROGRESS 未更新。clock-out 必须刷新 Current State 与 Next Steps"
     fi
   else
-    local rec cur
+    # 工作区干净 = 工作已提交。此时不能要求 "Last commit == HEAD"：
+    # 更新 PROGRESS 本身就会产生新 commit，sha 又变了，这个条件永远无法满足。
+    # 可满足且有意义的条件是这两个：
+    #   1. 最后一个 commit 确实带上了 PROGRESS.md（状态没有掉队）
+    #   2. PROGRESS.md 记录的 Last commit 在当前历史里（不是随手写的过期值）
+    local rec touched
     rec="$(grep -oE 'Last commit: `[0-9a-f]+`' "$PROGRESS" | head -1 | tr -d '`' | awk '{print $3}')"
-    cur="$(git rev-parse --short HEAD 2>/dev/null)"
-    if [ -n "$rec" ] && [ "${cur#"$rec"}" != "$cur" ]; then
-      emit state-updated pass "$PROGRESS 的 Last commit 与 HEAD 一致（${rec}）"
+    touched="$(git show --name-only --format= HEAD 2>/dev/null | grep -Fx "$PROGRESS" || true)"
+    if [ -z "$touched" ]; then
+      emit state-updated fail "最后一个 commit 没有包含 ${PROGRESS}。clock-out 必须把状态和代码放进 same commit"
+    elif [ -z "$rec" ]; then
+      emit state-updated fail "${PROGRESS} 里找不到 Last commit 行"
+    elif git merge-base --is-ancestor "$rec" HEAD >/dev/null 2>&1; then
+      emit state-updated pass "${PROGRESS} 随 HEAD 一同提交，记录的 Last commit=${rec} 在当前历史中"
     else
-      emit state-updated fail "$PROGRESS 记录的 Last commit=$rec 与 HEAD=$cur 不一致，状态已过期"
+      emit state-updated fail "${PROGRESS} 记录的 Last commit=${rec} 不在当前历史中，是过期或错误的值"
     fi
   fi
 

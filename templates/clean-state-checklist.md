@@ -17,7 +17,9 @@
 
 ## 3. 状态文件已更新
 
-- `PROGRESS.md` 的 Current State 反映当前 commit 与 `make check` 结果
+- `PROGRESS.md` 的 Current State 反映本次工作所基于的 commit 与 `make check` 结果。
+  `Last commit:` 写的是**写这行时的 HEAD**，提交后它自然成为新 HEAD 的祖先——
+  不要试图让它等于自己所在的那个 commit，那个条件永远无法满足
 - `PROGRESS.md` 的 Next Steps 是下一个 session 可直接执行的动作，不是「继续做」
 - 有 feature 完成时，`feature_list.json` 的 `state` 与 `evidence` 由
   `make verify-feature` 写入，不是手工改的
