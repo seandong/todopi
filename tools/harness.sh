@@ -13,6 +13,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 2
 
 RESULTS_DIR=".harness-results"
+LAST_OVERALL=""   # 最近一次 check/test/e2e 的 overall，供 ci 汇总读取
 FEATURES="feature_list.json"
 ARCH_RULES=".harness/arch-rules.json"
 PROGRESS="PROGRESS.md"
@@ -134,13 +135,17 @@ check_prd_sync() {
 }
 
 check_typecheck() {
+  # 绝不自动安装。`bunx tsc` 会联网下载 TypeScript 并写 lockfile——
+  # 一个会改动仓库的验证命令，比没有验证更危险。
   if [ ! -d src ]; then
     emit typecheck not_applicable "仓库尚无 src/，无代码可做类型检查"
-  elif ! have bun; then
-    emit typecheck blocked "需要类型检查但环境缺少 bun；安装：curl -fsSL https://bun.sh/install | bash"
+  elif [ ! -f tsconfig.json ]; then
+    emit typecheck blocked "src/ 已存在但缺少 tsconfig.json，无法确定类型检查配置"
+  elif [ ! -x node_modules/.bin/tsc ]; then
+    emit typecheck blocked "缺少本地 typescript 依赖（harness 不会自动安装）；先跑 ./init.sh 或 bun install"
   else
     local out
-    if out="$(bunx tsc --noEmit 2>&1)"; then
+    if out="$(node_modules/.bin/tsc --noEmit 2>&1)"; then
       emit typecheck pass "tsc --noEmit 通过"
     else
       emit typecheck fail "tsc --noEmit 失败：$(printf '%s' "$out" | head -5 | tr '\n' ' ')"
@@ -361,6 +366,7 @@ cmd_check() {
   checks_done
 
   printf '\n  结果已写入 %s\n' "$out"
+  LAST_OVERALL="$overall"
   print_overall "$overall" "check"
   [ "$overall" = "pass" ]
 }
@@ -394,6 +400,7 @@ cmd_test() {
     fi
   fi
   local overall; overall="$(checks_overall)"; checks_done
+  LAST_OVERALL="$overall"
   print_overall "$overall" "test"
   case "$overall" in pass|not_applicable) return 0 ;; *) return 1 ;; esac
 }
@@ -414,6 +421,7 @@ cmd_e2e() {
     fi
   fi
   local overall; overall="$(checks_overall)"; checks_done
+  LAST_OVERALL="$overall"
   print_overall "$overall" "e2e"
   case "$overall" in pass|not_applicable) return 0 ;; *) return 1 ;; esac
 }
@@ -639,26 +647,25 @@ cmd_clean_check() {
 cmd_ci() {
   have jq || die "ci 需要 jq"
   mkdir -p "$RESULTS_DIR"
-  local rc_check=0 rc_test=0 rc_e2e=0
-  cmd_check   || rc_check=1
-  cmd_test    || rc_test=1
-  cmd_e2e     || rc_e2e=1
-
-  local last overall
-  last="$(ls -1t "$RESULTS_DIR"/check-*.json 2>/dev/null | head -1)"
-  overall="$([ -n "$last" ] && jq -r .overall "$last" || echo unknown)"
+  local rc_check=0 rc_test=0 rc_e2e=0 l1 l2 l3
+  cmd_check   || rc_check=1 ; l1="$LAST_OVERALL"
+  cmd_test    || rc_test=1  ; l2="$LAST_OVERALL"
+  cmd_e2e     || rc_e2e=1   ; l3="$LAST_OVERALL"
 
   {
     echo "## todopi harness — CI scope"
     echo
-    echo "| 层 | 结果 |"
+    echo "| 层 | overall |"
     echo "|---|---|"
-    echo "| Layer 1 静态 | \`$overall\` |"
-    echo "| Layer 2 运行时 | $([ "$rc_test" -eq 0 ] && echo '未失败' || echo '`fail`') |"
-    echo "| Layer 3 系统 | $([ "$rc_e2e" -eq 0 ] && echo '未失败' || echo '`fail`') |"
+    echo "| Layer 1 静态 | \`$l1\` |"
+    echo "| Layer 2 运行时 | \`$l2\` |"
+    echo "| Layer 3 系统 | \`$l3\` |"
     echo
-    echo "CI 只跑不依赖真机与交互的层。真机行为、CLI 交互与人工判断的 diff 聚焦度"
-    echo "在 CI 记为 \`not_run\`——\`not_run\` 不满足任何 Gate，也不等于通过。"
+    echo "表中是各层真实的 overall 状态词，不做模糊表述。\`not_applicable\` 表示这一层"
+    echo "一个检查都没执行，它不等于通过；\`blocked\` 表示本该执行但环境不具备。"
+    echo
+    echo "CI 只跑不依赖真机与交互的层。CLI 交互与人工判断的 diff 聚焦度在 CI 记为"
+    echo "\`not_run\`——\`not_run\` 不满足任何 Gate，也不等于通过。"
     echo "状态词汇定义见 \`docs/harness/verification.md\`。"
   } > "$RESULTS_DIR/ci-summary.md"
 

@@ -11,9 +11,9 @@
 - `make test`: `not_applicable` —— 尚无 `tests/` 与 `src/`
 - `make e2e`: `not_applicable` —— 尚无可执行 CLI
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
-- `make audit`（课程校验器）: CRITICAL 6/7，RECOMMENDED 50/66。唯一的 CRITICAL
-  FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省，见
-  `docs/harness/index.md` 的「有意缺省的部分」
+- `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
+  CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省。
+  其余 WARN 项同样是有意偏差，逐条见 `docs/harness/index.md` 的「有意缺省的部分」
 - VCR: `n/a` —— 尚无 activated feature
 - 代码状态：**implementation has not started**。仓库中只有产品文档、格式规格和
   本 harness。

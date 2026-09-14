@@ -58,4 +58,7 @@ clean-check:
 
 ## 用课程自带的校验器审计本 harness（不入库，需要网络）
 audit:
-	@curl -fsSL https://raw.githubusercontent.com/walkinglabs/learn-harness-engineering/main/tools/audit-harness.sh | bash -s -- .
+	@curl -fsSL https://raw.githubusercontent.com/walkinglabs/learn-harness-engineering/main/tools/audit-harness.sh \
+	  -o $(TMPDIR)audit-harness.sh \
+	  || { echo "下载校验器失败（需要网络）"; exit 1; }
+	@bash $(TMPDIR)audit-harness.sh .

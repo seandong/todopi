@@ -4,13 +4,13 @@
   "rules": [
     {
       "id": "ARCH-001",
-      "description": "v0.1 源码中不得出现网络调用",
+      "description": "v0.1 源码中不得出现出站网络调用",
       "applies_when": "test -d src",
-      "check": "grep -rnE '\\b(fetch|XMLHttpRequest|https?\\.request|node:https?|axios|undici)\\b' src --include='*.ts' --include='*.tsx' || true",
+      "check": "grep -rnE '\\b(fetch|XMLHttpRequest|axios|undici|node-fetch|got|superagent)\\b|https?\\.request\\(' src --include='*.ts' --include='*.tsx' | grep -v '^src/board/' || true",
       "expect": "empty",
-      "what": "src/ 中出现了网络调用或 HTTP 客户端引用。",
+      "what": "src/ 中出现了出站网络调用或 HTTP 客户端引用。",
       "why": "README 承诺 v0.1 无网络、无遥测、无 API key。任何出站请求都会直接破坏这个产品承诺，也会让 verify 命令的沙箱假设失效。",
-      "fix": "删除该调用。若某个功能确实需要网络，先在 DECISIONS.md 记录决策并修改 README 的承诺，再修改本规则——顺序不能反。"
+      "fix": "删除该调用。src/board/ 被排除在本规则外——board 只对 loopback 提供本地 UI，导入 node:http 并 createServer 是设计内的，由 ARCH-002 约束它必须绑定 127.0.0.1。若某个功能确实需要出站网络，先在 DECISIONS.md 记录决策并修改 README 的承诺，再修改本规则——顺序不能反。"
     },
     {
       "id": "ARCH-002",

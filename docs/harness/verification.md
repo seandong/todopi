@@ -35,7 +35,7 @@
 |---|---|---|
 | `docs-links` | Markdown 内部相对链接指向的文件存在 | `pass` |
 | `spec-version` | `spec/todopi-format-v1.md` 含 `version: 1` 声明且与 config 描述一致 | `pass` |
-| `prd-sync` | `todopi-prd.md` 与 `todopi-prd.zh-CN.md` 同时存在，且不是一方单边领先超过一个 commit | `pass` |
+| `prd-sync` | `todopi-prd.md` 与 `todopi-prd.zh-CN.md` 同时存在，且工作区里没有一方单边改动 | `pass` |
 | `arch-rules` | `.harness/arch-rules.json` 全部规则 | 涉及源码的规则 `not_applicable` |
 | `typecheck` | `tsc --noEmit` | `not_applicable`（无 `src/`） |
 
