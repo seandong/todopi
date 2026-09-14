@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "schema": {
+    "fields": ["id", "behavior", "verification", "state", "depends_on", "evidence", "layers"],
+    "states": ["not_started", "active", "passing"],
+    "layer_labels": ["static", "runtime", "system"],
+    "layer_fields": ["label", "cmd", "repair"],
+    "rules": "docs/harness/scope.md",
+    "note": "state 与 evidence 由 tools/harness.sh 写入，不得手工编辑"
+  },
+  "features": []
+}

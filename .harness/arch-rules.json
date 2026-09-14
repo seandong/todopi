@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "note": "架构约束登记处。代码评审中发现的每一类新错误都应提升为这里的一条规则。字段含义见 docs/harness/verification.md。",
+  "rules": [
+    {
+      "id": "ARCH-001",
+      "description": "v0.1 源码中不得出现网络调用",
+      "applies_when": "test -d src",
+      "check": "grep -rnE '\\b(fetch|XMLHttpRequest|https?\\.request|node:https?|axios|undici)\\b' src --include='*.ts' --include='*.tsx' || true",
+      "expect": "empty",
+      "what": "src/ 中出现了网络调用或 HTTP 客户端引用。",
+      "why": "README 承诺 v0.1 无网络、无遥测、无 API key。任何出站请求都会直接破坏这个产品承诺，也会让 verify 命令的沙箱假设失效。",
+      "fix": "删除该调用。若某个功能确实需要网络，先在 DECISIONS.md 记录决策并修改 README 的承诺，再修改本规则——顺序不能反。"
+    },
+    {
+      "id": "ARCH-002",
+      "description": "不得引入常驻进程或非 loopback 监听",
+      "applies_when": "test -d src",
+      "check": "grep -rnE '\\b(setInterval|\\.listen\\(|createServer|child_process\\.spawn.*detached)\\b' src --include='*.ts' --include='*.tsx' | grep -v 'src/board/' || true",
+      "expect": "empty",
+      "what": "board 之外的代码里出现了常驻循环、端口监听或 detached 子进程。",
+      "why": "README 承诺 no daemon、no server。CLI 必须是跑完就退出的短命进程，否则台账的并发模型（基于文件锁与租约）会被长期持有的状态破坏。",
+      "fix": "把逻辑改成一次性执行并退出。board 是唯一例外，它的监听必须绑定 127.0.0.1，且代码放在 src/board/ 下。"
+    },
+    {
+      "id": "ARCH-003",
+      "description": "CLI 不得自动执行 git 写操作",
+      "applies_when": "test -d src",
+      "check": "grep -rnE \"git['\\\"]?[,)]?\\\\s*.*(commit|push|checkout|reset|rebase|merge)\" src --include='*.ts' --include='*.tsx' || true",
+      "expect": "empty",
+      "what": "src/ 中出现了会写入 git 状态的命令调用。",
+      "why": "README 承诺 no automatic git。用户的仓库不是工具的暂存区；自动提交会污染用户的 history 并在多 agent 场景下制造无法归因的改动。",
+      "fix": "改为只读 git 调用（rev-parse、status --porcelain 等），把写操作交还给用户。需要提示用户提交时，打印建议命令而不是执行它。"
+    },
+    {
+      "id": "ARCH-004",
+      "description": "格式规格必须声明版本号",
+      "applies_when": "true",
+      "check": "grep -qE '^Applies to: .*`version: 1`' spec/todopi-format-v1.md && echo '' || echo 'spec/todopi-format-v1.md 缺少 version 声明'",
+      "expect": "empty",
+      "what": "spec/todopi-format-v1.md 顶部的版本声明缺失或被改动。",
+      "why": "格式是 normative 契约，第三方要据此独立实现。版本号是兼容性判断的唯一依据，丢失版本号等于让所有下游实现失去升级路径。",
+      "fix": "恢复文件顶部的 `Applies to: `version: 1` in `.todopi/config.yml`` 行。若确实要发布新版本，新建 spec/todopi-format-v2.md 并在 v1 中标注 superseded，不要原地改版本号。"
+    },
+    {
+      "id": "ARCH-005",
+      "description": "PRD 中英文版本必须同时存在",
+      "applies_when": "true",
+      "check": "test -f docs/product/todopi-prd.md && test -f docs/product/todopi-prd.zh-CN.md && echo '' || echo 'PRD 中英文版本缺失其一'",
+      "expect": "empty",
+      "what": "docs/product/todopi-prd.md 与 todopi-prd.zh-CN.md 没有同时存在。",
+      "why": "PRD 是 English-first 且双语发布。单边存在会让其中一种语言的读者拿到过期或缺失的需求，而 README 把两者都列为项目文档。",
+      "fix": "补回缺失的文件。内容变更时两份必须在 same commit 内同步更新——不同步的翻译比没有翻译更危险。"
+    },
+    {
+      "id": "ARCH-006",
+      "description": "迁移完成前不得提前建立 .todopi/ 目录",
+      "applies_when": "test -f feature_list.json",
+      "check": "test -e .todopi && echo '.todopi/ 已存在，但 feature_list.json 仍是权威状态' || echo ''",
+      "expect": "empty",
+      "what": "仓库里同时存在 .todopi/ 和 feature_list.json。",
+      "why": "两套前向状态并存时，「现在在做什么」会有两个答案，而这个 harness 的全部价值就在于那个答案唯一。",
+      "fix": "要么删除 .todopi/，要么按 docs/harness/state-migration.md 完成整套迁移并在同一个 commit 内删除 feature_list.json。不允许中间态。"
+    }
+  ]
+}

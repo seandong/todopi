@@ -1,0 +1,5 @@
+# 目标运行时声明（asdf / mise 格式）。
+# 当前仓库尚无 package.json，这里只是把 PRD 的运行时要求固化成机器可读的事实。
+# source: docs/product/todopi-prd.md —— npm 包运行于 Node >= 20，发行二进制由 Bun 编译。
+nodejs 22.22.0
+bun 1.3.14

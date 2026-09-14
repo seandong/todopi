@@ -1,0 +1,40 @@
+# 清洁态检查清单
+
+一个 session 在五个维度全部满足前，不算结束。`make clean-check` 自动检查其中四项，
+第五项（diff 聚焦）需要人或 agent 自己判断。
+
+## 1. 基线是绿的
+
+`make check` 的 `overall` 为 `pass`。`blocked` 不算通过——如果某层跑不了，
+在 PROGRESS.md 的 Blockers 里写清缺什么、下一步装什么。
+
+## 2. 没有 debug artifact
+
+- 没有 `console.log` / `console.debug` / `debugger` 残留
+- 没有被注释掉的测试或断言
+- 没有 `.orig` / `.rej` / `*.tmp` / 临时脚本留在工作区
+- 没有为了让测试通过而加的 `skip` / `only`
+
+## 3. 状态文件已更新
+
+- `PROGRESS.md` 的 Current State 反映当前 commit 与 `make check` 结果
+- `PROGRESS.md` 的 Next Steps 是下一个 session 可直接执行的动作，不是「继续做」
+- 有 feature 完成时，`feature_list.json` 的 `state` 与 `evidence` 由
+  `make verify-feature` 写入，不是手工改的
+- 有新决策时，`DECISIONS.md` 已追加条目
+
+## 4. startup 路径可用
+
+一个刚 clone 仓库的人（或 agent）按 `AGENTS.md` 的 clock-in 步骤走一遍，
+每条命令都存在且能跑。特别是：新增了依赖或工具后，`make doctor` 要能检出缺失
+并给出安装命令，而不是让下一个 session 撞上一个看不懂的报错。
+
+## 5. diff 是聚焦的
+
+`git diff` 里的每一个文件都能回答「它为什么必须为这个 feature 而改」。
+顺手的格式化、无关的重命名、预留的配置项都应该移出这次改动——它们会淹没 diff，
+让评审失去意义。
+
+---
+
+跑 `make clean-check` 检查 1–4 项。第 5 项自己看 `git diff`。

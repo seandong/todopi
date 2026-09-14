@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastyle.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(make help:*)",
+      "Bash(make doctor:*)",
+      "Bash(make status:*)",
+      "Bash(make check:*)",
+      "Bash(make test:*)",
+      "Bash(make e2e:*)",
+      "Bash(make check-arch:*)",
+      "Bash(make vcr:*)",
+      "Bash(make clean-check:*)",
+      "Bash(make ci:*)",
+      "Bash(./tools/harness.sh:*)",
+      "Bash(./init.sh:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git ls-files:*)",
+      "Bash(jq:*)"
+    ]
+  }
+}

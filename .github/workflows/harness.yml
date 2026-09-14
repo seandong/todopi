@@ -1,0 +1,32 @@
+name: Harness
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  lightweight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run harness (Layer 1-3, 按可用性降级)
+        run: ./tools/harness.sh ci
+
+      - name: Publish scope summary
+        if: always()
+        run: cat .harness-results/ci-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload structured results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-results
+          path: .harness-results/
+          include-hidden-files: true
+          if-no-files-found: error
