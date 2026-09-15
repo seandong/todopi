@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `115c847` —— README 文档表加入 AGENTS.md 入口。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `eddd6c6` —— 格式规格评审后定稿，PRD 升到 1.1。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-sync /
   arch-rules（3 条通过、3 条不适用）/ typecheck（`not_applicable`）
 - `make test`: `not_applicable` —— 尚无 `tests/` 与 `src/`
