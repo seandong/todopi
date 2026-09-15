@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `7b4d86d` —— harness 初始化与三轮修正。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `115c847` —— README 文档表加入 AGENTS.md 入口。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-sync /
   arch-rules（3 条通过、3 条不适用）/ typecheck（`not_applicable`）
 - `make test`: `not_applicable` —— 尚无 `tests/` 与 `src/`
@@ -23,20 +23,28 @@
 无。当前没有 feature 处于 `active`。
 
 `feature_list.json` 的 `features` 是空数组，这是有意的——v0.1 的 feature 拆分要在
-`spec/todopi-format-v1.md` 定稿后单独做一次 brainstorm，理由见
-[Scope 契约](docs/harness/scope.md#当前状态空表)。
+技术方案确认后单独做一次 brainstorm，理由见
+[Scope 契约](docs/harness/scope.md#当前状态空表)。格式规格已于 2026-09-15 定稿，
+但拆 feature 还缺技术方案这一环（见 Next Steps）。
 
 ## Next Steps
 
 按顺序，每条都是可立即执行的动作：
 
-1. 评审 `spec/todopi-format-v1.md`（当前状态 Draft for review），把状态推进到
-   Stable 或记录待决问题。格式定稿前不要开始实现，否则格式层要返工。
-2. 基于定稿的 spec 拆出 v0.1 的第一批 feature，写入 `feature_list.json`。
-   每条必须能回答 Scope 契约末尾的三个问题。
-3. 第一个 feature 建议是格式层的读（解析 `.todopi/tasks/*.md` 并校验 spec 的
+1. ~~评审格式规格~~ 已完成（2026-09-15）：规格推进到 Stable，PRD 升到 1.1，
+   11 个问题逐条落文档。评审结论见 DECISIONS.md D004。
+2. **核实六家 agent 的外部事实**，这是纯查证、无决策，但能推翻 PRD 的 FR-A2 整节：
+   各家的 hook / 事件名、会话标识的取法（FR-P1b 要用）、沙箱是否约束子进程
+   （README 安全段落要用）。PRD 写于 2026-09-14，这些都是外部 API。
+   **不做这一步就拆 feature，六个集成 feature 会建在过期假设上。**
+3. **确认技术方案**：技术栈、架构分层、产品形态，并调研可复用的成熟三方组件
+   （YAML / frontmatter 解析、文件锁、CLI 框架、LexoRank、SSE），避免重复造轮子。
+   PRD 只定了「TypeScript + Bun 编译单二进制」，其余未定。
+4. 基于定稿的 spec 与已确认的技术方案，拆出 v0.1 的第一批 feature，写入
+   `feature_list.json`。每条必须能回答 Scope 契约末尾的三个问题。
+5. 第一个 feature 建议是格式层的读（解析 `.todopi/tasks/*.md` 并校验 spec 的
    MUST 条款），而不是 `todopi init`——读比写更容易建立测试基线。
-4. 建立 `src/` 与 `package.json` 时，同步补上依赖 lockfile 和
+6. 建立 `src/` 与 `package.json` 时，同步补上依赖 lockfile 和
    `src/ARCHITECTURE.md`，并更新 `docs/harness/index.md` 的「有意缺省」表。
 
 ## Blockers

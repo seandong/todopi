@@ -1,6 +1,6 @@
 # todopi — Product Requirements Document
 
-Version: 1.0 draft · 2026-09-14
+Version: 1.1 · 2026-09-15
 Companion documents: `spec/todopi-format-v1.md` (on-disk format), `docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md` (research and decision log, Chinese)
 
 ---
@@ -46,7 +46,7 @@ Launch line: *Your agent's tasks, in your repo, in 12 fields. Survives compactio
 ## 5. Principles
 
 1. Files are the database. `.todopi/` is committed; no index is committed.
-2. No daemon, server, database, API key, LLM call, telemetry, or automatic git.
+2. No resident process, database, API key, LLM call, telemetry, or automatic git. `todopi web` is a foreground process bound to loopback that ends with the terminal that started it; nothing listens while you are not looking.
 3. The CLI is the only writer. It validates fields, holds a lock, writes atomically. Humans may edit files; `doctor` catches damage.
 4. Be lenient with agents: accept the verbs they guess, never lose data on bad input, `--json` everywhere, stable exit codes.
 5. Be stingy with tokens: hard cap on `prime`, short default output, closed tasks folded.
@@ -61,7 +61,7 @@ Launch line: *Your agent's tasks, in your repo, in 12 fields. Survives compactio
 |---|---|
 | CLI | `todopi` / `tp`; TypeScript, Bun-compiled single binary via brew/curl; npm package runs on Node ≥ 20 |
 | Data | `.todopi/` at repo root; format per `spec/todopi-format-v1.md` |
-| Board | `todopi web`: local, 127.0.0.1-only, single-page, no accounts |
+| Board | `todopi web`: local, 127.0.0.1-only, single-page, no accounts; read-only in v0.1 |
 | Integrations | `todopi setup <agent>` for claude, codex, opencode, pi, cursor, gemini; each also published to its agent's marketplace/registry |
 | Importers | `todopi import <plan.md>` and `todopi import beads` |
 | Site | todopi.com: install, docs, format spec; English first, Chinese pages secondary |
@@ -72,13 +72,13 @@ Each requirement has an id, a statement, and acceptance. "Task" means a file con
 
 ### 7.1 Tasks
 
-- **FR-T1** `add` creates a task with title, optional description, parent, blockers, labels, acceptance criteria, verify command, and `--from <id>` provenance. *Accept:* file exists, passes `doctor`, Log has `created`.
+- **FR-T1** `add` creates a task with title, optional description, parent, blockers, labels, acceptance criteria, verify command, and `--from <id>` provenance. It assigns a `rank` ordering the task last, so that every task todopi writes carries one. *Accept:* file exists, passes `doctor`, Log has `created`.
 - **FR-T2** `ls` lists tasks; filters `--open` (default), `--closed`, `--ready`, `--blocked`, `--mine`, `--label`; `--json` emits an array; `--limit N`. Closed tasks are hidden unless asked. Stale and unverified tasks are marked.
 - **FR-T3** `show <id>` prints frontmatter, criteria with indices, last 5 Log lines with total count; `--full`, `--tree` (parent chain and children with progress), `--json`.
 - **FR-T4** `edit <id>` changes title, description, verify, labels, parent, and body sections via flags or `--edit` ($EDITOR). Logs `edited fields=…`.
-- **FR-T5** `move <id> --top | --before <id> | --after <id>` is the only way to change `rank`; it rewrites one file.
+- **FR-T5** `move <id> --top | --before <id> | --after <id>` is the only way to change `rank`; it rewrites exactly one file. This holds because every task carries a rank from creation (FR-T1): a mixed population of ranked and unranked tasks would make `--after` unsatisfiable, since any task that acquires a rank sorts ahead of every unranked one.
 - **FR-T6** Ids: `<prefix>-<6 base36>`, random, collision-checked locally.
-- **FR-T7** There is no priority field, no type field, no delete command. Soft delete is `close --as stale`.
+- **FR-T7** There is no priority field, no type field, no delete command. Soft delete is `close --as obsolete`.
 
 ### 7.2 Graph
 
@@ -88,19 +88,22 @@ Each requirement has an id, a statement, and acceptance. "Task" means a file con
 
 ### 7.3 Claim and lease
 
-- **FR-C1** `claim <id> [--as <actor>]` sets `status: in_progress` and `assignee`, creates the lease atomically, logs `claimed`. Refused (exit 3) if a live lease exists; `--steal` overrides and logs it.
+- **FR-C1** `claim <id> [--as <actor>]` sets `status: in_progress` and `assignee`, creates the lease atomically, logs `claimed`. A task the ready queue offers can always be claimed: a stale `in_progress` task is reclaimed without ceremony, because a queue that offers work and a claim that then refuses it would contradict each other. Only a *live* lease refuses (exit 3), and `--steal` overrides it. Either way, replacing another actor's `assignee` logs `steal=true` naming who was replaced.
 - **FR-C2** `release <id>` clears assignee, deletes the lease, logs `released`.
 - **FR-C3** Every write by the holder refreshes the lease heartbeat and `updated`.
-- **FR-C4** Actor resolution: `--as` > `TODOPI_ACTOR` > agent environment inference (`claude-code@<host>`, `codex@<host>`, …) > `git config user.name`.
-- **FR-C5** Leases live in `.git/todopi/leases/` (shared across worktrees), fall back to `.todopi/.cache/leases/` without git.
+- **FR-C4** Actor resolution: `--as` > `TODOPI_ACTOR` > agent environment inference (`claude-code@<host>`, `codex@<host>`, …) > `git config user.name`. An actor identifies a worker, not a session, so it is stable across sessions of the same tool on the same machine — otherwise resuming yesterday's own task would require stealing it. Values from `git config` are normalized per the format spec §5.4 (they commonly contain spaces, which the actor grammar forbids). `--as` overrides identity for queries as well as writes, which is how a person inspects another actor's work without configuration.
+- **FR-C6** Identity is matched two ways, and which one applies is decided by whether the command writes. **Writes match strictly:** `note`, `check`, `edit`, `done`, `close`, the heartbeat refresh, and the notes `handoff` appends are refused (exit 3) when the task's `assignee` is another actor, so two workers cannot interleave writes on one task. **Displays match broadly:** `ls --mine`, `prime`, and the report `handoff` prints treat as "mine" any task whose assignee is the resolved actor *or* ends in `@<this host>`. A person at a terminal is therefore shown what their agents are doing, which is the whole point of those three commands; no configuration and no stored list of actors is required.
+- **FR-C5** Leases live in `.git/todopi/leases/` (shared across worktrees), fall back to `.todopi/.cache/leases/` without git. The same directory holds the rest of the machine-local runtime state, including each session's last `prime` time (FR-P1). Session identity lives here and never enters a task file.
 
 ### 7.4 Definition of done
 
 - **FR-D1** `check <id> <n>` / `check <id> <n> --undo` toggles criterion n; logs it.
-- **FR-D2** `done <id>`: if `verify` is set, run it from the repo root with the configured timeout and capture output; refuse (exit 2) on non-zero. Refuse if any criterion is unchecked or any child is open. On success set `closed`/`done`, log `done verify=… commit=<HEAD7> dirty=<bool>`, delete lease.
+- **FR-D2** `done <id>`: if `verify` is set, print the command about to run, then run it from the repo root with the configured timeout and capture output; refuse (exit 2) on non-zero. Refuse if any criterion is unchecked, if any child is not `closed`, or if the task is assigned to another actor (FR-C6). On success set `closed`/`done`, log `done verify=… commit=<HEAD7> dirty=<bool>`, delete lease.
+- **FR-D2a** A refusal prints a report that is actionable without further commands, because it is the only thing the agent sees and the protocol tells it to fix the work rather than force it. The report names the gate that refused and its specifics: unchecked criteria listed individually with their indices and text; children that are not closed listed with id, title and status; for `verify`, the command as run, its exit code and the tail of its output; for an assignee conflict, the holding actor and when it last wrote. It ends with the two ways forward — fix and re-run `done`, or `--force --reason <text>`. Nothing is appended to the Log: no state changed (format spec §5.3.3). An agent that wants to record what it learned uses `note`.
 - **FR-D3** `--force --reason <text>` bypasses any gate and logs `forced=true` with the reason; such tasks are marked "unverified" in listings and the board.
-- **FR-D4** First `verify` execution in a repository asks for confirmation and records trust by repository path in `~/.config/todopi/trust`; `--yes` or `CI=true` skips the prompt. Verify output is truncated to the last 2 KB in the Log.
-- **FR-D5** `close <id> --as wontfix|duplicate|stale [--reason]` and `reopen <id>` per the state machine.
+- **FR-D4** First `verify` execution in a repository asks for confirmation and records trust by repository path in `~/.config/todopi/trust`; `--yes` or `CI=true` skips the prompt. Trust is never stored inside `.todopi/`: a record that travels with the repository would let the repository certify itself. Because `verify` is an ordinary task field that any writer can change — an agent, a hand edit, a merged pull request — trust by path does not bound *what* runs after it is granted. Two things narrow that: the command is printed verbatim before every execution, so it is never silently different from last time; and `handoff` lists tasks whose `verify` changed since the actor's last `prime` (FR-H1). Trust by command content is planned for v0.2, when the cost of re-prompting is justified by users who accept outside contributions.
+- **FR-D4a** Verify output placement follows from the Log being committed and `prime` being budgeted. A passing verify records no output: the command is in the frontmatter and the commit is in the Log, which is everything a reviewer needs to reproduce it. A forced close records the last 512 bytes, because bypassed verification is the one case a human must review and the evidence has to be visible in the diff. Full output is always written to `.todopi/.cache/verify/`, which is not committed and may be deleted at any time.
+- **FR-D5** `close <id> --as wontfix|duplicate|obsolete [--reason]` and `reopen <id>` per the state machine. `reopen` clears `assignee` along with `resolution`, or it would leave a task that violates the format's own invariant. The soft-delete resolution is `obsolete` rather than `stale` because `stale` already names a derived state — an `in_progress` task whose lease expired — and the two would otherwise appear side by side in the same listing meaning unrelated things.
 
 ### 7.5 Log
 
@@ -109,12 +112,14 @@ Each requirement has an id, a statement, and acceptance. "Task" means a file con
 
 ### 7.6 Context injection
 
-- **FR-P1** `prime [--budget <tokens>]` (default 1500) prints, in this priority until the budget is spent: (1) the caller's in-progress task(s): title, criteria with state, last 3 Log lines; (2) top 5 ready tasks: id and title; (3) counts: open / in progress / blocked / closed; (4) last 3 closed titles; (5) a 6-line protocol reminder. Tokens are estimated as characters ÷ 4. Output is Markdown. It records the call time per actor for FR-H1.
+- **FR-P1** `prime [--budget <tokens>]` (default 1500) prints Markdown in this order: (1) the 6-line protocol reminder; (2) the caller's in-progress task(s): title, criteria with state, last 3 Log lines; (3) tasks held by other actors on this machine: id, title, holder — so the caller does not redo work another agent is doing, clearly labelled as not its own; (4) top 5 ready tasks: id and title; (5) counts: open / in progress / blocked / closed; (6) last 3 closed titles. Tokens are estimated as characters ÷ 4.
+- **FR-P1a** Budget rules. The protocol reminder is pinned: it is a ~100-token constant and it is what tells an agent how to use todopi at all after a compaction, so it is never the thing that gets dropped. Every other item has a sub-budget and is truncated internally before the next item is dropped — within a task, unchecked criteria survive checked ones and the newest Log line survives the older ones — so that a caller holding five long tasks still receives a ready queue. Items are dropped from the end.
+- **FR-P1b** `prime` records its call time per session, in the runtime directory of FR-C5, for FR-H1. Where an agent exposes no session identifier the record falls back to being keyed by actor; two concurrent sessions of that agent then share one timestamp, which is a known limitation of the fallback and not of the design.
 - **FR-P2** `prime --json` emits the same content as structured data.
 
 ### 7.7 Handoff
 
-- **FR-H1** `handoff` prints: in-progress tasks by this actor with no Log entry in the last hour; tasks created by this actor since their last `prime`; then appends a `handoff` Log line with a summary to each in-progress task and refreshes heartbeats. It does not release. `--check` exits 0 with the report only (for hooks).
+- **FR-H1** `handoff` prints, using the broad identity match of FR-C6 so that a person sees what their agents did: in-progress tasks with no Log entry in the last hour; tasks created since the last `prime`; tasks whose `verify` command changed since then (FR-D4). It then appends a `handoff` Log line with a summary to each in-progress task **it is the assignee of** — the write path is strict — and refreshes those heartbeats. It does not release. `--check` exits 0 with the report only (for hooks).
 
 ### 7.8 Agent integration
 
@@ -125,9 +130,9 @@ Each requirement has an id, a statement, and acceptance. "Task" means a file con
 
 ### 7.9 Local board
 
-- **FR-B1** `web [--port 4747] [--open]` serves a single-page board on 127.0.0.1 only.
+- **FR-B1** `web [--port 4747] [--open]` serves a single-page board on 127.0.0.1 only. The process runs in the foreground and exits with its terminal.
 - **FR-B2** Views: columns by display state (open, blocked, in progress, done, closed), tree by container, ready queue; a task drawer shows criteria, Log, verification evidence.
-- **FR-B3** Writes are limited to: drag between columns (claim/release/done/close), toggle criteria, add note, drag to reorder (move). All writes go through the same validated, locked write path as the CLI; gates apply and the UI offers the force dialog with a required reason.
+- **FR-B3** The v0.1 board is **read-only**. Its stated purpose is to let a person see at a glance what the agent is doing, and reading satisfies that purpose entirely. The four write operations — drag between columns, toggle criteria, add note, drag to reorder — move to v0.2. They are the expensive half: each must go through the same validated, locked write path as the CLI, which would force the CLI's write path to be factored into a reusable interface in the first week of implementation, and each needs a force dialog with a required reason. Deferring them removes an architectural commitment from v0.1 without touching anything the launch depends on: the board carries no distribution value, and the launch demo is a terminal recording.
 - **FR-B4** The page refreshes on file change (SSE from a directory watcher).
 
 ### 7.10 Importers
@@ -137,7 +142,7 @@ Each requirement has an id, a statement, and acceptance. "Task" means a file con
 
 ### 7.11 Quality and operations
 
-- **FR-Q1** `doctor [--fix]` checks every invariant in the spec, conflict markers, unknown keys, orphan leases; `--fix` normalizes key order, timestamps, checkbox syntax, and removes stale leases. Exit 1 if problems remain.
+- **FR-Q1** `doctor [--fix]` checks every invariant in the spec, conflict markers, unknown keys, orphan leases; `--fix` normalizes key order, timestamps and checkbox syntax, backfills a missing `rank` in `created` order (FR-T5), and removes expired leases. It **never modifies the Log**, not even a line that fails to parse — it reports those instead. An append-only history that a repair tool may rewrite is not evidence, and the Log is what this product offers as evidence. Exit 1 if problems remain.
 - **FR-Q2** Exit codes: 0 ok · 1 usage/validation error · 2 gate failed (verify/criteria/children) · 3 conflict (lease held, concurrent write) · 4 format version unsupported.
 - **FR-Q3** `--json` output shapes are documented and versioned with the CLI; breaking changes bump the CLI major version.
 - **FR-Q4** Verb leniency: `done|finish|complete`, `close|cancel`, `ls|list`, `add|new|create`, `note|log`, `dep|block` are accepted as aliases; aliases are not counted as subcommands.
@@ -153,7 +158,7 @@ todopi ls [--open|--closed|--all] [--ready] [--blocked] [--mine] [--label l] [--
 todopi show <id> [--full] [--tree] [--json]
 todopi edit <id> [--title t] [-d text] [--verify cmd] [--label +l|-l] [--parent id|none] [--edit]
 todopi done <id> [--evidence text] [--force --reason text] [--yes]
-todopi close <id> --as <wontfix|duplicate|stale> [--reason text] [--force]
+todopi close <id> --as <wontfix|duplicate|obsolete> [--reason text] [--force]
 todopi reopen <id>
 todopi move <id> --top|--before <id>|--after <id>
 todopi dep add <id> --on <id> | dep rm <id> --on <id>
@@ -190,7 +195,7 @@ This text is a product artifact: its wording is tuned by dogfooding, and changin
 | Performance | Any command on a repository with 2,000 tasks completes in < 200 ms on a laptop (cold cache < 1 s). `prime` never exceeds its budget. |
 | Platforms | macOS and Linux supported; Windows best-effort (CI runs, failures do not block release). |
 | Runtime | npm package runs on Node ≥ 20 without Bun; brew/curl deliver a Bun-compiled binary with no runtime dependency. |
-| Security | Verify commands run only after per-repository trust; board binds to loopback; no network access anywhere in v0.1. |
+| Security | Verify commands run only after per-repository trust and are printed before every execution; board binds to loopback; no network access anywhere in v0.1. Documentation states plainly that allowing `todopi` in an agent's command allowlist is not a sandbox: `done` executes the repository's own `verify` command, which the agent's permission check does not see. |
 | Privacy | No telemetry, ever. Documentation warns that `.todopi/` is public in public repositories. |
 | Compatibility | Format version 1; CLI refuses to write newer versions (exit 4). |
 | Localization | CLI and docs in English; Chinese site pages secondary. |
@@ -201,13 +206,13 @@ This text is a product artifact: its wording is tuned by dogfooding, and changin
 | Version | Scope |
 |---|---|
 | **v0.1 (MVP)** | Everything in §7; six integrations on marketplaces; both importers; board; site with format spec; Show HN launch |
-| **v0.2** | Native-todo mirroring (Claude Code `TaskCreated/TaskCompleted` hooks, OpenCode plugin), commit/PR linking, git merge driver for task files, Linear one-way push (todopi is source of truth), `remember` memory entries in `prime`, thin MCP adapter (≤ 5 tools), GitHub Issues after Linear |
+| **v0.2** | Board writes (FR-B3), trust by command content (FR-D4), an optional `project_id` config key, native-todo mirroring (Claude Code `TaskCreated/TaskCompleted` hooks, OpenCode plugin), commit/PR linking, git merge driver for task files, Linear one-way push (todopi is source of truth), `remember` memory entries in `prime`, thin MCP adapter (≤ 5 tools), GitHub Issues after Linear |
 | **v0.3+** | Cross-repo view, hosted sync and shared board (paid), bidirectional sync, task-level cost attribution |
 
 ## 12. MVP acceptance
 
 1. This repository manages its own development with todopi across ≥ 3 sessions using both Claude Code and Codex, with no lost progress and no duplicated work attributable to the ledger.
-2. `todopi prime` output measured ≤ 1,500 tokens on this repository's real ledger.
+2. On this repository's real ledger, what `prime` prints within its budget is enough for a fresh session to resume correctly without opening any other file — confirmed by hand across 3 sessions. Measuring that the output fits the budget would prove nothing, since it is truncated to fit by construction; what needs proving is that the truncation order drops the least useful content first.
 3. A new user goes from nothing installed to a claimable task in ≤ 2 minutes following the README.
 4. `doctor` passes on the repository's ledger at every release tag.
 5. Each of the six `setup` targets installs cleanly on a fresh clone and the agent receives `prime` output at session start (verified manually per agent before launch).
@@ -236,10 +241,17 @@ This text is a product artifact: its wording is tuned by dogfooding, and changin
 
 ## 15. Open items
 
-Implementation defaults (decided unless objected to): random 6-char base36 ids; UTC second timestamps; `.todopi/` only at repo root; leases fall back to `.cache/` without git; `prime` truncation order as in FR-P1; characters ÷ 4 token estimate; "this session" = since this actor's last `prime`; closed blockers unblock regardless of resolution; no hard delete.
+Implementation defaults (decided unless objected to): random 6-char base36 ids; UTC second timestamps; `.todopi/` only at repo root; leases fall back to `.cache/` without git; `prime` truncation order as in FR-P1/P1a; characters ÷ 4 token estimate; "this session" = since this session's last `prime`, falling back to this actor's where the agent exposes no session id; closed blockers unblock regardless of resolution; no hard delete.
+
+Deferred with a named trigger, so that "later" does not become "never":
+
+- **Cross-repository view** (`ls --all`) stays in v0.3. It needs a user-level registry of repositories and repository-qualified output, and it serves the maintainer rather than the launch: none of the five MVP acceptance criteria touch more than one repository. Reconsider during dogfooding if the daily loop turns out to span repositories — the minimal form is one flag and an auto-populated registry, roughly half a day, and it costs none of the 20-subcommand budget. Until then the README documents the shell loop over `-C`.
+- **`project_id`** — a stable identifier surviving moves and clones, needed by the cross-repository view and by any later sync. Not added now because the format spec §9 classes a new config key as an additive change that does not bump the format version, so it can be introduced whenever it has a consumer and backfilled by `doctor --fix`. Adding it before then would ship a field nothing reads.
 
 Actions for the product owner: renew todopi.com (expires 2026-11-20); register todopi.dev; publish `todopi` / `@todopi` placeholders on npm; create the GitHub org; manual trademark search (USPTO, EUIPO); obtain two real Beads Classic exports for importer tests.
 
 ## 16. Decision log
 
 Thirty product decisions were taken on 2026-09-14 and are recorded, with rationale and research, in `docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md` §10.
+
+A review on 2026-09-15 resolved eleven issues found in that draft and in the format spec, and produced version 1.1 of this document. The substantive changes: ranks are assigned at creation (FR-T1/T5); the state machine gained reclaim and `reopen` clears `assignee`; criterion checks carry their text into the Log; verify output no longer enters the Log on success; refused transitions are not logged at all and instead produce a structured report (FR-D2a); identity is matched strictly for writes and broadly for displays (FR-C6); `prime` pins the protocol reminder and sub-budgets every item (FR-P1a); the v0.1 board is read-only (FR-B3); the soft-delete resolution is renamed `obsolete`; and MVP acceptance no longer asserts a tautology.

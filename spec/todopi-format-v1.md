@@ -1,6 +1,6 @@
 # The `.todopi/` Format, Version 1
 
-Status: Draft for review · 2026-09-14
+Status: Stable · 2026-09-15
 Applies to: `version: 1` in `.todopi/config.yml`
 
 This document specifies the on-disk format that todopi reads and writes. It is written so that a third-party tool can read and write a `.todopi/` directory without the todopi CLI. The key words MUST, MUST NOT, SHOULD, and MAY are to be interpreted as described in RFC 2119.
@@ -27,7 +27,7 @@ The format is deliberately small: one directory, one config file, one Markdown f
 ```
 
 - `tasks/` MUST contain only files named `<id>.md` where `<id>` is a valid task identifier (§4). Readers MUST ignore other entries and SHOULD warn.
-- `.cache/` holds derived data (indexes, leases when there is no `.git/`). Its contents are not part of the format; nothing in it may be needed to reconstruct state.
+- `.cache/` holds derived data (indexes, captured command output, leases when there is no `.git/`). Its contents are not part of the format; nothing in it may be needed to reconstruct state.
 - `todopi init` writes a `.gitignore` inside `.todopi/` containing `.cache/`.
 
 ## 3. `config.yml`
@@ -42,6 +42,10 @@ A YAML mapping. All keys are optional except `version`.
 | `verify_timeout_seconds` | integer | `600` | Timeout for `verify` commands. |
 
 Unknown keys MUST be preserved by writers and ignored by readers.
+
+There is deliberately no key for identity and no key for trust. Identity is a property
+of a person and a machine, not of a repository, and `config.yml` is committed: a value
+here would apply to every clone. Trust for `verify` commands is covered in §8.
 
 Example:
 
@@ -71,22 +75,24 @@ verify_timeout_seconds: 600
 
 Twelve fields are defined. Four are always required.
 
+Twelve fields, thirteen YAML keys: `created` and `updated` are one field family that
+always appears as a pair. No other field maps to more than one key.
+
 | # | Field | Type | Required | Constraints |
 |---|---|---|---|---|
 | 1 | `id` | string | yes | §4; MUST equal the file name minus `.md` |
 | 2 | `title` | string | yes | single line, 1–200 characters after trimming |
 | 3 | `status` | enum | yes | `open` · `in_progress` · `closed` |
-| 4 | `resolution` | enum | iff `status: closed` | `done` · `wontfix` · `duplicate` · `stale`; MUST be absent when status is not `closed` |
-| 5 | `assignee` | string | iff `status: in_progress` | actor string, `^[^\s:]{1,64}$`; MAY be present when `closed` (who closed it); MUST be absent when `open` |
+| 4 | `resolution` | enum | iff `status: closed` | `done` · `wontfix` · `duplicate` · `obsolete`; MUST be absent when status is not `closed` |
+| 5 | `assignee` | string | iff `status: in_progress` | an actor string (§5.4); MAY be present when `closed` (who closed it); MUST be absent when `open` |
 | 6 | `parent` | id | no | MUST reference an existing task; MUST NOT equal `id`; the parent chain MUST be acyclic |
 | 7 | `blocked_by` | list of id | no | each MUST reference an existing task; MUST NOT contain `id`; the blocked-by graph MUST be acyclic; empty list is equivalent to absent |
-| 8 | `rank` | string | no | `^[0-9a-z]{1,32}$`; see §7.4 |
+| 8 | `rank` | string | no | `^[0-9a-z]{1,32}$`; writers assign one at creation; see §7.4 |
 | 9 | `verify` | string | no | a shell command line, run from the repository root |
 | 10 | `labels` | list of string | no | each `^[a-z0-9][a-z0-9_.-]{0,31}$`; no duplicates |
 | 11 | `external` | mapping | no | keys are system names (`linear`, `github`, `beads`, …); values are mappings; writers MUST preserve entries they do not understand |
 | 12 | `created` / `updated` | timestamp | yes | RFC 3339, UTC, second precision, `Z` suffix, e.g. `2026-09-14T09:00:00Z`; `updated` ≥ `created` |
 
-(`created` and `updated` are counted as one field family; there are thirteen keys.)
 
 Additional keys:
 
@@ -150,12 +156,12 @@ Verbs and their arguments:
 | Verb | Arguments | Emitted by |
 |---|---|---|
 | `created` | `from=<id>` (optional; the task being worked on when this one was discovered) · `source=<path>` (optional) | `add`, `import` |
-| `claimed` | `steal=true` (optional) | `claim` |
+| `claimed` | `steal=true` (optional; set whenever the claim replaced another actor's `assignee`, whether or not that actor's lease had expired) · text = the replaced actor | `claim` |
 | `released` | — | `release` |
 | `note` | — (text required) | `note`, `handoff` |
-| `check` / `uncheck` | `ac=<n>` | `check` |
-| `done` | `verify=pass\|fail\|none` · `commit=<sha7>` · `dirty=true\|false` · `forced=true` (only when forced; text = reason) | `done` |
-| `closed` | `resolution=wontfix\|duplicate\|stale` · `forced=true` (when children were open) | `close` |
+| `check` / `uncheck` | `ac=<n>` · text = the criterion's text as it read at the time of the event, truncated to 80 characters | `check` |
+| `done` | `verify=pass\|fail\|none` · `commit=<sha7>` · `dirty=true\|false` · `forced=true` (only when forced; text = reason, optionally followed by verify output as indented continuation lines) | `done` |
+| `closed` | `resolution=wontfix\|duplicate\|obsolete` · `forced=true` (when a gate was bypassed) | `close` |
 | `reopened` | — | `reopen` |
 | `moved` | — | `move` |
 | `edited` | `fields=<comma-list>` | `edit` |
@@ -168,11 +174,41 @@ Examples:
 - 2026-09-14T09:00:00Z sean created from=tp-9f00k2
 - 2026-09-14T10:12:00Z claude-code@mbp claimed
 - 2026-09-14T10:20:00Z claude-code@mbp note: webauthn-lib 1.x breaks on Node 22, switched to 2.x
-- 2026-09-14T10:41:00Z claude-code@mbp check ac=1
+- 2026-09-14T10:41:00Z claude-code@mbp check ac=1: Existing passkey users can sign in
 - 2026-09-14T11:02:00Z claude-code@mbp done verify=pass commit=3f2a1c9 dirty=true
 ```
 
 A closed task whose most recent `done` or `closed` event carries `forced=true` is displayed as "unverified".
+
+What MUST NOT be appended:
+
+- **A transition that was refused.** If a gate rejects `done` or `close`, no state
+  changed, so nothing is appended. The Log records the history of the task, not the
+  attempts made against it. A worker that wants to record a failed attempt uses `note`.
+- **The output of a `verify` command that passed.** The `verify` field records what was
+  run and the `commit` argument records against what; the output itself adds no
+  information a reader can act on, and it is the largest thing that would ever enter a
+  task file. Full output belongs in `.cache/` (§2), which is not committed. Only a
+  forced close MAY carry output, because that is the case a human must review, and then
+  only the last 512 bytes.
+
+### 5.4 Actor strings
+
+An actor identifies who performed a write. It appears in `assignee` (§5.2) and in every
+Log line (§5.3.3), and MUST match `^[^\s:]{1,64}$`.
+
+- An actor identifies a **worker, not a session**. The same tool on the same machine
+  MUST produce the same actor string across sessions, so that a later session can
+  continue the work an earlier one claimed without being treated as a different worker.
+  Session identity is runtime state and never appears in a task file (§8).
+- The conventional shapes are `<tool>@<host>` for an automated worker
+  (`claude-code@mbp`) and a bare name for a person (`sean`).
+- A value taken from an external source — a version-control user name, for instance —
+  MUST be normalized before use: lowercased, runs of whitespace replaced by `-`,
+  characters outside `[a-z0-9_.@+-]` removed, truncated to 64 characters, and rejected
+  if the result is empty. Normalization is required, not advisory: such values commonly
+  contain spaces, and a space inside an actor would be read as a field separator and
+  corrupt the Log line.
 
 ## 6. State
 
@@ -182,11 +218,26 @@ A closed task whose most recent `done` or `closed` event carries `forced=true` i
 |---|---|---|---|
 | `open` | `in_progress` | `claim` | set `assignee`; create lease; log `claimed` |
 | `in_progress` | `open` | `release` | clear `assignee`; delete lease; log `released` |
-| `open`, `in_progress` | `closed` (`done`) | `done` | run `verify` if present; require Acceptance Criteria satisfied; require no open children; set `resolution: done`; delete lease; log `done` |
-| `open`, `in_progress` | `closed` (other) | `close --as` | require no open children; set `resolution`; delete lease; log `closed` |
-| `closed` | `open` | `reopen` | remove `resolution`; log `reopened` |
+| `in_progress` | `in_progress` | `claim` (reclaim) | replace `assignee`; replace lease; log `claimed steal=true` naming the replaced actor |
+| `open`, `in_progress` | `closed` (`done`) | `done` | run `verify` if present; require Acceptance Criteria satisfied; require every child `closed`; set `resolution: done`; delete lease; log `done` |
+| `open`, `in_progress` | `closed` (other) | `close --as` | require every child `closed`; set `resolution`; delete lease; log `closed` |
+| `closed` | `open` | `reopen` | remove `resolution` and `assignee`; log `reopened` |
 
-Any transition that is refused by a gate (verify failed, criteria unsatisfied, open children, already claimed by a live lease) MAY be forced with `--force --reason <text>`. A forced transition MUST record `forced=true` and the reason in the Log.
+Reclaim exists because §7.5 places a stale `in_progress` task in the ready queue: a
+queue that offers a task and a claim that then refuses it would contradict each other.
+A reclaim of a task whose lease has expired needs no extra ceremony; overriding a lease
+that is still live is what `--steal` is for. Either way the replacement of another
+actor's `assignee` is what `steal=true` records.
+
+Gates. A transition MUST be refused when: `verify` exits non-zero; the Acceptance
+Criteria are unsatisfied; some child is not `closed`; or the task's `assignee` is
+another actor. Any of these MAY be forced with `--force --reason <text>`, which MUST
+record `forced=true` and the reason in the Log. A refused transition changes nothing
+and MUST NOT append to the Log (§5.3.3).
+
+Writes that are not transitions — appending a note, toggling a criterion, editing a
+field — MUST also be refused when the task's `assignee` is another actor, so that two
+workers cannot interleave writes on one task.
 
 `blocked` and `stale` are not stored states (§7).
 
@@ -201,6 +252,7 @@ A conforming task set satisfies all of the following. `doctor` reports violation
 5. The `parent` graph and the `blocked_by` graph are each acyclic.
 6. `updated` ≥ `created`.
 7. No file contains git conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) at line start.
+8. Every `assignee` and every Log actor conforms to §5.4.
 
 ### 6.3 `updated`
 
@@ -235,6 +287,13 @@ Tasks are ordered by:
 2. then tasks without `rank`, ascending by `created`;
 3. ties by `id`.
 
+Writers MUST assign a `rank` when they create a task, ordered after the last ranked
+task. In a set written only by conforming tools, group 2 is therefore empty and the
+order is a single dimension. Group 2 exists to tolerate files written by hand or by
+tools that omit `rank`; a repair pass (`doctor --fix`) SHOULD backfill those in
+`created` order rather than leaving two populated groups, because a task that acquires
+a rank jumps ahead of every unranked task regardless of the value chosen.
+
 `rank` values are opaque strings chosen so that a new value can always be inserted between two existing ones by appending characters (the LexoRank idea). A writer that moves a task computes a new `rank` for that task only and MUST NOT rewrite other tasks' ranks; if no string fits between two neighbours it MAY renumber, and MUST then log `moved` on every task it touched.
 
 ### 7.5 Ready
@@ -256,6 +315,14 @@ Leases are the short-term mutual exclusion between agents on one machine, includ
 - `claim` creates the file atomically (`O_EXCL`); if it exists and is not stale, the claim is refused unless `--steal`.
 - Every write to the task by the lease holder updates `heartbeat_at`. `release`, `done`, `close` delete the file.
 - Leases are advisory and machine-local. The committed `status`/`assignee`/`updated` triple is the durable record.
+
+The lease directory is also where other machine-local runtime state belongs — per-session
+bookkeeping such as the time of each session's last context-injection call. None of it is
+part of the format and all of it MAY be deleted at any time.
+
+Trust for `verify` commands MUST NOT be stored anywhere inside `.todopi/`. A trust record
+that travels with the repository lets a repository certify itself, which defeats the point
+of asking. It belongs in user-level configuration outside any repository.
 
 Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.todopi/.cache/lock` without git) for the duration of read-validate-write of any task file, and MUST write via a temporary file in `tasks/` followed by an atomic rename. Readers need no lock.
 
@@ -305,7 +372,7 @@ remains the fallback.
 - 2026-09-14T09:00:00Z sean created from=tp-9f00k2
 - 2026-09-14T10:12:00Z claude-code@mbp claimed
 - 2026-09-14T10:20:00Z claude-code@mbp note: webauthn-lib 1.x breaks on Node 22, switched to 2.x
-- 2026-09-14T10:41:00Z claude-code@mbp check ac=1
+- 2026-09-14T10:41:00Z claude-code@mbp check ac=1: Existing passkey users can sign in
 ```
 
 ## 11. Conformance checklist for third-party writers
@@ -313,7 +380,9 @@ remains the fallback.
 - [ ] Preserve unknown frontmatter keys, `x-*` keys, unknown Log verbs, unrecognized body sections.
 - [ ] Emit frontmatter keys in §5.2 order; timestamps in UTC seconds with `Z`.
 - [ ] Never write `priority`, `type`, `blocks`, `children`.
-- [ ] Append to Log; never rewrite earlier lines.
+- [ ] Assign a `rank` when creating a task.
+- [ ] Normalize actor strings (§5.4); never emit one containing whitespace or `:`.
+- [ ] Append to Log; never rewrite earlier lines, and never append for a refused transition.
 - [ ] Bump `updated` on every write.
 - [ ] Hold the write lock; write via temp file and rename.
 - [ ] Refuse to write when `config.yml` `version` is unknown.

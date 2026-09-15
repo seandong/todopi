@@ -1,6 +1,6 @@
 # todopi — 产品需求文档（中文版）
 
-版本：1.0 草案 · 2026-09-14
+版本：1.1 · 2026-09-15
 配套文档：`spec/todopi-format-v1.md`（磁盘格式规格，英文）、`docs/product/todopi-prd.md`（英文 PRD，与本文同步）、`docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md`（调研与决策记录）
 
 ---
@@ -46,7 +46,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 ## 5. 原则
 
 1. 文件即数据库。`.todopi/` 提交进 git；不提交任何索引。
-2. 无守护进程、无服务器、无数据库、无 API key、无 LLM 调用、无遥测、无自动 git。
+2. 无常驻进程、无数据库、无 API key、无 LLM 调用、无遥测、无自动 git。`todopi web` 是绑定回环地址的前台进程，随启动它的终端一起结束；你不在看的时候没有任何东西在监听。
 3. CLI 是唯一写入者。它校验字段、持锁、原子写入。人可以编辑文件，`doctor` 兜底。
 4. 对 agent 宽容：接受它们会猜的动词，坏输入不丢数据，`--json` 无处不在，退出码稳定。
 5. 对 token 吝啬：`prime` 硬上限，默认输出短，关闭任务折叠。
@@ -61,7 +61,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 |---|---|
 | CLI | `todopi` / `tp`；TypeScript，Bun 编译单二进制走 brew/curl；npm 包在 Node ≥ 20 上运行 |
 | 数据 | 仓库根目录的 `.todopi/`；格式见 `spec/todopi-format-v1.md` |
-| 看板 | `todopi web`：本地、只绑定 127.0.0.1、单页、无账号 |
+| 看板 | `todopi web`：本地、只绑定 127.0.0.1、单页、无账号；v0.1 只读 |
 | 接入 | `todopi setup <agent>`，支持 claude、codex、opencode、pi、cursor、gemini；每家同时发布到其市场/注册表 |
 | 导入器 | `todopi import <plan.md>` 与 `todopi import beads` |
 | 站点 | todopi.com：安装、文档、格式规格；英文为主，中文页为辅 |
@@ -72,13 +72,13 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
 ### 7.1 任务
 
-- **FR-T1** `add` 创建任务：标题，可选描述、父任务、阻塞项、标签、验收标准、验证命令，以及 `--from <id>` 来源。*验收：* 文件存在、通过 `doctor`、Log 有 `created`。
+- **FR-T1** `add` 创建任务：标题，可选描述、父任务、阻塞项、标签、验收标准、验证命令，以及 `--from <id>` 来源。它同时分配一个排在末位的 `rank`，使 todopi 写出的每个任务都带 rank。*验收：* 文件存在、通过 `doctor`、Log 有 `created`。
 - **FR-T2** `ls` 列出任务；过滤器 `--open`（默认）、`--closed`、`--ready`、`--blocked`、`--mine`、`--label`；`--json` 输出数组；`--limit N`。已关闭任务默认隐藏。stale 与未验证任务有标记。
 - **FR-T3** `show <id>` 打印 frontmatter、带序号的验收标准、最近 5 条 Log 及总数；`--full`、`--tree`（父链与子任务及进度）、`--json`。
 - **FR-T4** `edit <id>` 通过参数或 `--edit`（$EDITOR）修改标题、描述、verify、标签、父任务和正文分节。记录 `edited fields=…`。
-- **FR-T5** `move <id> --top | --before <id> | --after <id>` 是改 `rank` 的唯一途径；只重写一个文件。
+- **FR-T5** `move <id> --top | --before <id> | --after <id>` 是改 `rank` 的唯一途径；**只重写一个文件**。这条成立的前提是每个任务自创建起就带 rank（FR-T1）：有 rank 与无 rank 混合存在时 `--after` 无解，因为任何任务一旦取得 rank 就会整段排到所有无 rank 任务之前。
 - **FR-T6** ID：`<前缀>-<6 位 base36>`，随机生成，本地碰撞检查。
-- **FR-T7** 没有优先级字段、没有类型字段、没有删除命令。软删除是 `close --as stale`。
+- **FR-T7** 没有优先级字段、没有类型字段、没有删除命令。软删除是 `close --as obsolete`。
 
 ### 7.2 图
 
@@ -88,19 +88,22 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
 ### 7.3 认领与租约
 
-- **FR-C1** `claim <id> [--as <actor>]` 设置 `status: in_progress` 与 `assignee`，原子创建租约，记录 `claimed`。存在有效租约时拒绝（退出码 3）；`--steal` 覆盖并留痕。
+- **FR-C1** `claim <id> [--as <actor>]` 设置 `status: in_progress` 与 `assignee`，原子创建租约，记录 `claimed`。ready 队列给出的任务一定能被认领：租约已过期的 in_progress 任务直接重新认领，不需要额外仪式——队列把任务摆出来、claim 又拒绝它，两者会自相矛盾。只有**未过期**的租约才拒绝（退出码 3），`--steal` 用于覆盖它。无论哪种情况，替换了他人的 `assignee` 都记录 `steal=true` 并写明被替换者。
 - **FR-C2** `release <id>` 清空 assignee、删除租约、记录 `released`。
 - **FR-C3** 持有者的每次写入都刷新租约心跳和 `updated`。
-- **FR-C4** actor 解析：`--as` > `TODOPI_ACTOR` > agent 环境推断（`claude-code@<host>`、`codex@<host>` 等）> `git config user.name`。
-- **FR-C5** 租约放在 `.git/todopi/leases/`（worktree 间共享）；无 git 时回退到 `.todopi/.cache/leases/`。
+- **FR-C4** actor 解析：`--as` > `TODOPI_ACTOR` > agent 环境推断（`claude-code@<host>`、`codex@<host>` 等）> `git config user.name`。actor 标识的是**工作者而非会话**，因此同一机器上同一工具跨会话保持不变——否则续做自己昨天的任务都要先抢占。取自 `git config` 的值按格式规格 §5.4 规范化（这类值常含空格，而 actor 语法禁止空格）。`--as` 同时覆盖写入身份与查询身份，人不必做任何配置就能查看另一个 actor 的工作。
+- **FR-C6** 身份有两种匹配方式，由命令是否写入决定。**写入严格匹配**：`note`、`check`、`edit`、`done`、`close`、心跳刷新，以及 `handoff` 追加的笔记，在任务 `assignee` 是另一个 actor 时拒绝（退出码 3），两个工作者因此不会在同一个任务上交错写入。**展示宽松匹配**：`ls --mine`、`prime` 和 `handoff` 打印的报告把 assignee 等于当前解析出的 actor **或**以 `@<本机 host>` 结尾的任务都算作「我的」。人在终端上因此能看到自己的 agent 在做什么——这正是这三个命令存在的意义；不需要任何配置，也不需要保存一份 actor 清单。
+- **FR-C5** 租约放在 `.git/todopi/leases/`（worktree 间共享）；无 git 时回退到 `.todopi/.cache/leases/`。同一目录承载其余机器本地运行时状态，包括每个会话上次 `prime` 的时间（FR-P1）。会话身份留在这里，永不进入任务文件。
 
 ### 7.4 完成定义
 
 - **FR-D1** `check <id> <n>` / `check <id> <n> --undo` 切换第 n 条验收标准并留痕。
-- **FR-D2** `done <id>`：若设置了 `verify`，在仓库根以配置的超时执行并捕获输出；非零退出则拒绝（退出码 2）。任何验收标准未勾选或任何子任务未关闭也拒绝。成功则设为 `closed`/`done`，记录 `done verify=… commit=<HEAD7> dirty=<bool>`，删除租约。
+- **FR-D2** `done <id>`：若设置了 `verify`，先原样打印将要执行的命令，再在仓库根以配置的超时执行并捕获输出；非零退出则拒绝（退出码 2）。任何验收标准未勾选、任何子任务不是 `closed`、或任务归属于另一个 actor（FR-C6），同样拒绝。成功则设为 `closed`/`done`，记录 `done verify=… commit=<HEAD7> dirty=<bool>`，删除租约。
+- **FR-D2a** 拒绝时打印一份不需要再跑别的命令就能据以行动的报告——因为这是 agent 唯一能看到的东西，而协议要求它去修活而不是强制通过。报告写明**是哪道门禁拒绝的**及其具体内容：未勾选的验收标准逐条列出序号与文本；未关闭的子任务列出 id、标题与状态；`verify` 列出实际执行的命令、退出码与输出尾部；归属冲突列出持有者及其最近一次写入时间。报告以两条出路结尾——修完重跑 `done`，或 `--force --reason <text>`。不向 Log 追加任何内容：状态没有改变（格式规格 §5.3.3）。agent 想记录学到的东西，用 `note`。
 - **FR-D3** `--force --reason <text>` 绕过任何门禁，记录 `forced=true` 与理由；此类任务在列表与看板中标记为「未验证」。
-- **FR-D4** 在某仓库首次执行 `verify` 前要求确认，信任按仓库路径记入 `~/.config/todopi/trust`；`--yes` 或 `CI=true` 跳过提示。验证输出在 Log 中截断为最后 2 KB。
-- **FR-D5** `close <id> --as wontfix|duplicate|stale [--reason]` 与 `reopen <id>` 按状态机执行。
+- **FR-D4** 在某仓库首次执行 `verify` 前要求确认，信任按仓库路径记入 `~/.config/todopi/trust`；`--yes` 或 `CI=true` 跳过提示。信任记录**永不**存在 `.todopi/` 内：随仓库一起传播的信任记录等于让仓库为自己背书。由于 `verify` 是任何写入者都能改的普通任务字段——agent、手工编辑、被合并的 PR——按路径信任并不约束授信之后**执行的是什么**。有两件事收窄这个面：每次执行前原样打印命令，使它永远不会和上次悄悄不同；`handoff` 列出自本 actor 上次 `prime` 以来 `verify` 发生过变更的任务（FR-H1）。按命令内容信任排在 v0.2——届时用户开始接受外部贡献，重复确认的摩擦才换得来对等的收益。
+- **FR-D4a** 验证输出的去向由两件事决定：Log 要提交进 git，而 `prime` 有预算。**通过**时不记录输出：命令在 frontmatter 里、commit 在 Log 里，复现所需的一切都已具备。**强制关闭**时记录最后 512 字节，因为被跳过的验证正是人必须复查的那一种，证据必须留在 diff 里看得见。**完整输出**一律写入 `.todopi/.cache/verify/`，不提交，可随时删除。
+- **FR-D5** `close <id> --as wontfix|duplicate|obsolete [--reason]` 与 `reopen <id>` 按状态机执行。`reopen` 在移除 `resolution` 的同时清除 `assignee`，否则会产出违反格式自身不变量的文件。软删除的 resolution 用 `obsolete` 而不是 `stale`，因为 `stale` 已经用于一个派生状态——租约过期的 in_progress 任务——两者会在同一份列表里并排出现却表示毫不相干的事。
 
 ### 7.5 日志
 
@@ -109,12 +112,14 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
 ### 7.6 上下文注入
 
-- **FR-P1** `prime [--budget <tokens>]`（默认 1500）按以下优先级打印直到预算用尽：(1) 调用者正在进行的任务：标题、带状态的验收标准、最近 3 条 Log；(2) ready 队列前 5 条：id 与标题；(3) 计数：open / in progress / blocked / closed；(4) 最近关闭的 3 条标题；(5) 6 行协议提醒。token 按字符数 ÷ 4 估算。输出为 Markdown。它按 actor 记录调用时间供 FR-H1 使用。
+- **FR-P1** `prime [--budget <tokens>]`（默认 1500）按此顺序打印 Markdown：(1) 6 行协议提醒；(2) 调用者正在进行的任务：标题、带状态的验收标准、最近 3 条 Log；(3) 本机其他 actor 持有的任务：id、标题、持有者——让调用者不去重做另一个 agent 正在做的事，并明确标注这不是它自己的；(4) ready 队列前 5 条：id 与标题；(5) 计数：open / in progress / blocked / closed；(6) 最近关闭的 3 条标题。token 按字符数 ÷ 4 估算。
+- **FR-P1a** 预算规则。协议提醒**置顶且不参与裁剪**：它是约 100 token 的常量，而且压缩之后正是它告诉 agent 该怎么用 todopi，绝不能是被丢掉的那一项。其余每一项都有自己的子预算，**先在项内截断再丢下一项**——任务内部保留未勾选的验收标准而非已勾选的、保留最新一条 Log 而非更早的——这样即便调用者持有五个长任务，也仍然拿得到 ready 队列。丢弃从末尾开始。
+- **FR-P1b** `prime` 把调用时间按**会话**记录在 FR-C5 的运行时目录，供 FR-H1 使用。agent 不暴露会话标识时回退为按 actor 记录，该 agent 的两个并发会话此时共用一个时间戳——这是回退方案的已知限制，不是设计的限制。
 - **FR-P2** `prime --json` 以结构化数据输出相同内容。
 
 ### 7.7 交接
 
-- **FR-H1** `handoff` 打印：本 actor 最近一小时没有 Log 的进行中任务；本 actor 自上次 `prime` 以来创建的任务；然后向每个进行中任务追加一条带摘要的 `handoff` Log 并刷新心跳。它不释放认领。`--check` 只输出报告并以 0 退出（供钩子使用）。
+- **FR-H1** `handoff` 用 FR-C6 的宽松身份匹配打印，好让人看到自己的 agent 做了什么：最近一小时没有 Log 的进行中任务；自上次 `prime` 以来创建的任务；自那时起 `verify` 命令发生过变更的任务（FR-D4）。随后向**自己是 assignee 的**每个进行中任务追加一条带摘要的 `handoff` Log 并刷新其心跳——写入路径是严格的。它不释放认领。`--check` 只输出报告并以 0 退出（供钩子使用）。
 
 ### 7.8 Agent 接入
 
@@ -125,9 +130,9 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
 ### 7.9 本地看板
 
-- **FR-B1** `web [--port 4747] [--open]` 只在 127.0.0.1 提供单页看板。
+- **FR-B1** `web [--port 4747] [--open]` 只在 127.0.0.1 提供单页看板。进程在前台运行，随终端退出。
 - **FR-B2** 视图：按显示状态分列（open、blocked、in progress、done、closed）、按容器的树、ready 队列；任务抽屉显示验收标准、Log、验证证据。
-- **FR-B3** 写操作仅限：跨列拖拽（claim/release/done/close）、切换验收标准、加 note、拖拽排序（move）。所有写入走与 CLI 相同的校验与加锁路径；门禁同样生效，UI 提供必须填理由的强制对话框。
+- **FR-B3** v0.1 的看板**只读**。它被声明的目标是「让人一眼看到 agent 在干什么」，而只读完全满足这个目标。四种写操作——跨列拖拽、勾选验收标准、加 note、拖拽排序——移到 v0.2。它们是贵的那一半：每一种都必须走与 CLI 相同的校验与加锁路径，这会迫使 CLI 的写入路径在实现的第一周就被抽成可复用接口；每一种还都需要一个必须填理由的强制对话框。推迟它们，等于在不触碰首发所依赖的任何东西的前提下，从 v0.1 移除一项架构承诺：看板不承担分发价值，而首发演示是一段终端录屏。
 - **FR-B4** 文件变化时页面刷新（目录监听 + SSE）。
 
 ### 7.10 导入器
@@ -137,7 +142,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
 ### 7.11 质量与运维
 
-- **FR-Q1** `doctor [--fix]` 检查规格中的所有不变量、冲突标记、未知键、孤儿租约；`--fix` 规范化键顺序、时间戳、checkbox 语法并清除过期租约。仍有问题则退出码 1。
+- **FR-Q1** `doctor [--fix]` 检查规格中的所有不变量、冲突标记、未知键、孤儿租约；`--fix` 规范化键顺序、时间戳与 checkbox 语法，按 `created` 顺序回填缺失的 `rank`（FR-T5），并清除过期租约。它**永不修改 Log**，哪怕某一行无法解析也只报告不改写。一个可以被修复工具改写的追加式历史不是证据，而 Log 正是这个产品拿出来当证据的东西。仍有问题则退出码 1。
 - **FR-Q2** 退出码：0 成功 · 1 用法/校验错误 · 2 门禁失败（verify/验收标准/子任务）· 3 冲突（租约被占、并发写）· 4 格式版本不支持。
 - **FR-Q3** `--json` 的输出结构有文档并随 CLI 版本化；破坏性变更升 CLI 主版本。
 - **FR-Q4** 动词宽容：`done|finish|complete`、`close|cancel`、`ls|list`、`add|new|create`、`note|log`、`dep|block` 作为别名接受；别名不计入子命令数。
@@ -153,7 +158,7 @@ todopi ls [--open|--closed|--all] [--ready] [--blocked] [--mine] [--label l] [--
 todopi show <id> [--full] [--tree] [--json]
 todopi edit <id> [--title t] [-d text] [--verify cmd] [--label +l|-l] [--parent id|none] [--edit]
 todopi done <id> [--evidence text] [--force --reason text] [--yes]
-todopi close <id> --as <wontfix|duplicate|stale> [--reason text] [--force]
+todopi close <id> --as <wontfix|duplicate|obsolete> [--reason text] [--force]
 todopi reopen <id>
 todopi move <id> --top|--before <id>|--after <id>
 todopi dep add <id> --on <id> | dep rm <id> --on <id>
@@ -190,7 +195,7 @@ todopi import <file.md> | import beads [path]
 | 性能 | 2,000 个任务的仓库上任何命令在笔记本上 < 200 ms（冷缓存 < 1 s）。`prime` 永不超预算。 |
 | 平台 | 支持 macOS 与 Linux；Windows 尽力（CI 跑，失败不阻塞发布）。 |
 | 运行时 | npm 包在 Node ≥ 20 上运行，不需要 Bun；brew/curl 提供无运行时依赖的 Bun 编译二进制。 |
-| 安全 | 验证命令仅在按仓库信任后执行；看板只绑定回环地址；v0.1 无任何网络访问。 |
+| 安全 | 验证命令仅在按仓库信任后执行，且每次执行前原样打印；看板只绑定回环地址；v0.1 无任何网络访问。文档明确写出：把 `todopi` 加进 agent 的命令白名单**不是**沙箱——`done` 会执行仓库自己的 `verify` 命令，而 agent 的权限检查看不到它。 |
 | 隐私 | 永不遥测。文档提醒 `.todopi/` 在公开仓库中是公开的。 |
 | 兼容 | 格式版本 1；CLI 拒绝写入更新的版本（退出码 4）。 |
 | 本地化 | CLI 与文档英文；中文站点页面为辅。 |
@@ -201,13 +206,13 @@ todopi import <file.md> | import beads [path]
 | 版本 | 范围 |
 |---|---|
 | **v0.1（MVP）** | §7 全部；六家接入包上市场；两个导入器；看板；含格式规格的站点；Show HN 首发 |
-| **v0.2** | 原生 todo 镜像（Claude Code `TaskCreated/TaskCompleted` 钩子、OpenCode 插件）、提交/PR 关联、任务文件的 git merge driver、Linear 单向推送（todopi 为事实来源）、`remember` 记忆条目进 `prime`、薄 MCP 适配（≤ 5 工具）、Linear 之后做 GitHub Issues |
+| **v0.2** | 看板写操作（FR-B3）、按命令内容信任（FR-D4）、可选的 `project_id` 配置键、原生 todo 镜像（Claude Code `TaskCreated/TaskCompleted` 钩子、OpenCode 插件）、提交/PR 关联、任务文件的 git merge driver、Linear 单向推送（todopi 为事实来源）、`remember` 记忆条目进 `prime`、薄 MCP 适配（≤ 5 工具）、Linear 之后做 GitHub Issues |
 | **v0.3+** | 跨仓视图、托管同步与共享看板（付费）、双向同步、任务级成本归因 |
 
 ## 12. MVP 验收
 
 1. 本仓库用 todopi 管理自己的开发，跨 ≥ 3 个会话、同时使用 Claude Code 与 Codex，没有可归因于账本的进度丢失或重复工作。
-2. 在本仓库真实账本上实测 `todopi prime` 输出 ≤ 1,500 token。
+2. 在本仓库真实账本上，`prime` 在预算内打印的内容，足以让一个全新会话不打开任何其他文件就正确接续——跨 3 个会话人工确认。测「输出没超预算」证明不了任何事，因为它本来就是按预算截断的；需要被证明的是**裁剪顺序先丢掉的是最没用的内容**。
 3. 新用户按 README 从零安装到一个可认领任务 ≤ 2 分钟。
 4. 每个发布 tag 上 `doctor` 对本仓库账本通过。
 5. 六个 `setup` 目标各自在全新克隆上干净安装，且 agent 在会话开始时收到 `prime` 输出（首发前逐家手工验证）。
@@ -236,10 +241,17 @@ todopi import <file.md> | import beads [path]
 
 ## 15. 待办项
 
-实现默认值（除非有异议即按此执行）：6 位 base36 随机 ID；UTC 秒级时间戳；`.todopi/` 只在仓库根；无 git 时租约回退到 `.cache/`；`prime` 的裁剪顺序如 FR-P1；字符数 ÷ 4 估算 token；「本会话」= 自本 actor 上次 `prime` 起；阻塞项关闭即解除阻塞而不论 resolution；无硬删除。
+实现默认值（除非有异议即按此执行）：6 位 base36 随机 ID；UTC 秒级时间戳；`.todopi/` 只在仓库根；无 git 时租约回退到 `.cache/`；`prime` 的裁剪顺序如 FR-P1/P1a；字符数 ÷ 4 估算 token；「本会话」= 自本**会话**上次 `prime` 起，agent 不暴露会话 id 时回退为本 actor；阻塞项关闭即解除阻塞而不论 resolution；无硬删除。
+
+**带触发条件的推迟项**，避免「以后再说」变成「一直没做」：
+
+- **跨仓视图**（`ls --all`）留在 v0.3。它需要一份用户级的仓库注册表和带仓库限定的输出，而且服务的是维护者而不是首发：MVP 的五条验收标准没有一条涉及一个以上的仓库。dogfooding 时若发现日常回路确实跨仓库，再重新考虑——最小形态是一个 flag 加一份自动积累的注册表，约半天工作量，且不占 20 个子命令的额度。在那之前 README 给出基于 `-C` 的 shell 循环写法。
+- **`project_id`** —— 一个能在移动与克隆后保持稳定的标识，跨仓视图和将来任何同步都需要它。现在不加，是因为格式规格 §9 明确把「新增配置键」归类为不升版本的加性变更，所以它随时可以在有消费者时引入，并由 `doctor --fix` 回填。提前加等于发布一个没人读的字段。
 
 产品负责人的动作：续费 todopi.com（2026-11-20 到期）；注册 todopi.dev；在 npm 发布 `todopi` / `@todopi` 占位；创建 GitHub org；人工商标检索（USPTO、EUIPO）；为导入器测试准备两份真实 Beads Classic 导出。
 
 ## 16. 决策记录
 
 2026-09-14 共做出 30 项产品决策，连同理由与调研记录在 `docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md` §10。
+
+2026-09-15 的一次评审解决了那份草稿与格式规格中发现的 11 个问题，产出本文档的 1.1 版。实质变更：rank 在创建时分配（FR-T1/T5）；状态机补上重新认领，`reopen` 清除 `assignee`；验收标准的勾选把标准文本一并写进 Log；通过的验证输出不再进 Log；被拒绝的转换完全不记 Log，改为输出一份结构化报告（FR-D2a）；身份在写入时严格匹配、在展示时宽松匹配（FR-C6）；`prime` 置顶协议提醒并为每一项设子预算（FR-P1a）；v0.1 看板改为只读（FR-B3）；软删除 resolution 更名为 `obsolete`；MVP 验收不再包含一条同义反复。

@@ -27,7 +27,7 @@ todopi（土豆皮）的产品定义已完成，代码尚未开始。技术栈�
 - **12 字段上限。** frontmatter MUST NOT 新增字段，扩展一律走 `external` 映射。
   source: `spec/todopi-format-v1.md` §5.2；why: 格式小本身就是产品承诺。
 - **v0.1 零网络。** 源码 MUST NOT 发起网络请求，MUST NOT 上报遥测。
-  source: `README.md`「No daemon, no server, no database, no API key, no telemetry」。
+  source: `README.md`「No resident process, no database, no API key, no telemetry, no network access」。
 - **不自动执行 git 写操作。** CLI MUST NOT 自动 commit / push / 切分支。
   source: 同上「no automatic git」；why: 用户的仓库不是 agent 的暂存区。
 - **不常驻。** MUST NOT 引入 daemon 或后台进程；board 之外不监听端口，board MUST

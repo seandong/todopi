@@ -78,9 +78,12 @@ not_started ──activate──> active ──verify-feature(全层 pass)──
 
 ## 当前状态：空表
 
-`features` 目前为空数组。这是有意的：v0.1 的 feature 拆分要在 spec 定稿后单独
-brainstorm 一次，而不是从 PRD 的 FR 编号机械翻译过来——FR 是需求，feature 是
-「一个 session 能做完并能被运行时证据验证的行为」，两者粒度不同。
+`features` 目前为空数组。这是有意的：v0.1 的 feature 拆分要在规格定稿**且技术方案
+确认后**单独 brainstorm 一次，而不是从 PRD 的 FR 编号机械翻译过来——FR 是需求，
+feature 是「一个 session 能做完并能被运行时证据验证的行为」，两者粒度不同。
+
+格式规格已于 2026-09-15 定稿（见 DECISIONS.md D004），技术方案尚未确认，
+因此本表继续为空。
 
 添加第一批 feature 之前，先确认每一条都能回答：
 

@@ -6,8 +6,7 @@ todopi 是一个任务台账工具，却用 `feature_list.json` 管理自己的�
 
 ## 为什么现在不 dogfood
 
-- `spec/todopi-format-v1.md` 仍是 Draft。用尚未定稿的格式承载开发状态，会让
-  spec 的每次修订都连带返工 harness。
+- ~~`spec/todopi-format-v1.md` 仍是 Draft~~ —— 2026-09-15 已推进到 Stable，此条不再成立。
 - 现在没有 CLI。手写 `.todopi/tasks/*.md` 意味着人肉维护 `blocked_by` 图的无环性、
   `updated` 时间戳和 id 唯一性——正是这个产品要消灭的负担。
 - 自举的价值在于「用真实工具跑真实流程」。用手写文件模拟，拿不到任何自举反馈。
@@ -16,7 +15,7 @@ todopi 是一个任务台账工具，却用 `feature_list.json` 管理自己的�
 
 以下全部满足时执行迁移，不早也不拖：
 
-1. `spec/todopi-format-v1.md` 状态从 Draft 变为 Stable；
+1. ~~`spec/todopi-format-v1.md` 状态从 Draft 变为 Stable~~ —— 2026-09-15 已满足；
 2. `init`、`add`、`claim`、`done`、`verify` 五个命令对应的 feature 全部
    `state: passing`；
 3. `todopi doctor` 能检出格式违规（孤儿引用、环、id 冲突）——否则迁移后
@@ -33,7 +32,7 @@ todopi 是一个任务台账工具，却用 `feature_list.json` 管理自己的�
 | `state: active` | `status: in_progress` + `assignee` | assignee 取认领者的 actor 字符串 |
 | `state: passing` | `status: closed` + `resolution: done` | |
 | `depends_on[]` | `blocked_by[]` | 语义一致；迁移后由 CLI 保证无环 |
-| `layers[].cmd` | `verify` | 多层合并为一条 `&&` 命令行；若合并后不可读，拆成父子任务，父任务 `parent` 指向原 feature |
+| `layers[].cmd` | `verify` | 多层合并为一条 `&&` 命令行；若合并后不可读，拆成父子任务，父任务 `parent` 指向原 feature。**已知损失见下** |
 | `layers[].repair` | body 的 Repair 段 | 格式没有 repair 字段，保留为正文 |
 | `evidence` | body 的 Log 段 | |
 | （无） | `created` / `updated` | 迁移时写入迁移时刻的 UTC 时间戳，并在 body 注明真实创建时间未知 |
@@ -41,6 +40,19 @@ todopi 是一个任务台账工具，却用 `feature_list.json` 管理自己的�
 
 `layers[].label` 没有对应字段——三层模型是 harness 概念，不是格式概念。
 合并命令时按 `static → runtime → system` 顺序串联。
+
+### 已知损失：`&&` 表达不了 `not_applicable`
+
+[验证契约](verification.md) 要求某层不适用时如实报 `not_applicable`，而不是 `pass`。
+但 `verify` 是一条命令行，只有一个退出码，承载不了这个区分——`a && b && c` 里
+跳过的层和通过的层都表现为「没有让整条命令失败」。
+
+迁移后这个区分只能由被调用的脚本自己在**输出**里说明，不能由退出码说明。
+PRD 的 FR-D2a 要求拒绝时打印结构化报告（哪道门禁、具体是什么），这让「哪一层挂了」
+至少在输出里可读，但「某层没跑」与「某层跑了并通过」在退出码层面仍然同形。
+
+这是 dogfooding 要付的真实代价，不是可以靠写法绕开的问题。记录在此，
+避免迁移后把它当成新发现的 bug。
 
 ## 迁移后的权威变更
 
