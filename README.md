@@ -16,6 +16,7 @@ No daemon, no server, no database, no API key, no telemetry, no automatic git.
 
 | Document | Purpose |
 |---|---|
+| [`AGENTS.md`](AGENTS.md) | Start here to work in this repository. Operating manual for coding agents; links to the harness docs under [`docs/harness/`](docs/harness/index.md). |
 | [`spec/todopi-format-v1.md`](spec/todopi-format-v1.md) | The on-disk format. Normative. Third parties can implement it without this CLI. |
 | [`docs/product/todopi-prd.md`](docs/product/todopi-prd.md) | Product requirements (English) |
 | [`docs/product/todopi-prd.zh-CN.md`](docs/product/todopi-prd.zh-CN.md) | 产品需求文档（中文） |

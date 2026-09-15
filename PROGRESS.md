@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `f2a89d4` —— harness 初始化。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `7b4d86d` —— harness 初始化与三轮修正。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-sync /
   arch-rules（3 条通过、3 条不适用）/ typecheck（`not_applicable`）
 - `make test`: `not_applicable` —— 尚无 `tests/` 与 `src/`
