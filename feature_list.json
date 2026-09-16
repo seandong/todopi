@@ -71,9 +71,9 @@
       "id": "F01",
       "behavior": "todopi doctor 指着一个 .todopi/ 目录，逐条报出它违反了格式规格的哪条不变量，全部通过退出 0、有问题退出 1",
       "verification": "对 spec/fixtures/valid/ 的每个样例，解析结果与配套 .json 的 frontmatter 一致且 doctor 退出 0；对 spec/fixtures/invalid/ 的每个样例，doctor 退出 1 且输出点名该 .json 里 violates 字段所指的规则。同时落地 TypeScript 工具链（package.json、tsconfig.json、lockfile、src/ARCHITECTURE.md）——src/ 一旦存在而工具链缺失，check_typecheck 会报 blocked，基线就红了。",
-      "state": "active",
+      "state": "passing",
       "depends_on": [],
-      "evidence": "",
+      "evidence": "commit f5fc504, verified 2026-09-16T11:04:33Z",
       "layers": [
         {
           "label": "static",
@@ -82,7 +82,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "解析用例失败→src/format/parse.ts 的规范形态扫描器或 yaml 回退分支；不变量用例失败→src/format/validate.ts 里对应编号的检查函数（编号见 spec §6.2）。"
         },
         {
@@ -109,7 +109,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "幂等用例失败→src/commands/init.ts 里追加 AGENTS.md 的逻辑没有先检测已有段落；版本用例失败→src/format/config.ts 没有在读取后比对 version 并抛出 exit 4。"
         },
         {
@@ -136,7 +136,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "round-trip 失败→src/format/emit.ts 的引号与转义（\\\\ 与 \\\" 两种）；并发用例失败→src/fs/lock.ts 的 O_EXCL 获取、pid+host 判活或退出清理；id 碰撞→src/domain/id.ts 没有在写入前检查 tasks/ 下同名文件。"
         },
         {
@@ -163,7 +163,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "派生态用例失败→src/domain/derive.ts 的对应函数（children/blocked/stale/ready），它们是纯函数，用例直接构造任务集合即可复现；排序失败→src/domain/order.ts；--mine 失败→src/domain/actor.ts 的宽松匹配。"
         },
         {
@@ -190,7 +190,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "重新认领用例失败→src/commands/claim.ts 没有区分「租约过期」与「租约存在且未过期」两条路径；actor 含空格→src/domain/actor.ts 的 normalize 未实现；worktree 场景→src/fs/gitdir.ts 应使用 git rev-parse --git-common-dir 而非 --git-dir。"
         },
         {
@@ -217,7 +217,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "「拒绝后 Log 变长了」这类用例失败→src/commands/done.ts 在门禁判定之前就调用了写入路径，应当先判定后写入；reopen 用例失败→src/commands/reopen.ts 只移除了 resolution，漏了 assignee。"
         },
         {
@@ -244,7 +244,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "孤儿进程用例失败→src/exec/run.ts 必须以独立进程组启动（detached）并在超时时向进程组发信号，而不是只 kill 直接子进程；Windows 走等价的树终止。"
         },
         {
@@ -271,7 +271,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "Log 条数不对→src/format/body.ts 的 Log 解析没有处理多行续行（缩进两格，用 \\n 连接）；未识别小节丢失→同文件的正文分段逻辑。"
         },
         {
@@ -298,7 +298,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "标准文本没进 Log→src/commands/check.ts 没有在写入前读取该条标准的文本；updated 没刷新→src/format/write.ts 的统一写入路径应无条件 bump，而不是由各命令自行决定。"
         },
         {
@@ -325,7 +325,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "环检测失败→src/domain/graph.ts；用例应覆盖长度为 1（自指）与长度大于 2 的环；move 改了不止一个文件→src/commands/move.ts 调用 fractional-indexing 时应只对被移动任务求新 rank。"
         },
         {
@@ -352,7 +352,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "截断顺序不对→src/commands/prime.ts 的子预算逻辑；用例应构造一个 10 条验收 + 3 条长 Log 的任务，断言被丢掉的是已勾选的标准而不是指针行；token 估算器→src/domain/tokens.ts，它的用例必须覆盖中文（实测 chars/4 对中文低估 2-3 倍，估算方式见 PRD §15 待决项）。"
         },
         {
@@ -379,7 +379,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "「本会话」范围不对→src/commands/handoff.ts 读的应是 F11 写入运行时目录的会话级时间戳，agent 未暴露会话 id 时才回退到 actor 级。"
         },
         {
@@ -406,7 +406,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "Log 被改动→src/commands/doctor.ts 的 fix 分支越界了，它的作用域只有 frontmatter 与验收标准区；回填 rank 后顺序变了→应按 created 升序分配，使原有相对顺序不变。"
         },
         {
@@ -433,7 +433,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "幂等失败→src/setup/claude.ts 合并 settings.json 时应按 matcher+command 去重，而不是无条件 push。"
         },
         {
@@ -460,7 +460,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "OpenCode 插件形状不对→src/setup/opencode.ts；它返回的是 { event: async ({event}) => {} }，session.compacted 是事件而不是顶层钩子名（PRD §17）。"
         },
         {
@@ -487,7 +487,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "注入没生效→src/setup/pi.ts 用错了事件：pi 的上下文注入机制是 before_agent_start 返回 message 字段，不是在 session_start 里直接写。"
         },
         {
@@ -514,7 +514,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "注入字段名写错→两家不同：Cursor 是 additional_context，Gemini 是 hookSpecificOutput.additionalContext（PRD §17）。"
         },
         {
@@ -541,7 +541,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "绑定地址不对→src/board/server.ts 的 listen 必须显式传 127.0.0.1；若 ARCH-002 报违规，确认常驻循环只出现在 src/board/ 下。"
         },
         {
@@ -568,7 +568,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "幂等失败→src/import/markdown.ts 应在创建前按 (source, title) 查已有任务；rank 被重算→同文件，已存在的任务跳过 rank 分配。"
         },
         {
@@ -595,7 +595,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "映射错误→src/import/beads.ts 的字段映射表，逐项对照 PRD FR-I2；external 丢失→写入路径必须保留 external 映射（spec §5.2 要求写入端保留不认识的条目）。"
         },
         {
@@ -623,7 +623,7 @@
         },
         {
           "label": "runtime",
-          "cmd": "node --test tests/",
+          "cmd": "node --test",
           "repair": "依赖超出白名单→package.json 的 dependencies 只能是 yaml / commander / fractional-indexing。"
         },
         {
