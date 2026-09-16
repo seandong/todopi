@@ -22,8 +22,9 @@ No resident process, no database, no API key, no telemetry, no network access, n
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Start here to work in this repository. Operating manual for coding agents; links to the harness docs under [`docs/harness/`](docs/harness/index.md). |
 | [`spec/todopi-format-v1.md`](spec/todopi-format-v1.md) | The on-disk format. Normative. Third parties can implement it without this CLI. |
-| [`docs/product/todopi-prd.md`](docs/product/todopi-prd.md) | Product requirements (English) |
-| [`docs/product/todopi-prd.zh-CN.md`](docs/product/todopi-prd.zh-CN.md) | 产品需求文档（中文） |
+| [`spec/fixtures/`](spec/fixtures/README.md) | The format as executable test data — sample files with expected parses. Run it against your own implementation. |
+| [`spec/IMPLEMENTING.md`](spec/IMPLEMENTING.md) | Advisory notes for implementing the format: what actually goes wrong, and in what order to build. |
+| [`docs/product/todopi-prd.md`](docs/product/todopi-prd.md) | Product requirements (Chinese; an internal design document) |
 | [`docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md`](docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md) | Research, competitive landscape, and the 30-decision log (Chinese) |
 
 ## Name

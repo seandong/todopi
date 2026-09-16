@@ -1,0 +1,10 @@
+{
+  "note": "标题是 YAML 关键字。不加引号时解析为 null，标题消失。yes/no/on/off/true/false 同理。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "null",
+    "status": "open",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}

@@ -116,21 +116,13 @@ check_spec_version() {
   fi
 }
 
-check_prd_sync() {
-  local en="docs/product/todopi-prd.md" zh="docs/product/todopi-prd.zh-CN.md"
-  if [ ! -f "$en" ] || [ ! -f "$zh" ]; then
-    emit prd-sync fail "PRD 中英文版本缺失其一（$en / ${zh}）"
-    return
-  fi
-  local dirty_en dirty_zh
-  dirty_en="$(git status --porcelain -- "$en" 2>/dev/null)"
-  dirty_zh="$(git status --porcelain -- "$zh" 2>/dev/null)"
-  if [ -n "$dirty_en" ] && [ -z "$dirty_zh" ]; then
-    emit prd-sync fail "英文 PRD 有未同步的改动，中文版未跟进（须在 same commit 内同步）"
-  elif [ -z "$dirty_en" ] && [ -n "$dirty_zh" ]; then
-    emit prd-sync fail "中文 PRD 单边改动。English-first：先改英文版再同步中文版"
+# PRD 自 2026-09-16 起只保留中文单本（DECISIONS D006）。这里不再校验双语同步，
+# 只校验它存在——它是多处 source: 引用的目标。
+check_prd_present() {
+  if [ -f docs/product/todopi-prd.md ]; then
+    emit prd-present pass "PRD 存在"
   else
-    emit prd-sync pass "PRD 中英文版本同时存在且无单边改动"
+    emit prd-present fail "docs/product/todopi-prd.md 不存在，但多条规则以它为 source"
   fi
 }
 
@@ -347,7 +339,7 @@ cmd_check() {
   header "check — Layer 1（静态）"
   check_docs_links
   check_spec_version
-  check_prd_sync
+  check_prd_present
   run_arch_rules quiet
   check_typecheck
 

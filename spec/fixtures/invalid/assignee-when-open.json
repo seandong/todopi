@@ -1,0 +1,5 @@
+{
+  "violates": "invariant-3",
+  "reason": "assignee 在 open 时 MUST 缺席。reopen 若只移除 resolution 就会产出这个形态——这是规格 1.1 修掉的缺陷。",
+  "reader_must": "reject or report; MUST NOT silently accept"
+}

@@ -1,0 +1,55 @@
+{
+  "note": "Log 语法的全部形态：无参数动词、带 key=value、带 text、多行 text（续行缩进两格，读取端用 \\n 连接）、未知动词（MUST 保留并忽略）。check 行带上当时的标准文本。",
+  "log": [
+    {
+      "ts": "2026-09-14T09:00:00Z",
+      "actor": "sean",
+      "verb": "created",
+      "args": {
+        "from": "tp-9f00k2"
+      }
+    },
+    {
+      "ts": "2026-09-14T10:12:00Z",
+      "actor": "claude-code@mbp",
+      "verb": "claimed",
+      "args": {}
+    },
+    {
+      "ts": "2026-09-14T10:20:00Z",
+      "actor": "claude-code@mbp",
+      "verb": "note",
+      "args": {},
+      "text": "webauthn-lib 1.x breaks on Node 22\nso the fix was to switch to 2.x, which changes the challenge encoding"
+    },
+    {
+      "ts": "2026-09-14T10:41:00Z",
+      "actor": "claude-code@mbp",
+      "verb": "check",
+      "args": {
+        "ac": "1"
+      },
+      "text": "Existing passkey users can sign in"
+    },
+    {
+      "ts": "2026-09-14T10:55:00Z",
+      "actor": "sean",
+      "verb": "unknown_verb",
+      "args": {
+        "key": "value"
+      },
+      "text": "a verb this version does not know",
+      "unknown": true
+    },
+    {
+      "ts": "2026-09-14T11:02:00Z",
+      "actor": "claude-code@mbp",
+      "verb": "done",
+      "args": {
+        "verify": "pass",
+        "commit": "3f2a1c9",
+        "dirty": "false"
+      }
+    }
+  ]
+}

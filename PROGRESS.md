@@ -6,8 +6,8 @@
 ## Current State
 
 - Last commit: `eddd6c6` —— 格式规格评审后定稿，PRD 升到 1.1。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
-- `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-sync /
-  arch-rules（3 条通过、3 条不适用）/ typecheck（`not_applicable`）
+- `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
+  arch-rules（4 条通过、5 条不适用）/ typecheck（`not_applicable`）
 - `make test`: `not_applicable` —— 尚无 `tests/` 与 `src/`
 - `make e2e`: `not_applicable` —— 尚无可执行 CLI
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
@@ -15,8 +15,8 @@
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省。
   其余 WARN 项同样是有意偏差，逐条见 `docs/harness/index.md` 的「有意缺省的部分」
 - VCR: `n/a` —— 尚无 activated feature
-- 代码状态：**implementation has not started**。仓库中只有产品文档、格式规格和
-  本 harness。
+- 代码状态：**implementation has not started**。仓库中只有产品文档、格式规格、
+  格式语料库（`spec/fixtures/`，14 valid + 9 invalid，已自洽验证）和本 harness。
 
 ## In Progress
 
@@ -31,21 +31,21 @@
 
 按顺序，每条都是可立即执行的动作：
 
-1. ~~评审格式规格~~ 已完成（2026-09-15）：规格推进到 Stable，PRD 升到 1.1，
-   11 个问题逐条落文档。评审结论见 DECISIONS.md D004。
-2. **核实六家 agent 的外部事实**，这是纯查证、无决策，但能推翻 PRD 的 FR-A2 整节：
-   各家的 hook / 事件名、会话标识的取法（FR-P1b 要用）、沙箱是否约束子进程
-   （README 安全段落要用）。PRD 写于 2026-09-14，这些都是外部 API。
-   **不做这一步就拆 feature，六个集成 feature 会建在过期假设上。**
-3. **确认技术方案**：技术栈、架构分层、产品形态，并调研可复用的成熟三方组件
-   （YAML / frontmatter 解析、文件锁、CLI 框架、LexoRank、SSE），避免重复造轮子。
-   PRD 只定了「TypeScript + Bun 编译单二进制」，其余未定。
-4. 基于定稿的 spec 与已确认的技术方案，拆出 v0.1 的第一批 feature，写入
-   `feature_list.json`。每条必须能回答 Scope 契约末尾的三个问题。
+1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
+   落文档。结论见 DECISIONS.md D004。
+2. ~~核实六家 agent 的外部事实~~ 已完成（2026-09-16）：结果写入 PRD §17，
+   FR-A2 按核实结果重写。查出三处出入，其中 Cursor 与 Gemini CLI 都已支持钩子
+   （PRD 1.1 写的「规则文件加命令」已过期）、pi 的压缩事件选错了方向。
+3. ~~确认技术方案~~ 已完成（2026-09-16）：十条选型附实测数据，见 DECISIONS D006。
+4. **拆出 v0.1 的第一批 feature**，写入 `feature_list.json`。每条必须能回答
+   Scope 契约末尾的三个问题。这是当前的下一步动作。
 5. 第一个 feature 建议是格式层的读（解析 `.todopi/tasks/*.md` 并校验 spec 的
-   MUST 条款），而不是 `todopi init`——读比写更容易建立测试基线。
-6. 建立 `src/` 与 `package.json` 时，同步补上依赖 lockfile 和
+   MUST 条款），而不是 `todopi init`——读比写更容易建立测试基线，而且
+   `spec/fixtures/` 已经提供了现成的测试语料（14 valid + 9 invalid）。
+6. 建立 `src/` 与 `package.json` 时：依赖只有三个（`yaml`、`commander`、
+   `fractional-indexing`，均零传递依赖），同步补上 lockfile 与
    `src/ARCHITECTURE.md`，并更新 `docs/harness/index.md` 的「有意缺省」表。
+   注意 ARCH-007（禁 `Bun.*`）与 ARCH-008（DTO 边界）在 `src/` 出现后即生效。
 
 ## Blockers
 

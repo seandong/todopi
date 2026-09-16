@@ -1,0 +1,12 @@
+{
+  "note": "closed 状态可以保留 assignee（记录谁关的）。这是不变量 3 唯一的例外。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "Done task",
+    "status": "closed",
+    "resolution": "done",
+    "assignee": "sean",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T10:00:00Z"
+  }
+}

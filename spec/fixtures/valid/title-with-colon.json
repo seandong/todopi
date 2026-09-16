@@ -1,0 +1,10 @@
+{
+  "note": "标题含冒号。不加引号时 YAML 报 BLOCK_AS_IMPLICIT_KEY，整个文件读不出来。冒号在标题里是常态——任务粒度约等于一次提交，而提交标题按惯例带冒号。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "feat: add login",
+    "status": "open",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}

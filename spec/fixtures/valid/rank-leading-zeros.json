@@ -1,0 +1,11 @@
+{
+  "note": "rank 形似数字。规格定义 rank 是字符串，不加引号时变成整数 7，排序语义被破坏。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "Ranked task",
+    "status": "open",
+    "rank": "007",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}

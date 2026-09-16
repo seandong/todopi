@@ -1,0 +1,10 @@
+{
+  "note": "标题带尾随空格。不加引号时被剥掉；加引号后必须原样保留。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "trailing spaces   ",
+    "status": "open",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}

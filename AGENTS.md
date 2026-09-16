@@ -34,8 +34,14 @@ todopi（土豆皮）的产品定义已完成，代码尚未开始。技术栈�
   只绑定 loopback。source: `docs/product/todopi-prd.md` Security 行。
 - **verify 命令需要信任。** 首次在某仓库执行 verify，MUST 先取得确认并按仓库路径
   记录信任。source: PRD FR-D4。
-- **文档 English-first。** 用户可见文案 MUST 先写英文；`todopi-prd.md` 变更 MUST 在
-  same commit 同步 `todopi-prd.zh-CN.md`，不留 stale 文档。source: PRD Site 行。
+- **用户可见文案 English-first。** CLI 输出、`README.md`、`spec/`、协议文本、官网
+  MUST 先写英文。仓库内的设计文档（PRD、brainstorm、DECISIONS、本 harness 文档）
+  用中文。source: brainstorm 决策 #8；why: 英文是分发语言，中文是思考语言，
+  把两者混同会让其中一种长期失真。
+- **格式语料库是契约。** `spec/fixtures/` 里既有 fixture 的**期望值**变更等同于
+  修改格式语义，MUST 与 `spec/todopi-format-v1.md` 同步并走同一套版本流程；
+  新增 fixture 不受此限。source: `spec/fixtures/README.md`；why: 第三方的 CI
+  会跑这份语料，改期望值就是在改他们的通过标准。
 - **生成物不入库。** `.harness-results/`、构建产物、本地缓存遵循 `.gitignore`。
 
 ### Tools 与权限

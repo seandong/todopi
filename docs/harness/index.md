@@ -24,8 +24,9 @@
 - `docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md` 是 2026-09-14 的
   调研与 30 条决策日志，是历史记录。其中的结论若仍有效，应已进入 PRD 或 spec；
   没进去的不要当作现行决定执行。
-- `docs/product/todopi-prd.md` / `.zh-CN.md` 是产品需求。英文版是主版本，
-  中文版是翻译；两者冲突以英文版为准。
+- `docs/product/todopi-prd.md` 是产品需求，中文单本（DECISIONS D006）。
+  它与 `spec/todopi-format-v1.md` 冲突时以 spec 为准——spec 是 normative，
+  第三方据它实现；PRD 描述的是本 CLI 的产品行为。
 
 历史文档保留原路径以便追溯。它们里的命令和状态陈述是当时的证据，不是现在的启动指令。
 

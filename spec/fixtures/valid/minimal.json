@@ -1,0 +1,10 @@
+{
+  "note": "四个必填字段加时间戳；最小的合法任务文件。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "A plain title",
+    "status": "open",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}

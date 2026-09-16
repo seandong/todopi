@@ -1,0 +1,23 @@
+{
+  "note": "未知键、x-* 扩展键与嵌套的 external 映射。读取端可以忽略它们，但写入端 MUST 原样保留——包括缩进块的结构。这个文件同时是「快路径必须回退到完整 YAML 解析器」的样例：external 的值是缩进块，不是规范形态。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "Task written by a later revision",
+    "status": "open",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z",
+    "x-vendor-hint": "some extension value",
+    "future_scalar": "a key this version does not know",
+    "external": {
+      "linear": {
+        "id": "ENG-123",
+        "url": "https://linear.app/x/ENG-123"
+      }
+    }
+  },
+  "must_preserve_on_write": [
+    "x-vendor-hint",
+    "future_scalar",
+    "external"
+  ]
+}

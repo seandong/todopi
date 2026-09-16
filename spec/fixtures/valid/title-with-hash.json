@@ -1,0 +1,10 @@
+{
+  "note": "标题含 #。不加引号时 # 之后被当成注释丢弃，标题被静默截断成 'fix'。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "fix #42 in the C# parser",
+    "status": "open",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}

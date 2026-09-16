@@ -1,0 +1,10 @@
+{
+  "note": "标题含双引号与反斜杠。写入端必须转义 \\\\ 与 \\\"，读取端必须还原。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "He said \"yes\" then left C:\\path",
+    "status": "open",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}

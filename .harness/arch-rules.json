@@ -44,13 +44,13 @@
     },
     {
       "id": "ARCH-005",
-      "description": "PRD 中英文版本必须同时存在",
+      "description": "PRD 必须存在",
       "applies_when": "true",
-      "check": "test -f docs/product/todopi-prd.md && test -f docs/product/todopi-prd.zh-CN.md && echo '' || echo 'PRD 中英文版本缺失其一'",
+      "check": "test -f docs/product/todopi-prd.md && echo '' || echo 'PRD 缺失'",
       "expect": "empty",
-      "what": "docs/product/todopi-prd.md 与 todopi-prd.zh-CN.md 没有同时存在。",
-      "why": "PRD 是 English-first 且双语发布。单边存在会让其中一种语言的读者拿到过期或缺失的需求，而 README 把两者都列为项目文档。",
-      "fix": "补回缺失的文件。内容变更时两份必须在 same commit 内同步更新——不同步的翻译比没有翻译更危险。"
+      "what": "docs/product/todopi-prd.md 不存在。",
+      "why": "AGENTS.md 有多条边界以 PRD 为 source，README 把它列为项目文档。PRD 自 2026-09-16 起只保留中文单本（DECISIONS D006），双语同步的约束随之取消。",
+      "fix": "补回该文件。若要改名或迁移，同步更新 AGENTS.md 的 source: 引用、README 的文档表与本规则。"
     },
     {
       "id": "ARCH-006",
@@ -61,6 +61,36 @@
       "what": "仓库里同时存在 .todopi/ 和 feature_list.json。",
       "why": "两套前向状态并存时，「现在在做什么」会有两个答案，而这个 harness 的全部价值就在于那个答案唯一。",
       "fix": "要么删除 .todopi/，要么按 docs/harness/state-migration.md 完成整套迁移并在同一个 commit 内删除 feature_list.json。不允许中间态。"
+    },
+    {
+      "id": "ARCH-007",
+      "description": "src/ 中不得使用 Bun 专属 API",
+      "applies_when": "test -d src",
+      "check": "grep -rnE '\\\\bBun\\\\.' src --include='*.ts' --include='*.tsx' || true",
+      "expect": "empty",
+      "what": "src/ 中出现了 Bun.* 的调用（如 Bun.YAML、Bun.file、Bun.spawnSync）。",
+      "why": "发行物有两个：npm 包跑在 Node ≥ 20（不需要 Bun），brew/curl 发 Bun 编译的二进制。两者必须是同一份代码同一套行为——若 Bun 与 Node 走不同实现（例如各自的 YAML 引擎），同一个任务文件可能被解析出不同结果，「格式是第三方可独立实现的公开契约」这个承诺当场破产。本地开发通常用 bun 跑，这类错误在本地永远不暴露，只有 npm 用户会踩到，所以必须由静态规则挡住。source: DECISIONS D006。",
+      "fix": "改用 node: 内置模块或已选定的依赖（yaml / commander / fractional-indexing）。Bun 只作为编译器，不作为运行时 API 来源。确有必要引入 Bun 专属能力时，先在 DECISIONS.md 记录它对 npm 发行物的影响，再改本规则——顺序不能反。"
+    },
+    {
+      "id": "ARCH-008",
+      "description": "领域层类型不得直接出现在输出路径",
+      "applies_when": "test -d src/domain && test -d src/output",
+      "check": "grep -rnE \"from ['\\\"].*domain\" src/output --include='*.ts' | grep -v 'output/dto' || true",
+      "expect": "empty",
+      "what": "src/output/ 下（dto 映射层之外）直接引用了 src/domain/ 的类型。",
+      "why": "--json 是有版本承诺的公开 API（PRD FR-Q3：破坏性变更要升 CLI 大版本）。直接序列化领域对象时，一次内部重命名就是一次对外破坏性变更，而且没有任何测试会因此变红——用的是同一个对象。显式的 DTO 映射层把契约变成一个能被指着看、改动显眼的东西。source: DECISIONS D006。",
+      "fix": "在 src/output/dto/ 里加映射函数，由它把领域对象翻译成对外形状。映射只做字段搬运与改名，不做计算——一旦开始在映射里算派生态或拼字符串，这一层就白分了。"
+    },
+    {
+      "id": "ARCH-009",
+      "description": "格式规格与语料库必须同步变更",
+      "applies_when": "true",
+      "check": "test -d spec/fixtures/valid && test -d spec/fixtures/invalid && test -f spec/fixtures/README.md && test -f spec/IMPLEMENTING.md && echo '' || echo 'spec/fixtures 或 spec/IMPLEMENTING.md 缺失'",
+      "expect": "empty",
+      "what": "spec/fixtures/ 的结构或 spec/IMPLEMENTING.md 缺失。",
+      "why": "语料库是格式规格的可执行形式，第三方的 CI 会跑它——改既有 fixture 的期望值等同于改格式语义。三份文档有明确权威顺序：规格（normative）> 语料库（可执行形式）> 说明书（advisory，不引入新要求）。缺任何一份，这个顺序就断了。source: AGENTS.md「格式语料库是契约」。",
+      "fix": "补回缺失的部分。新增 fixture 不受限制；修改既有 fixture 的期望值 MUST 与 spec/todopi-format-v1.md 在 same commit 内一起改，并按 spec §9 判断是否需要递增格式版本。"
     }
   ]
 }

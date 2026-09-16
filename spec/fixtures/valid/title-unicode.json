@@ -1,0 +1,10 @@
+{
+  "note": "非 ASCII 与 emoji。文件是 UTF-8 无 BOM。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "支持 passkey 登录 🥔",
+    "status": "open",
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}

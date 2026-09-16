@@ -1,9 +1,17 @@
 # The `.todopi/` Format, Version 1
 
-Status: Stable · 2026-09-15
+Status: Stable · 2026-09-16
 Applies to: `version: 1` in `.todopi/config.yml`
 
 This document specifies the on-disk format that todopi reads and writes. It is written so that a third-party tool can read and write a `.todopi/` directory without the todopi CLI. The key words MUST, MUST NOT, SHOULD, and MAY are to be interpreted as described in RFC 2119.
+
+Three documents describe this format, and they rank:
+
+| | |
+|---|---|
+| **This document** | Normative. It defines the format; on any disagreement it wins. |
+| [`fixtures/`](fixtures/README.md) | This document in executable form — sample files with their expected parses. A disagreement with this document is a bug in one of them, and they are fixed together. |
+| [`IMPLEMENTING.md`](IMPLEMENTING.md) | Advisory. Reasoning, suggested order of work, and the mistakes implementations actually make. It introduces no requirement. |
 
 The format is deliberately small: one directory, one config file, one Markdown file per task, twelve frontmatter fields. Everything else is derived.
 
@@ -70,6 +78,13 @@ verify_timeout_seconds: 600
 - Encoding UTF-8, line endings LF, no BOM.
 - The file MUST begin with a line `---`, followed by a YAML mapping, followed by a line `---`, followed by the Markdown body. The body MAY be empty.
 - Writers MUST emit frontmatter keys in the order listed in §5.2 so that diffs are stable. Readers MUST accept any order.
+- **Writers MUST quote every scalar value with double quotes**, escaping `\` as `\\` and `"` as `\"`, and MUST write lists in flow style with each element quoted the same way (`labels: ["auth", "web"]`; an empty list is `[]`). This applies to every value a writer emits, including ones that look like plain words.
+
+  This rule exists because YAML infers a type from an unquoted scalar, and task titles routinely defeat that inference. `title: feat: add login` is a parse error that makes the whole file unreadable. `title: fix #42` silently becomes `fix`, because `#` opens a comment. `rank: 007` becomes the integer `7`, and writing it back loses the leading zeros the ordering depends on. `title: null` becomes no title at all. None of these are exotic: a task title that mirrors a commit subject contains a colon by convention, and issue references contain `#`.
+
+  Quoting removes the ambiguity rather than enumerating the cases. It also makes the frontmatter a regular sub-language — every value is a quoted string or a flow list of quoted strings — which a reader may exploit with a simple scanner, falling back to a full YAML parser for any line that departs from that shape.
+
+  Readers MUST NOT require quoting: a file written by hand is still valid YAML and MUST be read as such. `doctor --fix` normalizes such files.
 
 ### 5.2 Frontmatter fields
 
@@ -77,6 +92,10 @@ Twelve fields are defined. Four are always required.
 
 Twelve fields, thirteen YAML keys: `created` and `updated` are one field family that
 always appears as a pair. No other field maps to more than one key.
+
+The Type column below describes the value's meaning, not its YAML spelling: writers
+quote every scalar (§5.1), so `rank: "007"` and `created: "2026-09-14T09:00:00Z"` are
+strings on disk and a reader converts them as this table directs.
 
 | # | Field | Type | Required | Constraints |
 |---|---|---|---|---|
@@ -339,17 +358,17 @@ Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.
 
 ```markdown
 ---
-id: tp-a1b2c3
-title: Support passkeys on /login
-status: in_progress
-assignee: claude-code@mbp
-parent: tp-9f00k2
-blocked_by: [tp-7c21xx]
-rank: a0m
+id: "tp-a1b2c3"
+title: "feat: support passkeys on /login (#42)"
+status: "in_progress"
+assignee: "claude-code@mbp"
+parent: "tp-9f00k2"
+blocked_by: ["tp-7c21xx"]
+rank: "a0m"
 verify: "pnpm test -- login"
-labels: [auth]
-created: 2026-09-14T09:00:00Z
-updated: 2026-09-14T10:41:00Z
+labels: ["auth"]
+created: "2026-09-14T09:00:00Z"
+updated: "2026-09-14T10:41:00Z"
 ---
 
 ## Description
@@ -380,6 +399,7 @@ remains the fallback.
 - [ ] Preserve unknown frontmatter keys, `x-*` keys, unknown Log verbs, unrecognized body sections.
 - [ ] Emit frontmatter keys in §5.2 order; timestamps in UTC seconds with `Z`.
 - [ ] Never write `priority`, `type`, `blocks`, `children`.
+- [ ] Quote every scalar value and every list element with double quotes (§5.1).
 - [ ] Assign a `rank` when creating a task.
 - [ ] Normalize actor strings (§5.4); never emit one containing whitespace or `:`.
 - [ ] Append to Log; never rewrite earlier lines, and never append for a refused transition.

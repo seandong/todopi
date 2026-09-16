@@ -1,154 +1,168 @@
-# todopi — Product Requirements Document
+# todopi — 产品需求文档
 
-Version: 1.1 · 2026-09-15
-Companion documents: `spec/todopi-format-v1.md` (on-disk format), `docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md` (research and decision log, Chinese)
+版本：1.2 · 2026-09-16
+配套文档：`spec/todopi-format-v1.md`（磁盘格式规格，英文，normative）、`docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md`（调研与决策记录）
+
+本文是仓库内的设计文档，用中文（决策 #8：英文为主指 CLI 输出、SKILL、README、官网；仓库内设计文档可用中文）。面向用户的文案仍是 English-first。
 
 ---
 
-## 1. Summary
+## 1. 摘要
 
-todopi is a durable task ledger for AI coding agents. It is a single CLI (`todopi`, alias `tp`) that keeps a dependency-aware task graph as plain Markdown files inside the repository, so that any coding agent — Claude Code, Codex CLI, OpenCode, pi, Cursor, Gemini CLI — knows where the work stands across sessions, context compactions, machines, and agent switches, and cannot mark work done without evidence.
+todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`todopi`，别名 `tp`），把带依赖关系的任务图以纯 Markdown 文件保存在仓库内，让任何 coding agent（Claude Code、Codex CLI、OpenCode、pi、Cursor、Gemini CLI）在跨会话、跨上下文压缩、跨机器、跨 agent 的情况下都知道工作进展到哪，并且没有证据不能把任务标为完成。
 
-Launch line: *Your agent's tasks, in your repo, in 12 fields. Survives compaction, sessions, and switching agents.*
+首发定位：*Your agent's tasks, in your repo, in 12 fields. Survives compaction, sessions, and switching agents.*
 
-## 2. Problem
+## 2. 问题
 
-1. **Agents forget.** Every agent's built-in todo list is session-shaped, and in 2026 vendors are turning them off by default (Claude Code on new models, Codex `update_plan`, OpenCode V2, Gemini CLI). Context compaction drops the plan, so agents redo finished work, retry failed approaches, and lose constraints they had discovered.
-2. **"Done" is self-reported.** Models grade their own work generously. Nothing in the loop runs the acceptance check before the checkbox is ticked.
-3. **Existing trackers are either heavy or thin.** Beads proved the abstractions (ready queue, claim, prime, dependency graph) and then buried them under a database, a daemon and 100+ subcommands. The minimal clones dropped the machinery but also the format stability and the cross-agent integration. Spec-driven tools produce checkbox lists with no ids, no graph, no "where am I" view.
+1. **agent 会忘。** 每家 agent 的内建 todo 都是会话级的，2026 年各家还在默认关闭它们（Claude Code 对新模型、Codex 的 `update_plan`、OpenCode V2、Gemini CLI）。上下文压缩会丢掉计划，agent 于是重做已完成的工作、重试失败过的方案、忘掉已经发现的约束。
+2. **「完成」是自述的。** 模型给自己打分很宽松。循环里没有任何环节在打勾之前跑一遍验收检查。
+3. **现有 tracker 要么重要么薄。** Beads 验证了正确的抽象（ready 队列、认领、prime、依赖图），然后把它们埋在数据库、守护进程和 100 多个子命令之下。极简克隆去掉了机器，也去掉了格式稳定性和跨 agent 接入。规格驱动工具产出的是没有 ID、没有图、没有「我在哪」视图的 checkbox 列表。
 
-## 3. Goals and non-goals
+## 3. 目标与非目标
 
-### Goals (v0.1)
+### 目标（v0.1）
 
-- G1. A task created in one session is found, with its history, by the next session — any agent, any machine, after any compaction.
-- G2. A task cannot be closed as done while its verification command fails, its acceptance criteria are unchecked, or its children are open, except by an explicit, logged force.
-- G3. Installing into any of six agents is one command; the agent receives task context automatically at session start and after compaction.
-- G4. Everything is plain files in git, human-readable in a PR, and specified independently of the CLI.
-- G5. Token cost is bounded: the context injection is capped, listings are terse, closed work is folded.
+- G1. 一个会话里创建的任务，下一个会话能连同历史一起找到——任何 agent、任何机器、任何一次压缩之后。
+- G2. 任务在验证命令失败、验收标准未勾全、子任务未关闭时不能被关闭为 done，除非显式、留痕地强制。
+- G3. 接入六家 agent 中任意一家只需一条命令；agent 在会话开始和压缩后自动收到任务上下文。
+- G4. 一切都是 git 里的纯文件，在 PR 中人类可读，格式独立于 CLI 被规范化。
+- G5. token 开销有上限：上下文注入有硬上限，列表输出简短，已关闭的工作被折叠。
 
-### Non-goals
+### 非目标
 
-- Running or orchestrating agents; managing worktrees.
-- Human project management (cycles, estimates, due dates, reports).
-- Any server, daemon, database, network call, LLM call, telemetry, or automatic git operation.
-- Multi-agent "factory" scale (tens of concurrent agents) and team permissions.
-- Cloud sync, hosted board, MCP server, Linear/GitHub sync — deferred to v0.2+.
+- 运行或编排 agent；管理 worktree。
+- 人类项目管理（迭代、估时、截止日期、报表）。
+- 任何服务器、守护进程、数据库、网络调用、LLM 调用、遥测、自动 git 操作。
+- 多 agent「工厂」规模（几十个并发 agent）与团队权限。
+- 云同步、托管看板、MCP server、Linear/GitHub 同步——推迟到 v0.2 及以后。
 
-## 4. Users
+## 4. 用户
 
-| Persona | Situation | What they need from todopi |
+| 画像 | 处境 | 需要 todopi 提供什么 |
 |---|---|---|
-| **Solo developer with 1–3 agents** (primary) | Works on one project across days, switching between Claude Code and Codex; runs long tasks that compact | Resume without re-explaining; trust "done"; see progress at a glance |
-| **Autonomous-loop user** (secondary) | Runs Ralph-style loops or 2–3 parallel worktrees | An atomically claimable ready queue; verification as back-pressure |
-| **Human reviewer** | Reviews the agent's PR | Task files in the diff: who claimed, what was verified, which criterion failed |
+| **独立开发者 + 1–3 个 agent**（主要） | 跨天做同一个项目，在 Claude Code 和 Codex 之间切换，跑会压缩的长任务 | 不用重新解释就能续做；信任「完成」；一眼看到进度 |
+| **自主循环用户**（次要） | 跑 Ralph 式循环或 2–3 个并行 worktree | 可原子认领的 ready 队列；验证作为回压 |
+| **人类审阅者** | 审 agent 的 PR | diff 里的任务文件：谁认领、验证了什么、哪条标准没过 |
 
-## 5. Principles
+## 5. 原则
 
-1. Files are the database. `.todopi/` is committed; no index is committed.
-2. No resident process, database, API key, LLM call, telemetry, or automatic git. `todopi web` is a foreground process bound to loopback that ends with the terminal that started it; nothing listens while you are not looking.
-3. The CLI is the only writer. It validates fields, holds a lock, writes atomically. Humans may edit files; `doctor` catches damage.
-4. Be lenient with agents: accept the verbs they guess, never lose data on bad input, `--json` everywhere, stable exit codes.
-5. Be stingy with tokens: hard cap on `prime`, short default output, closed tasks folded.
-6. Done needs evidence.
-7. Format before features: the on-disk format is versioned and public; the CLI is one implementation.
-8. Complement, don't replace: agents keep their in-turn micro-plans; todopi holds what must outlive the context window.
-9. Never collect usage data.
+1. 文件即数据库。`.todopi/` 提交进 git；不提交任何索引。
+2. 无常驻进程、无数据库、无 API key、无 LLM 调用、无遥测、无自动 git。`todopi web` 是绑定回环地址的前台进程，随启动它的终端一起结束；你不在看的时候没有任何东西在监听。
+3. CLI 是唯一写入者。它校验字段、持锁、原子写入。人可以编辑文件，`doctor` 兜底。
+4. 对 agent 宽容：接受它们会猜的动词，坏输入不丢数据，`--json` 无处不在，退出码稳定。
+5. 对 token 吝啬：`prime` 硬上限，默认输出短，关闭任务折叠。
+6. 完成需要证据。
+7. 格式先于功能：磁盘格式有版本号且公开；CLI 只是一个实现。
+8. 补充而非替代：agent 保留一轮内的微计划；todopi 保存必须活过上下文窗口的东西。
+9. 永不收集使用数据。
 
-## 6. Product surface
+## 6. 产品面
 
-| Surface | Description |
+| 面 | 说明 |
 |---|---|
-| CLI | `todopi` / `tp`; TypeScript, Bun-compiled single binary via brew/curl; npm package runs on Node ≥ 20 |
-| Data | `.todopi/` at repo root; format per `spec/todopi-format-v1.md` |
-| Board | `todopi web`: local, 127.0.0.1-only, single-page, no accounts; read-only in v0.1 |
-| Integrations | `todopi setup <agent>` for claude, codex, opencode, pi, cursor, gemini; each also published to its agent's marketplace/registry |
-| Importers | `todopi import <plan.md>` and `todopi import beads` |
-| Site | todopi.com: install, docs, format spec; English first, Chinese pages secondary |
+| CLI | `todopi` / `tp`；TypeScript，Bun 编译单二进制走 brew/curl；npm 包在 Node ≥ 20 上运行 |
+| 数据 | 仓库根目录的 `.todopi/`；格式见 `spec/todopi-format-v1.md` |
+| 看板 | `todopi web`：本地、只绑定 127.0.0.1、单页、无账号；v0.1 只读 |
+| 接入 | `todopi setup <agent>`，支持 claude、codex、opencode、pi、cursor、gemini；每家同时发布到其市场/注册表 |
+| 导入器 | `todopi import <plan.md>` 与 `todopi import beads` |
+| 站点 | todopi.com：安装、文档、格式规格；英文为主，中文页为辅 |
 
-## 7. Functional requirements
+## 7. 功能需求
 
-Each requirement has an id, a statement, and acceptance. "Task" means a file conforming to the format spec.
+每条需求有编号、陈述和验收口径。「任务」指符合格式规格的一个文件。
 
-### 7.1 Tasks
+### 7.1 任务
 
-- **FR-T1** `add` creates a task with title, optional description, parent, blockers, labels, acceptance criteria, verify command, and `--from <id>` provenance. It assigns a `rank` ordering the task last, so that every task todopi writes carries one. *Accept:* file exists, passes `doctor`, Log has `created`.
-- **FR-T2** `ls` lists tasks; filters `--open` (default), `--closed`, `--ready`, `--blocked`, `--mine`, `--label`; `--json` emits an array; `--limit N`. Closed tasks are hidden unless asked. Stale and unverified tasks are marked.
-- **FR-T3** `show <id>` prints frontmatter, criteria with indices, last 5 Log lines with total count; `--full`, `--tree` (parent chain and children with progress), `--json`.
-- **FR-T4** `edit <id>` changes title, description, verify, labels, parent, and body sections via flags or `--edit` ($EDITOR). Logs `edited fields=…`.
-- **FR-T5** `move <id> --top | --before <id> | --after <id>` is the only way to change `rank`; it rewrites exactly one file. This holds because every task carries a rank from creation (FR-T1): a mixed population of ranked and unranked tasks would make `--after` unsatisfiable, since any task that acquires a rank sorts ahead of every unranked one.
-- **FR-T6** Ids: `<prefix>-<6 base36>`, random, collision-checked locally.
-- **FR-T7** There is no priority field, no type field, no delete command. Soft delete is `close --as obsolete`.
+- **FR-T1** `add` 创建任务：标题，可选描述、父任务、阻塞项、标签、验收标准、验证命令，以及 `--from <id>` 来源。它同时分配一个排在末位的 `rank`，使 todopi 写出的每个任务都带 rank。*验收：* 文件存在、通过 `doctor`、Log 有 `created`。
+- **FR-T2** `ls` 列出任务；过滤器 `--open`（默认）、`--closed`、`--ready`、`--blocked`、`--mine`、`--label`；`--json` 输出数组；`--limit N`。已关闭任务默认隐藏。stale 与未验证任务有标记。
+- **FR-T3** `show <id>` 打印 frontmatter、带序号的验收标准、最近 5 条 Log 及总数；`--full`、`--tree`（父链与子任务及进度）、`--json`。
+- **FR-T4** `edit <id>` 通过参数或 `--edit`（$EDITOR）修改标题、描述、verify、标签、父任务和正文分节。记录 `edited fields=…`。
+- **FR-T5** `move <id> --top | --before <id> | --after <id>` 是改 `rank` 的唯一途径；**只重写一个文件**。这条成立的前提是每个任务自创建起就带 rank（FR-T1）：有 rank 与无 rank 混合存在时 `--after` 无解，因为任何任务一旦取得 rank 就会整段排到所有无 rank 任务之前。
+- **FR-T6** ID：`<前缀>-<6 位 base36>`，随机生成，本地碰撞检查。
+- **FR-T7** 没有优先级字段、没有类型字段、没有删除命令。软删除是 `close --as obsolete`。
 
-### 7.2 Graph
+### 7.2 图
 
-- **FR-G1** `dep add <id> --on <id>` / `dep rm` maintain `blocked_by`; cycles are refused (exit 1) with the cycle printed.
-- **FR-G2** `ls --ready` (alias `ready`) implements the spec's ready definition and ordering; output is what an agent should pick from.
-- **FR-G3** Containers (tasks with children) never appear in ready and show `n/m` child progress.
+- **FR-G1** `dep add <id> --on <id>` / `dep rm` 维护 `blocked_by`；有环则拒绝（退出码 1）并打印环。
+- **FR-G2** `ls --ready`（别名 `ready`）实现规格中的 ready 定义与排序；输出即 agent 应从中挑选的内容。
+- **FR-G3** 容器（有子任务的任务）永不出现在 ready 中，并显示 `n/m` 子任务进度。
 
-### 7.3 Claim and lease
+### 7.3 认领与租约
 
-- **FR-C1** `claim <id> [--as <actor>]` sets `status: in_progress` and `assignee`, creates the lease atomically, logs `claimed`. A task the ready queue offers can always be claimed: a stale `in_progress` task is reclaimed without ceremony, because a queue that offers work and a claim that then refuses it would contradict each other. Only a *live* lease refuses (exit 3), and `--steal` overrides it. Either way, replacing another actor's `assignee` logs `steal=true` naming who was replaced.
-- **FR-C2** `release <id>` clears assignee, deletes the lease, logs `released`.
-- **FR-C3** Every write by the holder refreshes the lease heartbeat and `updated`.
-- **FR-C4** Actor resolution: `--as` > `TODOPI_ACTOR` > agent environment inference (`claude-code@<host>`, `codex@<host>`, …) > `git config user.name`. An actor identifies a worker, not a session, so it is stable across sessions of the same tool on the same machine — otherwise resuming yesterday's own task would require stealing it. Values from `git config` are normalized per the format spec §5.4 (they commonly contain spaces, which the actor grammar forbids). `--as` overrides identity for queries as well as writes, which is how a person inspects another actor's work without configuration.
-- **FR-C6** Identity is matched two ways, and which one applies is decided by whether the command writes. **Writes match strictly:** `note`, `check`, `edit`, `done`, `close`, the heartbeat refresh, and the notes `handoff` appends are refused (exit 3) when the task's `assignee` is another actor, so two workers cannot interleave writes on one task. **Displays match broadly:** `ls --mine`, `prime`, and the report `handoff` prints treat as "mine" any task whose assignee is the resolved actor *or* ends in `@<this host>`. A person at a terminal is therefore shown what their agents are doing, which is the whole point of those three commands; no configuration and no stored list of actors is required.
-- **FR-C5** Leases live in `.git/todopi/leases/` (shared across worktrees), fall back to `.todopi/.cache/leases/` without git. The same directory holds the rest of the machine-local runtime state, including each session's last `prime` time (FR-P1). Session identity lives here and never enters a task file.
+- **FR-C1** `claim <id> [--as <actor>]` 设置 `status: in_progress` 与 `assignee`，原子创建租约，记录 `claimed`。ready 队列给出的任务一定能被认领：租约已过期的 in_progress 任务直接重新认领，不需要额外仪式——队列把任务摆出来、claim 又拒绝它，两者会自相矛盾。只有**未过期**的租约才拒绝（退出码 3），`--steal` 用于覆盖它。无论哪种情况，替换了他人的 `assignee` 都记录 `steal=true` 并写明被替换者。
+- **FR-C2** `release <id>` 清空 assignee、删除租约、记录 `released`。
+- **FR-C3** 持有者的每次写入都刷新租约心跳和 `updated`。
+- **FR-C4** actor 解析：`--as` > `TODOPI_ACTOR` > agent 环境推断（`claude-code@<host>`、`codex@<host>` 等）> `git config user.name`。actor 标识的是**工作者而非会话**，因此同一机器上同一工具跨会话保持不变——否则续做自己昨天的任务都要先抢占。取自 `git config` 的值按格式规格 §5.4 规范化（这类值常含空格，而 actor 语法禁止空格）。`--as` 同时覆盖写入身份与查询身份，人不必做任何配置就能查看另一个 actor 的工作。
+- **FR-C6** 身份有两种匹配方式，由命令是否写入决定。**写入严格匹配**：`note`、`check`、`edit`、`done`、`close`、心跳刷新，以及 `handoff` 追加的笔记，在任务 `assignee` 是另一个 actor 时拒绝（退出码 3），两个工作者因此不会在同一个任务上交错写入。**展示宽松匹配**：`ls --mine`、`prime` 和 `handoff` 打印的报告把 assignee 等于当前解析出的 actor **或**以 `@<本机 host>` 结尾的任务都算作「我的」。人在终端上因此能看到自己的 agent 在做什么——这正是这三个命令存在的意义；不需要任何配置，也不需要保存一份 actor 清单。
+- **FR-C5** 租约放在 `.git/todopi/leases/`（worktree 间共享）；无 git 时回退到 `.todopi/.cache/leases/`。同一目录承载其余机器本地运行时状态，包括每个会话上次 `prime` 的时间（FR-P1）。会话身份留在这里，永不进入任务文件。
 
-### 7.4 Definition of done
+### 7.4 完成定义
 
-- **FR-D1** `check <id> <n>` / `check <id> <n> --undo` toggles criterion n; logs it.
-- **FR-D2** `done <id>`: if `verify` is set, print the command about to run, then run it from the repo root with the configured timeout and capture output; refuse (exit 2) on non-zero. Refuse if any criterion is unchecked, if any child is not `closed`, or if the task is assigned to another actor (FR-C6). On success set `closed`/`done`, log `done verify=… commit=<HEAD7> dirty=<bool>`, delete lease.
-- **FR-D2a** A refusal prints a report that is actionable without further commands, because it is the only thing the agent sees and the protocol tells it to fix the work rather than force it. The report names the gate that refused and its specifics: unchecked criteria listed individually with their indices and text; children that are not closed listed with id, title and status; for `verify`, the command as run, its exit code and the tail of its output; for an assignee conflict, the holding actor and when it last wrote. It ends with the two ways forward — fix and re-run `done`, or `--force --reason <text>`. Nothing is appended to the Log: no state changed (format spec §5.3.3). An agent that wants to record what it learned uses `note`.
-- **FR-D3** `--force --reason <text>` bypasses any gate and logs `forced=true` with the reason; such tasks are marked "unverified" in listings and the board.
-- **FR-D4** First `verify` execution in a repository asks for confirmation and records trust by repository path in `~/.config/todopi/trust`; `--yes` or `CI=true` skips the prompt. Trust is never stored inside `.todopi/`: a record that travels with the repository would let the repository certify itself. Because `verify` is an ordinary task field that any writer can change — an agent, a hand edit, a merged pull request — trust by path does not bound *what* runs after it is granted. Two things narrow that: the command is printed verbatim before every execution, so it is never silently different from last time; and `handoff` lists tasks whose `verify` changed since the actor's last `prime` (FR-H1). Trust by command content is planned for v0.2, when the cost of re-prompting is justified by users who accept outside contributions.
-- **FR-D4a** Verify output placement follows from the Log being committed and `prime` being budgeted. A passing verify records no output: the command is in the frontmatter and the commit is in the Log, which is everything a reviewer needs to reproduce it. A forced close records the last 512 bytes, because bypassed verification is the one case a human must review and the evidence has to be visible in the diff. Full output is always written to `.todopi/.cache/verify/`, which is not committed and may be deleted at any time.
-- **FR-D5** `close <id> --as wontfix|duplicate|obsolete [--reason]` and `reopen <id>` per the state machine. `reopen` clears `assignee` along with `resolution`, or it would leave a task that violates the format's own invariant. The soft-delete resolution is `obsolete` rather than `stale` because `stale` already names a derived state — an `in_progress` task whose lease expired — and the two would otherwise appear side by side in the same listing meaning unrelated things.
+- **FR-D1** `check <id> <n>` / `check <id> <n> --undo` 切换第 n 条验收标准并留痕。
+- **FR-D2** `done <id>`：若设置了 `verify`，先原样打印将要执行的命令，再在仓库根以配置的超时执行并捕获输出；非零退出则拒绝（退出码 2）。任何验收标准未勾选、任何子任务不是 `closed`、或任务归属于另一个 actor（FR-C6），同样拒绝。成功则设为 `closed`/`done`，记录 `done verify=… commit=<HEAD7> dirty=<bool>`，删除租约。
+- **FR-D2a** 拒绝时打印一份不需要再跑别的命令就能据以行动的报告——因为这是 agent 唯一能看到的东西，而协议要求它去修活而不是强制通过。报告写明**是哪道门禁拒绝的**及其具体内容：未勾选的验收标准逐条列出序号与文本；未关闭的子任务列出 id、标题与状态；`verify` 列出实际执行的命令、退出码与输出尾部；归属冲突列出持有者及其最近一次写入时间。报告以两条出路结尾——修完重跑 `done`，或 `--force --reason <text>`。不向 Log 追加任何内容：状态没有改变（格式规格 §5.3.3）。agent 想记录学到的东西，用 `note`。
+- **FR-D3** `--force --reason <text>` 绕过任何门禁，记录 `forced=true` 与理由；此类任务在列表与看板中标记为「未验证」。
+- **FR-D4** 在某仓库首次执行 `verify` 前要求确认，信任按仓库路径记入 `~/.config/todopi/trust`；`--yes` 或 `CI=true` 跳过提示。信任记录**永不**存在 `.todopi/` 内：随仓库一起传播的信任记录等于让仓库为自己背书。由于 `verify` 是任何写入者都能改的普通任务字段——agent、手工编辑、被合并的 PR——按路径信任并不约束授信之后**执行的是什么**。有两件事收窄这个面：每次执行前原样打印命令，使它永远不会和上次悄悄不同；`handoff` 列出自本 actor 上次 `prime` 以来 `verify` 发生过变更的任务（FR-H1）。按命令内容信任排在 v0.2——届时用户开始接受外部贡献，重复确认的摩擦才换得来对等的收益。
+- **FR-D4a** 验证输出的去向由两件事决定：Log 要提交进 git，而 `prime` 有预算。**通过**时不记录输出：命令在 frontmatter 里、commit 在 Log 里，复现所需的一切都已具备。**强制关闭**时记录最后 512 字节，因为被跳过的验证正是人必须复查的那一种，证据必须留在 diff 里看得见。**完整输出**一律写入 `.todopi/.cache/verify/`，不提交，可随时删除。
+- **FR-D5** `close <id> --as wontfix|duplicate|obsolete [--reason]` 与 `reopen <id>` 按状态机执行。`reopen` 在移除 `resolution` 的同时清除 `assignee`，否则会产出违反格式自身不变量的文件。软删除的 resolution 用 `obsolete` 而不是 `stale`，因为 `stale` 已经用于一个派生状态——租约过期的 in_progress 任务——两者会在同一份列表里并排出现却表示毫不相干的事。
 
-### 7.5 Log
+### 7.5 日志
 
-- **FR-L1** `note <id> <text>` appends a Log line; multi-line text is supported.
-- **FR-L2** All state changes append a Log line in the spec grammar; nothing rewrites earlier lines.
+- **FR-L1** `note <id> <text>` 追加一行 Log；支持多行文本。
+- **FR-L2** 所有状态变更都按规格语法追加一行 Log；从不改写之前的行。
 
-### 7.6 Context injection
+### 7.6 上下文注入
 
-- **FR-P1** `prime [--budget <tokens>]` (default 1500) prints Markdown in this order: (1) the 6-line protocol reminder; (2) the caller's in-progress task(s): title, criteria with state, last 3 Log lines; (3) tasks held by other actors on this machine: id, title, holder — so the caller does not redo work another agent is doing, clearly labelled as not its own; (4) top 5 ready tasks: id and title; (5) counts: open / in progress / blocked / closed; (6) last 3 closed titles. Tokens are estimated as characters ÷ 4.
-- **FR-P1a** Budget rules. The protocol reminder is pinned: it is a ~100-token constant and it is what tells an agent how to use todopi at all after a compaction, so it is never the thing that gets dropped. Every other item has a sub-budget and is truncated internally before the next item is dropped — within a task, unchecked criteria survive checked ones and the newest Log line survives the older ones — so that a caller holding five long tasks still receives a ready queue. Items are dropped from the end.
-- **FR-P1b** `prime` records its call time per session, in the runtime directory of FR-C5, for FR-H1. Where an agent exposes no session identifier the record falls back to being keyed by actor; two concurrent sessions of that agent then share one timestamp, which is a known limitation of the fallback and not of the design.
-- **FR-P2** `prime --json` emits the same content as structured data.
+- **FR-P1** `prime [--budget <tokens>]`（默认 1500）按此顺序打印 Markdown：(1) 6 行协议提醒；(2) 调用者正在进行的任务：标题、带状态的验收标准、最近 3 条 Log；(3) 本机其他 actor 持有的任务：id、标题、持有者——让调用者不去重做另一个 agent 正在做的事，并明确标注这不是它自己的；(4) ready 队列前 5 条：id 与标题；(5) 计数：open / in progress / blocked / closed；(6) 最近关闭的 3 条标题。token 按字符数 ÷ 4 估算。
+- **FR-P1a** 预算规则。协议提醒**置顶且不参与裁剪**：它是约 100 token 的常量，而且压缩之后正是它告诉 agent 该怎么用 todopi，绝不能是被丢掉的那一项。其余每一项都有自己的子预算，**先在项内截断再丢下一项**——任务内部保留未勾选的验收标准而非已勾选的、保留最新一条 Log 而非更早的——这样即便调用者持有五个长任务，也仍然拿得到 ready 队列。丢弃从末尾开始。
+- **FR-P1b** `prime` 把调用时间按**会话**记录在 FR-C5 的运行时目录，供 FR-H1 使用。会话标识的可得性于 2026-09-16 核实：Claude Code、Codex、Gemini CLI 在钩子 stdin 里给 `session_id`；Cursor 的钩子载荷同样带会话标识；OpenCode 在事件对象上给 `session_id` 或 `sessionID`（两种拼法都要处理）；pi 不把它传进事件，扩展需调 `ctx.sessionManager.getSessionId()` 自取。六家都拿得到，因此按 actor 记录只是**防御性**回退，不是常态。
+- **FR-P2** `prime --json` 以结构化数据输出相同内容。
 
-### 7.7 Handoff
+### 7.7 交接
 
-- **FR-H1** `handoff` prints, using the broad identity match of FR-C6 so that a person sees what their agents did: in-progress tasks with no Log entry in the last hour; tasks created since the last `prime`; tasks whose `verify` command changed since then (FR-D4). It then appends a `handoff` Log line with a summary to each in-progress task **it is the assignee of** — the write path is strict — and refreshes those heartbeats. It does not release. `--check` exits 0 with the report only (for hooks).
+- **FR-H1** `handoff` 用 FR-C6 的宽松身份匹配打印，好让人看到自己的 agent 做了什么：最近一小时没有 Log 的进行中任务；自上次 `prime` 以来创建的任务；自那时起 `verify` 命令发生过变更的任务（FR-D4）。随后向**自己是 assignee 的**每个进行中任务追加一条带摘要的 `handoff` Log 并刷新其心跳——写入路径是严格的。它不释放认领。`--check` 只输出报告并以 0 退出（供钩子使用）。
 
-### 7.8 Agent integration
+### 7.8 Agent 接入
 
-- **FR-A1** `setup <agent>` installs, idempotently, the agent's skill/rules file and hooks. Default target is project-level configuration (so a clone works); `--user` targets user-level. It prints every file it wrote.
-- **FR-A2** Hook mapping: Claude Code `SessionStart` (startup, resume, compact) → `prime`; `SessionEnd` → `handoff --check`. Codex `SessionStart`, `PostCompact` → `prime`; `SessionEnd` → `handoff --check`. OpenCode plugin: `session.compacted` → `prime`. pi extension: `session_start`, `session_before_compact` → `prime`. Cursor and Gemini: rules file plus commands.
-- **FR-A3** All agents receive the same ≤ 800-token instruction text (the "protocol", §9); per-agent packaging only wraps it.
-- **FR-A4** Each integration is published to its agent's marketplace/registry at launch: Claude Code plugin, Codex plugin, OpenCode plugin, pi package (npm), Cursor rules, Gemini extension.
+- **FR-A1** `setup <agent>` 幂等地安装该 agent 的 skill/规则文件与钩子。默认写项目级配置（克隆即用）；`--user` 写用户级。它打印写入的每个文件。
+- **FR-A2** 钩子映射。各家事件名于 2026-09-16 核实（见 §17）。六家都能在**会话开始**注入，但**压缩之后**能否重新注入分成两类，这个差异决定了各家的接入形态：
 
-### 7.9 Local board
+  | Agent | 会话开始 | 压缩 | 会话结束 | 配置位置 |
+  |---|---|---|---|---|
+  | Claude Code | `SessionStart`（matcher：`startup` `resume` `clear` `compact` `fork`） | `PostCompact` | `SessionEnd` | `.claude/settings.json` |
+  | Codex | `SessionStart` | `PostCompact` | `SessionEnd` | `.codex/hooks.json` |
+  | OpenCode | `event` 钩子订阅 `session.created` | 同上订阅 `session.compacted` | `session.idle` 兜底 | `.opencode/plugins/` |
+  | pi | `session_start` | **`session_compact`**（压缩后）；`session_before_compact` 是压缩前 | `session_shutdown` | `.pi/extensions/`，`pi install` |
+  | Cursor | `sessionStart`（返回 `additional_context`） | **无 post 事件**，只有 `preCompact` | `sessionEnd` | `.cursor/hooks.json` |
+  | Gemini CLI | `SessionStart`（返回 `hookSpecificOutput.additionalContext`） | **无 post 事件**，只有 `PreCompress` | `SessionEnd` | `settings.json` |
 
-- **FR-B1** `web [--port 4747] [--open]` serves a single-page board on 127.0.0.1 only. The process runs in the foreground and exits with its terminal.
-- **FR-B2** Views: columns by display state (open, blocked, in progress, done, closed), tree by container, ready queue; a task drawer shows criteria, Log, verification evidence.
-- **FR-B3** The v0.1 board is **read-only**. Its stated purpose is to let a person see at a glance what the agent is doing, and reading satisfies that purpose entirely. The four write operations — drag between columns, toggle criteria, add note, drag to reorder — move to v0.2. They are the expensive half: each must go through the same validated, locked write path as the CLI, which would force the CLI's write path to be factored into a reusable interface in the first week of implementation, and each needs a force dialog with a required reason. Deferring them removes an architectural commitment from v0.1 without touching anything the launch depends on: the board carries no distribution value, and the launch demo is a terminal recording.
-- **FR-B4** The page refreshes on file change (SSE from a directory watcher).
+- **FR-A2a** 无 post-compaction 事件的两家（Cursor、Gemini CLI）改用**压缩前注入**：在 `preCompact` / `PreCompress` 时把 `prime --budget 400` 的输出交给待生成的摘要，使账本指针**成为摘要的一部分**，从而按定义活过压缩。这不是等价替代——它注入的是压缩发生**那一刻**的状态，此后到下一次会话开始之间的变化不会反映。协议文本因此要求 agent 在察觉上下文被压缩后主动跑一次 `todopi prime`，这一条对所有 agent 都写，对这两家是必需的。
+- **FR-A2b** Cursor 的 CLI（`cursor-agent`）对钩子的支持一直在变动：2026-01 只有 `beforeShellExecution` / `afterShellExecution` 触发，2026-04 扩展到含 `sessionStart`，官方论坛记录显示仍未与 IDE 完全对齐。因此 Cursor 接入包 MUST 同时提供规则文件作为回退路径，且 MUST 在首发前于 CLI 与 IDE 两种形态下各手工验证一次（MVP 验收第 5 条）。
+- **FR-A3** 所有 agent 收到同一份 ≤ 800 token 的说明文本（「协议」，§9）；各家打包只是包装。
+- **FR-A4** 每个接入包首发即发布到对应市场/注册表：Claude Code plugin、Codex plugin、OpenCode plugin、pi package（npm）、Cursor 规则、Gemini 扩展。
 
-### 7.10 Importers
+### 7.9 本地看板
 
-- **FR-I1** `import <file.md>`: parses Markdown checkbox lists (Superpowers plans, spec-kit `tasks.md`, OpenSpec `tasks.md`). Headings become containers, items become children, document order becomes `rank`, checked items are created `closed/done` with `forced=true` (no verification ran). Each task records `created source=<path>`; re-import is idempotent on (source, title).
-- **FR-I2** `import beads [path]`: reads Beads Classic `issues.jsonl` (default `.beads/issues.jsonl`). Mapping: priority → rank order; type → label; `blocks` → `blocked_by`; parent-child → `parent`; closed → `closed` with `done` (or `wontfix` when Beads reason says so); original id under `external.beads.id`. Dolt-era exports are out of scope.
+- **FR-B1** `web [--port 4747] [--open]` 只在 127.0.0.1 提供单页看板。进程在前台运行，随终端退出。
+- **FR-B2** 视图：按显示状态分列（open、blocked、in progress、done、closed）、按容器的树、ready 队列；任务抽屉显示验收标准、Log、验证证据。
+- **FR-B3** v0.1 的看板**只读**。它被声明的目标是「让人一眼看到 agent 在干什么」，而只读完全满足这个目标。四种写操作——跨列拖拽、勾选验收标准、加 note、拖拽排序——移到 v0.2。它们是贵的那一半：每一种都必须走与 CLI 相同的校验与加锁路径，这会迫使 CLI 的写入路径在实现的第一周就被抽成可复用接口；每一种还都需要一个必须填理由的强制对话框。推迟它们，等于在不触碰首发所依赖的任何东西的前提下，从 v0.1 移除一项架构承诺：看板不承担分发价值，而首发演示是一段终端录屏。
+- **FR-B4** 文件变化时页面刷新（目录监听 + SSE）。
 
-### 7.11 Quality and operations
+### 7.10 导入器
 
-- **FR-Q1** `doctor [--fix]` checks every invariant in the spec, conflict markers, unknown keys, orphan leases; `--fix` normalizes key order, timestamps and checkbox syntax, backfills a missing `rank` in `created` order (FR-T5), and removes expired leases. It **never modifies the Log**, not even a line that fails to parse — it reports those instead. An append-only history that a repair tool may rewrite is not evidence, and the Log is what this product offers as evidence. Exit 1 if problems remain.
-- **FR-Q2** Exit codes: 0 ok · 1 usage/validation error · 2 gate failed (verify/criteria/children) · 3 conflict (lease held, concurrent write) · 4 format version unsupported.
-- **FR-Q3** `--json` output shapes are documented and versioned with the CLI; breaking changes bump the CLI major version.
-- **FR-Q4** Verb leniency: `done|finish|complete`, `close|cancel`, `ls|list`, `add|new|create`, `note|log`, `dep|block` are accepted as aliases; aliases are not counted as subcommands.
-- **FR-Q5** `init` creates `.todopi/` with `config.yml`, `tasks/`, `.gitignore`, and appends the protocol text to `AGENTS.md` (creating it if absent). It never touches `CLAUDE.md` unless `setup claude` is run.
+- **FR-I1** `import <file.md>`：解析 Markdown checkbox 列表（Superpowers 计划、spec-kit `tasks.md`、OpenSpec `tasks.md`）。标题变容器，条目变子任务，文档顺序变 `rank`，已勾选条目以 `closed/done` 且 `forced=true` 创建（未跑验证）。每个任务记录 `created source=<path>`；按（source，标题）幂等重复导入。
+- **FR-I2** `import beads [path]`：读取 Beads Classic 的 `issues.jsonl`（默认 `.beads/issues.jsonl`）。映射：priority → rank 顺序；type → label；`blocks` → `blocked_by`；parent-child → `parent`；closed → `closed` 且 `done`（Beads 原因表明放弃时为 `wontfix`）；原 ID 放 `external.beads.id`。Dolt 时代的导出不在范围内。
 
-## 8. Command reference (20 subcommands)
+### 7.11 质量与运维
+
+- **FR-Q1** `doctor [--fix]` 检查规格中的所有不变量、冲突标记、未知键、孤儿租约；`--fix` 规范化键顺序、时间戳与 checkbox 语法，按 `created` 顺序回填缺失的 `rank`（FR-T5），并清除过期租约。它**永不修改 Log**，哪怕某一行无法解析也只报告不改写。一个可以被修复工具改写的追加式历史不是证据，而 Log 正是这个产品拿出来当证据的东西。仍有问题则退出码 1。
+- **FR-Q2** 退出码：0 成功 · 1 用法/校验错误 · 2 门禁失败（verify/验收标准/子任务）· 3 冲突（租约被占、并发写）· 4 格式版本不支持。
+- **FR-Q3** `--json` 的输出结构有文档并随 CLI 版本化；破坏性变更升 CLI 主版本。
+- **FR-Q4** 动词宽容：`done|finish|complete`、`close|cancel`、`ls|list`、`add|new|create`、`note|log`、`dep|block` 作为别名接受；别名不计入子命令数。
+- **FR-Q5** `init` 创建含 `config.yml`、`tasks/`、`.gitignore` 的 `.todopi/`，并把协议文本追加到 `AGENTS.md`（不存在则创建）。除非运行 `setup claude`，否则不碰 `CLAUDE.md`。
+
+## 8. 命令参考（20 个子命令）
 
 ```
 todopi init [--prefix tp]
@@ -173,85 +187,118 @@ todopi doctor [--fix]
 todopi import <file.md> | import beads [path]
 ```
 
-Global flags: `--json`, `--quiet`, `--as <actor>`, `-C <dir>`.
+全局参数：`--json`、`--quiet`、`--as <actor>`、`-C <dir>`。
 
-## 9. Agent protocol (content of SKILL.md / AGENTS.md snippet, ≤ 800 tokens)
+## 9. Agent 协议（SKILL.md / AGENTS.md 片段的内容，≤ 800 token）
 
-The text every agent gets, in outline:
+每个 agent 都会收到的文本，大纲如下：
 
-1. **What todopi is**: the repository's durable task ledger; `.todopi/` is data, never edit it by hand, use the CLI.
-2. **Granularity**: one todopi task ≈ one change worth a commit, with a checkable outcome. Editing one file or running one test is not a task.
-3. **Moments** (do these, don't deliberate): session start → read the `prime` output you were given (or run `todopi prime`); before working → `todopi claim <id>`; discovered new work → `todopi add "<title>" --from <current id>`; learned something the hard way → `todopi note <id> "<what and why>"`; finished → `todopi done <id>` (it runs the verification; fix the work, don't force); ending the session → `todopi handoff`.
-4. **Native todo lists**: keep using yours for the steps inside this turn; never copy todopi tasks into it.
-5. **Commits**: include `.todopi/` changes in the commit for the work; mention the task id in the message.
-6. **Queries**: `todopi ls --ready` for what to do next; `todopi show <id>` for details; add `--json` when parsing.
+1. **todopi 是什么**：仓库的持久任务账本；`.todopi/` 是数据，永远不要手改，用 CLI。
+2. **粒度**：一个 todopi 任务约等于一次值得提交的改动，有可检查的结果。改一个文件或跑一次测试不是任务。
+3. **时刻**（照做，不要斟酌）：会话开始 → 读给你的 `prime` 输出（或运行 `todopi prime`）；动手前 → `todopi claim <id>`；发现新工作 → `todopi add "<title>" --from <当前 id>`；踩了坑 → `todopi note <id> "<做了什么、为什么>"`；做完 → `todopi done <id>`（它会跑验证；修工作，不要强制）；结束会话 → `todopi handoff`。
+4. **原生 todo**：本轮内的步骤继续用你自己的；永远不要把 todopi 任务复制进去。
+5. **提交**：把 `.todopi/` 的改动和对应工作一起提交；在提交信息里写任务 id。
+6. **查询**：`todopi ls --ready` 看下一步做什么；`todopi show <id>` 看细节；解析输出时加 `--json`。
 
-This text is a product artifact: its wording is tuned by dogfooding, and changing it is not a code change.
+这段文本是产品产物：措辞靠 dogfooding 调整，改它不是代码变更。
 
-## 10. Non-functional requirements
+## 10. 非功能需求
 
-| Area | Requirement |
+| 领域 | 要求 |
 |---|---|
-| Performance | Any command on a repository with 2,000 tasks completes in < 200 ms on a laptop (cold cache < 1 s). `prime` never exceeds its budget. |
-| Platforms | macOS and Linux supported; Windows best-effort (CI runs, failures do not block release). |
-| Runtime | npm package runs on Node ≥ 20 without Bun; brew/curl deliver a Bun-compiled binary with no runtime dependency. |
-| Security | Verify commands run only after per-repository trust and are printed before every execution; board binds to loopback; no network access anywhere in v0.1. Documentation states plainly that allowing `todopi` in an agent's command allowlist is not a sandbox: `done` executes the repository's own `verify` command, which the agent's permission check does not see. |
-| Privacy | No telemetry, ever. Documentation warns that `.todopi/` is public in public repositories. |
-| Compatibility | Format version 1; CLI refuses to write newer versions (exit 4). |
-| Localization | CLI and docs in English; Chinese site pages secondary. |
-| Licensing | MIT. |
+| 性能 | 2,000 个任务的仓库上任何命令在笔记本上 < 200 ms（冷缓存 < 1 s）。`prime` 永不超预算。2026-09-16 实测（M 系列 mac，2,000 任务全量扫描）：手写快路径解析 16 ms、通用 YAML 解析器 120 ms、进程启动 10 ms、文件 I/O 20 ms。目标环境含 WSL2、容器挂载卷与网络文件系统，那里 I/O 往返贵一个数量级，余量按最坏环境预留而非按开发机。 |
+| 平台 | 支持 macOS 与 Linux；Windows 尽力（CI 跑，失败不阻塞发布）。 |
+| 运行时 | npm 包在 Node ≥ 20 上运行，不需要 Bun；brew/curl 提供无运行时依赖的 Bun 编译二进制。源码只用 Node API，Bun 仅作编译器（DECISIONS D006）。实测体积：npm 包 228 KB，二进制 61 MB（macOS arm64）/ 90 MB（Linux x64），体积全部来自内嵌运行时，`--minify` 与 `--bytecode` 均无效。curl 安装器先探测 Node ≥ 20：有则装 npm 包，无则下载二进制。 |
+| 安全 | 验证命令仅在按仓库信任后执行，且每次执行前原样打印；看板只绑定回环地址；v0.1 无任何网络访问。文档明确写出：把 `todopi` 加进 agent 的命令白名单**不是**沙箱——`done` 会执行仓库自己的 `verify` 命令，而 agent 的权限检查看不到它。**OS 级沙箱是有效的**：2026-09-16 核实，Claude Code 与 Codex 的沙箱都约束整棵进程树（macOS Seatbelt、Linux bubblewrap+Landlock+seccomp），todopi 派生的 verify 进程继承同一套限制。文档应据此建议：依赖白名单做隔离的用户同时启用 OS 沙箱。 |
+| 隐私 | 永不遥测。文档提醒 `.todopi/` 在公开仓库中是公开的。 |
+| 兼容 | 格式版本 1；CLI 拒绝写入更新的版本（退出码 4）。 |
+| 本地化 | 用户可见文案（CLI 输出、README、spec、协议文本、官网）English-first；中文站点页面为辅。仓库内设计文档用中文。 |
+| 许可 | MIT。 |
 
-## 11. Release plan
+## 11. 发布计划
 
-| Version | Scope |
+| 版本 | 范围 |
 |---|---|
-| **v0.1 (MVP)** | Everything in §7; six integrations on marketplaces; both importers; board; site with format spec; Show HN launch |
-| **v0.2** | Board writes (FR-B3), trust by command content (FR-D4), an optional `project_id` config key, native-todo mirroring (Claude Code `TaskCreated/TaskCompleted` hooks, OpenCode plugin), commit/PR linking, git merge driver for task files, Linear one-way push (todopi is source of truth), `remember` memory entries in `prime`, thin MCP adapter (≤ 5 tools), GitHub Issues after Linear |
-| **v0.3+** | Cross-repo view, hosted sync and shared board (paid), bidirectional sync, task-level cost attribution |
+| **v0.1（MVP）** | §7 全部；六家接入包上市场；两个导入器；看板；含格式规格的站点；Show HN 首发 |
+| **v0.2** | 看板写操作（FR-B3）、按命令内容信任（FR-D4）、可选的 `project_id` 配置键、原生 todo 镜像（Claude Code `TaskCreated/TaskCompleted` 钩子、OpenCode 插件）、提交/PR 关联、任务文件的 git merge driver、Linear 单向推送（todopi 为事实来源）、`remember` 记忆条目进 `prime`、薄 MCP 适配（≤ 5 工具）、Linear 之后做 GitHub Issues |
+| **v0.3+** | 跨仓视图、托管同步与共享看板（付费）、双向同步、任务级成本归因 |
 
-## 12. MVP acceptance
+## 12. MVP 验收
 
-1. This repository manages its own development with todopi across ≥ 3 sessions using both Claude Code and Codex, with no lost progress and no duplicated work attributable to the ledger.
-2. On this repository's real ledger, what `prime` prints within its budget is enough for a fresh session to resume correctly without opening any other file — confirmed by hand across 3 sessions. Measuring that the output fits the budget would prove nothing, since it is truncated to fit by construction; what needs proving is that the truncation order drops the least useful content first.
-3. A new user goes from nothing installed to a claimable task in ≤ 2 minutes following the README.
-4. `doctor` passes on the repository's ledger at every release tag.
-5. Each of the six `setup` targets installs cleanly on a fresh clone and the agent receives `prime` output at session start (verified manually per agent before launch).
+1. 本仓库用 todopi 管理自己的开发，跨 ≥ 3 个会话、同时使用 Claude Code 与 Codex，没有可归因于账本的进度丢失或重复工作。
+2. 在本仓库真实账本上，`prime` 在预算内打印的内容，足以让一个全新会话不打开任何其他文件就正确接续——跨 3 个会话人工确认。测「输出没超预算」证明不了任何事，因为它本来就是按预算截断的；需要被证明的是**裁剪顺序先丢掉的是最没用的内容**。
+3. 新用户按 README 从零安装到一个可认领任务 ≤ 2 分钟。
+4. 每个发布 tag 上 `doctor` 对本仓库账本通过。
+5. 六个 `setup` 目标各自在全新克隆上干净安装，且 agent 在会话开始时收到 `prime` 输出（首发前逐家手工验证）。
 
-## 13. Launch checklist (Show HN, no soft launch)
+## 13. 首发清单（直接 Show HN，不做软发布）
 
-- [ ] Format spec published at todopi.com/spec with the twelve-field table
-- [ ] 30-second recording: compaction happens, the agent continues from `prime`
-- [ ] README: install for six agents, the protocol, "vs Beads" paragraph, pronunciation and name origin
-- [ ] npm `todopi`, brew tap, curl installer live; `@todopi` scope claimed
-- [ ] Six marketplace/registry listings live
-- [ ] `import beads` tested against at least two real Beads Classic exports
-- [ ] awesome-list PRs prepared for the week after launch
-- [ ] Domain: todopi.com renewed, todopi.dev registered
+- [ ] 格式规格发布在 todopi.com/spec，含 12 字段表
+- [ ] 30 秒录屏：压缩发生，agent 从 `prime` 继续
+- [ ] README：六家安装方式、协议、「vs Beads」段落、读音与名字来源
+- [ ] npm `todopi`、brew tap、curl 安装脚本上线；`@todopi` scope 已占
+- [ ] 六个市场/注册表条目上线
+- [ ] `import beads` 用至少两份真实 Beads Classic 导出测过
+- [ ] 首发后一周的 awesome 列表 PR 准备好
+- [ ] 域名：todopi.com 已续费，todopi.dev 已注册
 
-## 14. Risks
+## 14. 风险
 
-| Risk | Mitigation |
+| 风险 | 应对 |
 |---|---|
-| Crowded category (Beads and a dozen minimal clones) | Compete on the public format, one-command cross-agent setup, verified completion, capped prime; not on feature count |
-| A vendor ships durable, in-repo tasks natively | Stay cross-agent and diffable; be the format others read |
-| Agents ignore or misuse the ledger | Hooks rather than prompts; lenient verbs; handoff review of agent-created tasks; tune the protocol text from dogfooding |
-| Scope creep (Beads' failure mode) | Hard cap of 20 subcommands in v0.1; each addition must remove something |
-| Six integrations for one maintainer | Integrations are thin wrappers around one protocol text plus `prime`/`handoff`; contract tests run all six in CI |
-| Same task edited on two branches conflicts | Accepted for v0.1 (rare for solo use); `doctor` detects markers; merge driver in v0.2 |
+| 品类拥挤（Beads 与十几个极简克隆） | 靠公开格式、一条命令跨 agent 接入、验证式完成、有上限的 prime 竞争；不拼功能数 |
+| 某家厂商原生做出仓库内持久任务 | 坚持跨 agent 与可 diff；成为别人读的格式 |
+| agent 忽视或误用账本 | 用钩子而非提示；宽容动词；handoff 审视 agent 新建的任务；靠 dogfooding 调协议文本 |
+| 范围膨胀（Beads 的失败模式） | v0.1 硬上限 20 个子命令；每加一个必须删一个 |
+| 一个维护者六套接入 | 接入只是围绕同一份协议文本加 `prime`/`handoff` 的薄包装；CI 里对六家跑契约测试 |
+| 同一任务在两个分支被改产生冲突 | v0.1 接受（独立开发场景少见）；`doctor` 检测冲突标记；v0.2 出 merge driver |
 
-## 15. Open items
+## 15. 待办项
 
-Implementation defaults (decided unless objected to): random 6-char base36 ids; UTC second timestamps; `.todopi/` only at repo root; leases fall back to `.cache/` without git; `prime` truncation order as in FR-P1/P1a; characters ÷ 4 token estimate; "this session" = since this session's last `prime`, falling back to this actor's where the agent exposes no session id; closed blockers unblock regardless of resolution; no hard delete.
+实现默认值（除非有异议即按此执行）：6 位 base36 随机 ID；UTC 秒级时间戳；`.todopi/` 只在仓库根；无 git 时租约回退到 `.cache/`；`prime` 的裁剪顺序如 FR-P1/P1a；字符数 ÷ 4 估算 token；「本会话」= 自本**会话**上次 `prime` 起，agent 不暴露会话 id 时回退为本 actor；阻塞项关闭即解除阻塞而不论 resolution；无硬删除。
 
-Deferred with a named trigger, so that "later" does not become "never":
+**带触发条件的推迟项**，避免「以后再说」变成「一直没做」：
 
-- **Cross-repository view** (`ls --all`) stays in v0.3. It needs a user-level registry of repositories and repository-qualified output, and it serves the maintainer rather than the launch: none of the five MVP acceptance criteria touch more than one repository. Reconsider during dogfooding if the daily loop turns out to span repositories — the minimal form is one flag and an auto-populated registry, roughly half a day, and it costs none of the 20-subcommand budget. Until then the README documents the shell loop over `-C`.
-- **`project_id`** — a stable identifier surviving moves and clones, needed by the cross-repository view and by any later sync. Not added now because the format spec §9 classes a new config key as an additive change that does not bump the format version, so it can be introduced whenever it has a consumer and backfilled by `doctor --fix`. Adding it before then would ship a field nothing reads.
+- **跨仓视图**（`ls --all`）留在 v0.3。它需要一份用户级的仓库注册表和带仓库限定的输出，而且服务的是维护者而不是首发：MVP 的五条验收标准没有一条涉及一个以上的仓库。dogfooding 时若发现日常回路确实跨仓库，再重新考虑——最小形态是一个 flag 加一份自动积累的注册表，约半天工作量，且不占 20 个子命令的额度。在那之前 README 给出基于 `-C` 的 shell 循环写法。
+- **`project_id`** —— 一个能在移动与克隆后保持稳定的标识，跨仓视图和将来任何同步都需要它。现在不加，是因为格式规格 §9 明确把「新增配置键」归类为不升版本的加性变更，所以它随时可以在有消费者时引入，并由 `doctor --fix` 回填。提前加等于发布一个没人读的字段。
 
-Actions for the product owner: renew todopi.com (expires 2026-11-20); register todopi.dev; publish `todopi` / `@todopi` placeholders on npm; create the GitHub org; manual trademark search (USPTO, EUIPO); obtain two real Beads Classic exports for importer tests.
+产品负责人的动作：续费 todopi.com（2026-11-20 到期）；注册 todopi.dev；在 npm 发布 `todopi` / `@todopi` 占位；创建 GitHub org；人工商标检索（USPTO、EUIPO）；为导入器测试准备两份真实 Beads Classic 导出。
 
-## 16. Decision log
+## 16. 决策记录
 
-Thirty product decisions were taken on 2026-09-14 and are recorded, with rationale and research, in `docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md` §10.
+2026-09-14 共做出 30 项产品决策，连同理由与调研记录在 `docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md` §10。
 
-A review on 2026-09-15 resolved eleven issues found in that draft and in the format spec, and produced version 1.1 of this document. The substantive changes: ranks are assigned at creation (FR-T1/T5); the state machine gained reclaim and `reopen` clears `assignee`; criterion checks carry their text into the Log; verify output no longer enters the Log on success; refused transitions are not logged at all and instead produce a structured report (FR-D2a); identity is matched strictly for writes and broadly for displays (FR-C6); `prime` pins the protocol reminder and sub-budgets every item (FR-P1a); the v0.1 board is read-only (FR-B3); the soft-delete resolution is renamed `obsolete`; and MVP acceptance no longer asserts a tautology.
+2026-09-15 的一次评审解决了那份草稿与格式规格中发现的 11 个问题，产出本文档的 1.1 版。实质变更：rank 在创建时分配（FR-T1/T5）；状态机补上重新认领，`reopen` 清除 `assignee`；验收标准的勾选把标准文本一并写进 Log；通过的验证输出不再进 Log；被拒绝的转换完全不记 Log，改为输出一份结构化报告（FR-D2a）；身份在写入时严格匹配、在展示时宽松匹配（FR-C6）；`prime` 置顶协议提醒并为每一项设子预算（FR-P1a）；v0.1 看板改为只读（FR-B3）；软删除 resolution 更名为 `obsolete`；MVP 验收不再包含一条同义反复。
+
+## 17. 外部事实核实记录（2026-09-16）
+
+本节记录对第三方 agent API 的核实结果。这些是**外部事实，会变**；每次首发前
+与每次接入包改动前都应重核，核实日期与结论一并更新。核实方法：各家官方文档
+与官方论坛记录。
+
+### 与 1.1 版的三处出入
+
+1. **Cursor 与 Gemini CLI 都已支持钩子。** 1.1 版写的「规则文件加命令」已过期。
+   两家都能在 `SessionStart` / `sessionStart` 注入上下文，各自的字段是
+   `hookSpecificOutput.additionalContext` 与 `additional_context`。
+2. **pi 的压缩事件选错了。** 1.1 版写 `session_before_compact`，它在压缩**之前**
+   触发。压缩后重新注入要用 `session_compact`。
+3. **OpenCode 缺会话开始的覆盖。** 1.1 版只写了 `session.compacted`，遗漏了
+   `session.created`；且这两者都不是顶层钩子名，而是通过 `event` 钩子订阅的事件。
+
+### 结构性发现：三分之一的接入面没有 post-compaction 事件
+
+Cursor 只有 `preCompact`、Gemini CLI 只有 `PreCompress`，都没有压缩后的对应事件。
+而「压缩之后重新注入账本指针」正是这个产品的核心演示（启动清单里那段 30 秒录屏）。
+FR-A2a 给出的替代路径是压缩**前**注入摘要，让指针成为摘要的一部分；这不是等价
+替代，差异写在 FR-A2a 里。这个约束应当影响首发叙事：核心演示用有 post 事件的
+agent 录，而不是假设六家表现一致。
+
+### 顺带确认
+
+- **沙箱约束整棵进程树**（Claude Code、Codex 均已确认），所以 README 建议用户
+  以 OS 沙箱补白名单的不足，是有效建议而非安慰性措辞。
+- Claude Code 的 `SessionStart` matcher 有五个（`startup` `resume` `clear`
+  `compact` `fork`），1.1 版只列了三个。
+- Claude Code 有 `TaskCreated` / `TaskCompleted` 事件，v0.2 的原生 todo 镜像
+  计划成立。

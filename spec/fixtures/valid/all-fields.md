@@ -1,0 +1,26 @@
+---
+id: "tp-a1b2c3"
+title: "Support passkeys on /login"
+status: "in_progress"
+assignee: "claude-code@mbp"
+parent: "tp-9f00k2"
+blocked_by: ["tp-7c21xx", "tp-0000zz"]
+rank: "a0m"
+verify: "pnpm test -- login"
+labels: ["auth", "web"]
+created: "2026-09-14T09:00:00Z"
+updated: "2026-09-14T10:41:00Z"
+---
+
+## Description
+
+Whatever.
+
+## Acceptance Criteria
+
+- [x] First criterion
+- [ ] Second criterion
+
+## Log
+
+- 2026-09-14T09:00:00Z sean created

@@ -1,0 +1,5 @@
+{
+  "violates": "invariant-6",
+  "reason": "updated < created。通常是时钟回拨或手工编辑。",
+  "reader_must": "reject or report; MUST NOT silently accept"
+}

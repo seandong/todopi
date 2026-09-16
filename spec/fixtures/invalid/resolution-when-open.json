@@ -1,0 +1,5 @@
+{
+  "violates": "invariant-2",
+  "reason": "resolution 只能在 status 为 closed 时出现。",
+  "reader_must": "reject or report; MUST NOT silently accept"
+}

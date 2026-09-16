@@ -1,0 +1,12 @@
+{
+  "note": "空列表等价于字段缺失，但必须能被解析。",
+  "frontmatter": {
+    "id": "tp-a1b2c3",
+    "title": "No labels",
+    "status": "open",
+    "labels": [],
+    "blocked_by": [],
+    "created": "2026-09-14T09:00:00Z",
+    "updated": "2026-09-14T09:00:00Z"
+  }
+}
