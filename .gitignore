@@ -6,3 +6,9 @@ dist/
 
 # harness 结构化结果：本地产物，CI 以 artifact 形式上传
 .harness-results/
+
+# 编辑器临时文件
+*.swp
+*.swo
+*~
+.*.sw[a-p]
