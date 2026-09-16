@@ -91,6 +91,46 @@
       "what": "spec/fixtures/ 的结构或 spec/IMPLEMENTING.md 缺失。",
       "why": "语料库是格式规格的可执行形式，第三方的 CI 会跑它——改既有 fixture 的期望值等同于改格式语义。三份文档有明确权威顺序：规格（normative）> 语料库（可执行形式）> 说明书（advisory，不引入新要求）。缺任何一份，这个顺序就断了。source: AGENTS.md「格式语料库是契约」。",
       "fix": "补回缺失的部分。新增 fixture 不受限制；修改既有 fixture 的期望值 MUST 与 spec/todopi-format-v1.md 在 same commit 内一起改，并按 spec §9 判断是否需要递增格式版本。"
+    },
+    {
+      "id": "ARCH-010",
+      "description": "运行时依赖限定在已论证的三个包内",
+      "applies_when": "test -f package.json",
+      "check": "jq -r '(.dependencies // {}) | keys[]' package.json 2>/dev/null | grep -vxE 'yaml|commander|fractional-indexing' || true",
+      "expect": "empty",
+      "what": "package.json 的 dependencies 里出现了白名单之外的包。",
+      "why": "三个依赖都经过论证且都零传递依赖，这是「npm 装完 1.5 MB」这个分发优势的来源（DECISIONS D008）。更要紧的是有两个包是被**明确拒绝**过的：proper-lockfile（核心是 setInterval 心跳，撞 ARCH-002，且我们能用 pid 精确判活）与 lexorank（带 bucket 与后台重平衡，那是给中心化数据库设计的）。一个 fresh context 的实现者最自然的动作就是装上它们——这条规则就是为此存在。devDependencies 不受限制。",
+      "fix": "删除该依赖，改用 node: 内置模块或白名单内的包。确有必要新增时，先在 DECISIONS.md 论证它、说明为什么现有手段不够，再改本规则——顺序不能反。"
+    },
+    {
+      "id": "ARCH-011",
+      "description": "不得引入提交或缓存的任务索引",
+      "applies_when": "test -d src",
+      "check": "grep -rniE 'index\\\\.json|buildIndex|taskIndex|cacheIndex' src --include='*.ts' --include='*.tsx' || true",
+      "expect": "empty",
+      "what": "src/ 中出现了任务索引的构建或读取。",
+      "why": "读路径只有一条：每次全量扫描，读到的就是磁盘真相（DECISIONS D006 决策 3）。派生缓存要安全，需要「垄断写入」或「监听文件系统」二者之一，而这两扇门都被已定的产品决策关死了——格式规格明文允许人工编辑与第三方写入，AGENTS.md 明文禁止 daemon。缓存过期时 CLI 不会报错，而是自信地给出过期的 ready 队列，agent 领走别人正在做的任务——正是 MVP 验收第 1 条要排除的「重复工作」。规模顶上来时的解法是归档已关闭任务，不是缓存。",
+      "fix": "删除索引逻辑。若全量扫描确实慢，先上手写快路径解析（实测 120ms → 16ms，零一致性风险），再考虑归档 closed 任务；触发条件写在 D006：单仓库 open 任务 > 5000，或全量扫描在目标平台上 > 500 ms。"
+    },
+    {
+      "id": "ARCH-012",
+      "description": "测试与执行不得依赖 Bun 专属入口",
+      "applies_when": "test -f package.json",
+      "check": "grep -nE '\"(test|e2e|start|build)\"[[:space:]]*:[[:space:]]*\"[^\"]*bun (test|run)' package.json || true",
+      "expect": "empty",
+      "what": "package.json 的脚本里用 bun test 或 bun run 作为测试/执行入口。",
+      "why": "与 ARCH-007 同源（DECISIONS D006 决策 1）：源码只用 Node API，测试运行器同样不该引入 Bun 专属依赖，否则 CI 与本地会分叉——本地绿、npm 用户红，而这类差异只有用户会发现。Node 22 直接执行 .ts 且 node --test 直接吃 .ts 文件，不需要构建步骤也不需要 tsx/ts-node。",
+      "fix": "改用 node --test。Bun 只在发布二进制时作为编译器出现（bun build --compile），不作为日常执行入口。"
+    },
+    {
+      "id": "ARCH-013",
+      "description": "不得使用类型剥离无法处理的 TypeScript 语法",
+      "applies_when": "test -d src",
+      "check": "grep -rnE '^[[:space:]]*(export[[:space:]]+)?(const[[:space:]]+)?enum[[:space:]]|^[[:space:]]*namespace[[:space:]]|@[A-Za-z_][A-Za-z0-9_]*\\\\(' src --include='*.ts' --include='*.tsx' || true",
+      "expect": "empty",
+      "what": "src/ 中出现了 enum、namespace 或装饰器。",
+      "why": "Node 22 通过类型剥离直接执行 .ts，而剥离只删类型、不做类型导向的代码生成。enum 会在运行时报 SyntaxError（已实测），namespace 与装饰器同理。这三样一旦出现，node --test 与直接执行 src/cli.ts 都会挂，而 tsc --noEmit 却能通过——静态检查绿、运行时红，是最难查的一类。",
+      "fix": "enum 改为 as const 对象加联合类型（例如 const STATUS = ['open','in_progress','closed'] as const; type Status = typeof STATUS[number]），namespace 改为模块，装饰器改为普通高阶函数。"
     }
   ]
 }

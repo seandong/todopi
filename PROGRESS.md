@@ -24,10 +24,8 @@
 
 无。当前没有 feature 处于 `active`。
 
-`feature_list.json` 的 `features` 是空数组，这是有意的——v0.1 的 feature 拆分要在
-技术方案确认后单独做一次 brainstorm，理由见
-[Scope 契约](docs/harness/scope.md#当前状态空表)。格式规格已于 2026-09-15 定稿，
-但拆 feature 还缺技术方案这一环（见 Next Steps）。
+`feature_list.json` 已于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
+拆分依据见 DECISIONS D011。当前没有 feature 处于 `active`，下一步是 activate F01。
 
 ## Next Steps
 
@@ -39,15 +37,22 @@
    FR-A2 按核实结果重写。查出三处出入，其中 Cursor 与 Gemini CLI 都已支持钩子
    （PRD 1.1 写的「规则文件加命令」已过期）、pi 的压缩事件选错了方向。
 3. ~~确认技术方案~~ 已完成（2026-09-16）：十条选型附实测数据，见 DECISIONS D006。
-4. **拆出 v0.1 的第一批 feature**，写入 `feature_list.json`。每条必须能回答
-   Scope 契约末尾的三个问题。这是当前的下一步动作。
-5. 第一个 feature 建议是格式层的读（解析 `.todopi/tasks/*.md` 并校验 spec 的
-   MUST 条款），而不是 `todopi init`——读比写更容易建立测试基线，而且
-   `spec/fixtures/` 已经提供了现成的测试语料（14 valid + 9 invalid）。
-6. 建立 `src/` 与 `package.json` 时：依赖只有三个（`yaml`、`commander`、
-   `fractional-indexing`，均零传递依赖），同步补上 lockfile 与
+4. ~~拆出 v0.1 的第一批 feature~~ 已完成（2026-09-16）：21 条，三个里程碑，
+   依据见 DECISIONS D011。
+5. **`make activate F=F01`**，然后用 `superpowers:writing-plans` 为它写实现计划
+   （存 `docs/plans/`，不用 skill 默认的 `docs/superpowers/plans/`——`docs/harness/`
+   已是本仓库放过程文档的地方，再引入带工具名的路径会让权威地图多一个待解释条目）。
+   写 plan 的过程会逼出 `src/ARCHITECTURE.md` 的初稿，因为写不出模块划分就写不出
+   符合 writing-plans 标准的步骤。
+6. F01 同时要落地工具链：`package.json`（依赖只有三个）、`tsconfig.json`、lockfile、
    `src/ARCHITECTURE.md`，并更新 `docs/harness/index.md` 的「有意缺省」表。
-   注意 ARCH-007（禁 `Bun.*`）与 ARCH-008（DTO 边界）在 `src/` 出现后即生效。
+   **实测事实**：Node 22.22 直接执行 `.ts` 且 `node --test` 直接吃 `.ts`，
+   不需要构建步骤也不需要 `tsx`/`ts-node`；`typescript` 只作为 devDependency 供
+   `tsc --noEmit` 用。但类型剥离不做类型导向的代码生成——`enum` 会在运行时报
+   SyntaxError 而 `tsc --noEmit` 却能通过（已由 ARCH-013 挡住）。
+7. `src/` 出现后立即生效的规则：ARCH-007（禁 `Bun.*`）、ARCH-008（DTO 边界）、
+   ARCH-011（禁任务索引）、ARCH-013（禁 enum/namespace/装饰器）；
+   `package.json` 出现后生效的：ARCH-010（依赖白名单）、ARCH-012（禁 bun test）。
 
 ## Blockers
 

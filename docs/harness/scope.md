@@ -76,17 +76,33 @@ not_started ──activate──> active ──verify-feature(全层 pass)──
   但一个 session 结束时 VCR 仍 < 1.0，说明工作跨 session 了——
   在 PROGRESS.md 里如实记录，不要靠记忆。
 
-## 当前状态：空表
+## 当前状态：21 条，三个里程碑
 
-`features` 目前为空数组。这是有意的：v0.1 的 feature 拆分要在规格定稿**且技术方案
-确认后**单独 brainstorm 一次，而不是从 PRD 的 FR 编号机械翻译过来——FR 是需求，
-feature 是「一个 session 能做完并能被运行时证据验证的行为」，两者粒度不同。
+`features` 于 2026-09-16 填入 21 条，拆分依据见 [DECISIONS D011](../../DECISIONS.md)。
+顶层的 `milestones` 键给出分组与各自的完成信号：
 
-格式规格已于 2026-09-15 定稿（D004），技术方案已于 2026-09-16 确认（D006），
-外部事实已核实（PRD §17）。三项前置条件都已满足，**拆 feature 是当前的下一步动作**。
+| 里程碑 | feature | 完成信号 |
+|---|---|---|
+| M1 | F01–F07 | [状态迁移契约](state-migration.md) 的三个触发条件全部满足，仓库切换到用 todopi 管自己 |
+| M2 | F08–F13 | 日常回路完整，dogfooding 不再需要手工绕开任何环节 |
+| M3 | F14–F21 | PRD §13 首发清单中与代码相关的条目全部可勾 |
 
-添加第一批 feature 之前，先确认每一条都能回答：
+**M1 与 M2 不委派，M3 的八个 feature 可交给 subagent 顺序完成。**
+判据是「它会不会锁定后面所有 feature 都要继承的决定」——M1/M2 每一个都在定
+目录结构、DTO 边界、领域模型形状，或需要 dogfooding 反馈的措辞；M3 的八个是
+叶子节点（没有东西依赖它们），且规格已细到不需要再做设计判断。
+
+WIP=1 禁止的是**并行**（第二个 `make activate` 会被拒，且 `feature_list.json` 与
+`PROGRESS.md` 都是单文件），不禁止顺序委派。委派在这个仓库比在一般仓库更安全，
+因为完成判据不由 agent 说了算：`state` 与 `evidence` 只能由 `make verify-feature`
+在三层真的通过后写入。
+
+新增 feature 时，每一条都要能回答：
 
 1. 用户能观察到什么变化？
 2. 什么命令能证明它做到了？
 3. 这个命令失败时，agent 该改哪个文件？
+
+第三问对应 `layers[].repair`，是最容易敷衍也最值钱的一项——它必须点名具体文件
+或函数。委派场景下它尤其重要：subagent 拿不到这几天的论证过程，repair 是它
+唯一的现场指引。
