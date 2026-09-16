@@ -4,10 +4,15 @@
   "description": "A durable task ledger for AI coding agents",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=20" },
-  "bin": { "todopi": "src/cli.ts", "tp": "src/cli.ts" },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "todopi": "src/cli.ts",
+    "tp": "src/cli.ts"
+  },
   "scripts": {
-    "test": "node --test tests/",
+    "test": "node --test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
