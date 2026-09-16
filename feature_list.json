@@ -71,7 +71,7 @@
       "id": "F01",
       "behavior": "todopi doctor 指着一个 .todopi/ 目录，逐条报出它违反了格式规格的哪条不变量，全部通过退出 0、有问题退出 1",
       "verification": "对 spec/fixtures/valid/ 的每个样例，解析结果与配套 .json 的 frontmatter 一致且 doctor 退出 0；对 spec/fixtures/invalid/ 的每个样例，doctor 退出 1 且输出点名该 .json 里 violates 字段所指的规则。同时落地 TypeScript 工具链（package.json、tsconfig.json、lockfile、src/ARCHITECTURE.md）——src/ 一旦存在而工具链缺失，check_typecheck 会报 blocked，基线就红了。",
-      "state": "not_started",
+      "state": "active",
       "depends_on": [],
       "evidence": "",
       "layers": [
@@ -87,7 +87,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f01-doctor.sh",
+          "cmd": "bash tools/e2e/f01-doctor.sh",
           "repair": "退出码不对→src/cli.ts 的 doctor 分支没有把校验结果映射到 FR-Q2 的退出码（0 成功 / 1 校验错误）；输出不含规则名→src/output/dto/doctor.ts 的映射丢了 violates 字段。"
         }
       ]
@@ -114,7 +114,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f02-init.sh",
+          "cmd": "bash tools/e2e/f02-init.sh",
           "repair": "在空临时目录跑 init 后 doctor 不为 0→检查 config.yml 的字段顺序与默认值是否符合 spec §3。"
         }
       ]
@@ -141,7 +141,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f03-add.sh",
+          "cmd": "bash tools/e2e/f03-add.sh",
           "repair": "add 后 doctor 不为 0→说明发射器写出的形状与 F01 的解析器不一致，先看 spec §5.1 的引号规则哪一条没实现。"
         }
       ]
@@ -168,7 +168,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f04-ls.sh",
+          "cmd": "bash tools/e2e/f04-ls.sh",
           "repair": "--json 结构与文档不符→src/output/dto/task.ts；若报 ARCH-008 违规，说明 src/output/ 直接 import 了 src/domain/ 的类型。"
         }
       ]
@@ -195,7 +195,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f05-claim.sh",
+          "cmd": "bash tools/e2e/f05-claim.sh",
           "repair": "租约没写到预期位置→确认 --git-common-dir 的取值；裸仓库场景按 PRD §15 明确不支持，应报错而不是写进裸仓库内部。"
         }
       ]
@@ -222,7 +222,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f06-gates.sh",
+          "cmd": "bash tools/e2e/f06-gates.sh",
           "repair": "报告内容不足→src/output/report/gate.ts；它必须能独立回答「哪道门、具体是什么、下一步做什么」三个问题。"
         }
       ]
@@ -249,7 +249,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f07-verify.sh",
+          "cmd": "bash tools/e2e/f07-verify.sh",
           "repair": "信任提示未出现→src/exec/trust.ts 的路径解析；输出写错地方→确认完整输出进 .cache/、只有 --force 时才进 Log。"
         }
       ]
@@ -276,7 +276,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f08-show.sh",
+          "cmd": "bash tools/e2e/f08-show.sh",
           "repair": "--tree 进度不对→src/domain/derive.ts 的 children 计数；容器的判定是「有一个以上子任务」。"
         }
       ]
@@ -303,7 +303,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f09-note-check.sh",
+          "cmd": "bash tools/e2e/f09-note-check.sh",
           "repair": "多行 note 读回变成一行→src/format/body.ts 的续行处理。"
         }
       ]
@@ -330,7 +330,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f10-edit-move-dep.sh",
+          "cmd": "bash tools/e2e/f10-edit-move-dep.sh",
           "repair": "move 后顺序不对→确认 fractional-indexing 用的是 base36 字符集，与 spec §5.2 的 rank 正则一致。"
         }
       ]
@@ -357,7 +357,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f11-prime.sh",
+          "cmd": "bash tools/e2e/f11-prime.sh",
           "repair": "输出里出现了协议文本→删掉；它由 setup 装进各家规则文件，压缩后由 agent 自行重读。"
         }
       ]
@@ -384,7 +384,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f12-handoff.sh",
+          "cmd": "bash tools/e2e/f12-handoff.sh",
           "repair": "--check 有副作用→它必须只读；写入分支只在不带 --check 时执行。"
         }
       ]
@@ -411,7 +411,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f13-doctor-fix.sh",
+          "cmd": "bash tools/e2e/f13-doctor-fix.sh",
           "repair": "--fix 后 doctor 仍非 0→输出会列出剩余问题；不可自动修复的项（如环、孤儿引用）本就不在 --fix 范围内。"
         }
       ]
@@ -438,7 +438,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f14-setup-claude.sh",
+          "cmd": "bash tools/e2e/f14-setup-claude.sh",
           "repair": "钩子没触发→核对事件名与 matcher 拼写（PRD §17 记录了核实结果：matcher 有 startup/resume/clear/compact/fork 五个）。"
         }
       ]
@@ -465,7 +465,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f15-setup-codex-opencode.sh",
+          "cmd": "bash tools/e2e/f15-setup-codex-opencode.sh",
           "repair": "生成的配置不被各家接受→对照 PRD §17 的配置位置表逐项核对。"
         }
       ]
@@ -492,7 +492,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f16-setup-pi.sh",
+          "cmd": "bash tools/e2e/f16-setup-pi.sh",
           "repair": "扩展装不上→pi 的扩展可放 .pi/extensions/ 或经 pi install 分发，确认 setup 选的是项目级路径。"
         }
       ]
@@ -519,7 +519,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f17-setup-cursor-gemini.sh",
+          "cmd": "bash tools/e2e/f17-setup-cursor-gemini.sh",
           "repair": "压缩后指针丢失→确认走的是压缩前注入而不是期待一个不存在的 post 事件；Cursor CLI 不触发 sessionStart 时回退到规则文件路径。"
         }
       ]
@@ -546,7 +546,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f18-web.sh",
+          "cmd": "bash tools/e2e/f18-web.sh",
           "repair": "轮询退化没走通→src/board/watch.ts 应在 fs.watch 抛错或不可用时切换，而不是直接失败。"
         }
       ]
@@ -573,7 +573,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f19-import-md.sh",
+          "cmd": "bash tools/e2e/f19-import-md.sh",
           "repair": "导入后 doctor 非 0→多半是 parent 指向了一个尚未创建的任务，应按文档顺序先建父后建子。"
         }
       ]
@@ -600,7 +600,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f20-import-beads.sh",
+          "cmd": "bash tools/e2e/f20-import-beads.sh",
           "repair": "环或孤儿引用→Beads 的 blocks 是反向关系，映射成 blocked_by 时方向不能反。"
         }
       ]
@@ -628,7 +628,7 @@
         },
         {
           "label": "system",
-          "cmd": "node tools/e2e/f21-install.sh",
+          "cmd": "bash tools/e2e/f21-install.sh",
           "repair": "无 Node 的容器里失败→安装器的平台探测或校验和步骤；失败必须是明确报错而不是装出一个坏的二进制。"
         }
       ]

@@ -22,10 +22,14 @@
 
 ## In Progress
 
-无。当前没有 feature 处于 `active`。
+**F01 `doctor`** —— `state: active`，实现计划已写：
+[docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)（9 个 task）。
 
-`feature_list.json` 已于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
-拆分依据见 DECISIONS D011。当前没有 feature 处于 `active`，下一步是 activate F01。
+尚未开始写代码。VCR = 0（1 个 activated、0 个 passing）。
+下一步是执行 plan 的 Task 1（工具链与 CLI 骨架）。
+
+`feature_list.json` 于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
+拆分依据见 DECISIONS D011。
 
 ## Next Steps
 
@@ -39,11 +43,10 @@
 3. ~~确认技术方案~~ 已完成（2026-09-16）：十条选型附实测数据，见 DECISIONS D006。
 4. ~~拆出 v0.1 的第一批 feature~~ 已完成（2026-09-16）：21 条，三个里程碑，
    依据见 DECISIONS D011。
-5. **`make activate F=F01`**，然后用 `superpowers:writing-plans` 为它写实现计划
-   （存 `docs/plans/`，不用 skill 默认的 `docs/superpowers/plans/`——`docs/harness/`
-   已是本仓库放过程文档的地方，再引入带工具名的路径会让权威地图多一个待解释条目）。
-   写 plan 的过程会逼出 `src/ARCHITECTURE.md` 的初稿，因为写不出模块划分就写不出
-   符合 writing-plans 标准的步骤。
+5. ~~activate F01 并写实现计划~~ 已完成（2026-09-16）：计划在
+   [docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)。
+   **执行方式建议 Inline 而非委派**——F01 定下的目录结构、DTO 边界、退出码与错误
+   输出形态会被后面 20 个 feature 全部继承，理由见 DECISIONS D011。
 6. F01 同时要落地工具链：`package.json`（依赖只有三个）、`tsconfig.json`、lockfile、
    `src/ARCHITECTURE.md`，并更新 `docs/harness/index.md` 的「有意缺省」表。
    **实测事实**：Node 22.22 直接执行 `.ts` 且 `node --test` 直接吃 `.ts`，
