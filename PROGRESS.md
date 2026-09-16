@@ -8,7 +8,9 @@
 - Last commit: `8b81d5b` —— 分发形态调研，六家市场上架降为首发后跟进。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（4 条通过、5 条不适用）/ typecheck（`not_applicable`）
-- `make test`: `not_applicable` —— 尚无 `tests/` 与 `src/`
+- `make test`: `pass` —— `fixtures` 通过（`tools/check-fixtures.mjs`：15 valid /
+  9 invalid，spec §6.2 的 8 条不变量 8/8 有对应样例）；`unit-test` 仍
+  `not_applicable`（尚无 `tests/` 与 `src/`）。这是本仓库第一个真实的运行时证据
 - `make e2e`: `not_applicable` —— 尚无可执行 CLI
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的

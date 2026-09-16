@@ -100,7 +100,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 ### 7.4 完成定义
 
 - **FR-D1** `check <id> <n>` / `check <id> <n> --undo` 切换第 n 条验收标准并留痕。
-- **FR-D2** `done <id>`：若设置了 `verify`，先原样打印将要执行的命令，再在仓库根以配置的超时执行并捕获输出；非零退出则拒绝（退出码 2）。任何验收标准未勾选、任何子任务不是 `closed`、或任务归属于另一个 actor（FR-C6），同样拒绝。成功则设为 `closed`/`done`，记录 `done verify=… commit=<HEAD7> dirty=<bool>`，删除租约。
+- **FR-D2** `done <id>`：若设置了 `verify`，先原样打印将要执行的命令，再在仓库根以配置的超时执行并捕获输出；非零退出则拒绝（退出码 2）。超时**MUST 终止整个进程组**而不只是直接子进程：POSIX 上以独立进程组启动并向进程组发信号，Windows 上用等价的树终止。实测依据是运行时默认行为只向直接子进程发 SIGTERM，孙进程全部存活——而 `verify` 的典型值（`pnpm test`、`cargo test`）都会 fork worker，默认超时又是 600 秒，被遗弃的 worker 会继续占端口、写文件、烧 CPU，而 todopi 早已退出。任何验收标准未勾选、任何子任务不是 `closed`、或任务归属于另一个 actor（FR-C6），同样拒绝。成功则设为 `closed`/`done`，记录 `done verify=… commit=<HEAD7> dirty=<bool>`，删除租约。
 - **FR-D2a** 拒绝时打印一份不需要再跑别的命令就能据以行动的报告——因为这是 agent 唯一能看到的东西，而协议要求它去修活而不是强制通过。报告写明**是哪道门禁拒绝的**及其具体内容：未勾选的验收标准逐条列出序号与文本；未关闭的子任务列出 id、标题与状态；`verify` 列出实际执行的命令、退出码与输出尾部；归属冲突列出持有者及其最近一次写入时间。报告以两条出路结尾——修完重跑 `done`，或 `--force --reason <text>`。不向 Log 追加任何内容：状态没有改变（格式规格 §5.3.3）。agent 想记录学到的东西，用 `note`。
 - **FR-D3** `--force --reason <text>` 绕过任何门禁，记录 `forced=true` 与理由；此类任务在列表与看板中标记为「未验证」。
 - **FR-D4** 在某仓库首次执行 `verify` 前要求确认，信任按仓库路径记入 `~/.config/todopi/trust`；`--yes` 或 `CI=true` 跳过提示。信任记录**永不**存在 `.todopi/` 内：随仓库一起传播的信任记录等于让仓库为自己背书。由于 `verify` 是任何写入者都能改的普通任务字段——agent、手工编辑、被合并的 PR——按路径信任并不约束授信之后**执行的是什么**。有两件事收窄这个面：每次执行前原样打印命令，使它永远不会和上次悄悄不同；`handoff` 列出自本 actor 上次 `prime` 以来 `verify` 发生过变更的任务（FR-H1）。按命令内容信任排在 v0.2——届时用户开始接受外部贡献，重复确认的摩擦才换得来对等的收益。
@@ -172,7 +172,7 @@ todopi add <title> [-d text] [--parent id] [--blocked-by id,…] [--label l]… 
 todopi ls [--open|--closed|--all] [--ready] [--blocked] [--mine] [--label l] [--limit n] [--json]
 todopi show <id> [--full] [--tree] [--json]
 todopi edit <id> [--title t] [-d text] [--verify cmd] [--label +l|-l] [--parent id|none] [--edit]
-todopi done <id> [--evidence text] [--force --reason text] [--yes]
+todopi done <id> [--force --reason text] [--yes]
 todopi close <id> --as <wontfix|duplicate|obsolete> [--reason text] [--force]
 todopi reopen <id>
 todopi move <id> --top|--before <id>|--after <id>
@@ -190,9 +190,18 @@ todopi import <file.md> | import beads [path]
 
 全局参数：`--json`、`--quiet`、`--as <actor>`、`-C <dir>`。
 
+- `--json`：输出结构化数据而非人类可读文本（FR-Q3）。
+- `--quiet`：抑制进度与提示性输出，只保留结果本身与错误；退出码不受影响。与 `--json` 同时给时 `--json` 决定格式、`--quiet` 去掉伴随文本，两者不冲突。
+- `--as <actor>`：同时覆盖写入身份与查询身份（FR-C4）。
+- `-C <dir>`：在该目录下查找 `.todopi/` 并执行，等价于先 cd 过去。
+
 ## 9. Agent 协议（SKILL.md / AGENTS.md 片段的内容，≤ 800 token）
 
-每个 agent 都会收到的文本，大纲如下：
+**本节是对一份英文产物的中文描述，不是那份产物本身。** 协议文本会被 `setup` 写进
+用户的仓库，属于用户可见文案，MUST 是英文（AGENTS.md 的 English-first 边界）。
+正文是首发阻塞项，尚未撰写；撰写时以本节大纲为准，并逐条核对 ≤ 800 token 预算。
+
+大纲如下：
 
 1. **todopi 是什么**：仓库的持久任务账本；`.todopi/` 是数据，永远不要手改，用 CLI。
 2. **粒度**：一个 todopi 任务约等于一次值得提交的改动，有可检查的结果。改一个文件或跑一次测试不是任务。
@@ -200,6 +209,7 @@ todopi import <file.md> | import beads [path]
 4. **原生 todo**：本轮内的步骤继续用你自己的；永远不要把 todopi 任务复制进去。
 5. **提交**：把 `.todopi/` 的改动和对应工作一起提交；在提交信息里写任务 id。
 6. **查询**：`todopi ls --ready` 看下一步做什么；`todopi show <id>` 看细节；解析输出时加 `--json`。
+7. **察觉到上下文被压缩时**：主动跑一次 `todopi prime`，不要等钩子。这条对所有 agent 都写，但对 Cursor 与 Gemini CLI 是**必需**——它们没有压缩后事件（FR-A2/A2a），钩子不会替你重新注入。
 
 这段文本是产品产物：措辞靠 dogfooding 调整，改它不是代码变更。
 
@@ -261,6 +271,9 @@ todopi import <file.md> | import beads [path]
 **带触发条件的推迟项**，避免「以后再说」变成「一直没做」：
 
 - **跨仓视图**（`ls --all`）留在 v0.3。它需要一份用户级的仓库注册表和带仓库限定的输出，而且服务的是维护者而不是首发：MVP 的五条验收标准没有一条涉及一个以上的仓库。dogfooding 时若发现日常回路确实跨仓库，再重新考虑——最小形态是一个 flag 加一份自动积累的注册表，约半天工作量，且不占 20 个子命令的额度。在那之前 README 给出基于 `-C` 的 shell 循环写法。
+- **导入器与 `forced=true` 的相互作用**（FR-I1/I2，本轮未展开）。FR-I1 规定导入时已勾选的条目建成 `closed/done` 且 `forced=true`，而 `forced=true` 在列表与看板中标记为「未验证」（FR-D3）。导入 500 个 Beads 已关闭 issue 会产生 500 个「未验证」标记——语义上没错（确实没验证过），但会把一个本用于警示「有人跳过了验证」的标记变成噪音。另需定义：重复导入（按 source + title 幂等）时 `rank` 保留还是重算，因为 rank 现在于创建时分配（FR-T1）。拆到导入器 feature 时展开。
+- **裸仓库明确不支持。** 实测裸仓库中 `git rev-parse --git-common-dir` 返回 `.`，租约目录会落在裸仓库内部。规格 §1 定义 `.todopi/` 位于「包含 `.git` 的目录」，而裸仓库没有工作区。应在规格中显式声明不支持，而不是留给实现去猜。（git worktree 场景实测正确：`--git-common-dir` 正确指向共享的 `.git`。）
+- **Windows 的原子 rename 是已知风险点。** 原子写是临时文件 + rename，而 Windows 上 rename 覆盖一个被其他进程打开的文件会失败。Windows 是尽力而为（CI 跑但不阻塞发布），但这一条应当是 Windows CI **明确要测**的用例，而不是等用户报告。本条未经实测，仅为推理。
 - **`project_id`** —— 一个能在移动与克隆后保持稳定的标识，跨仓视图和将来任何同步都需要它。现在不加，是因为格式规格 §9 明确把「新增配置键」归类为不升版本的加性变更，所以它随时可以在有消费者时引入，并由 `doctor --fix` 回填。提前加等于发布一个没人读的字段。
 
 产品负责人的动作：续费 todopi.com（2026-11-20 到期）；注册 todopi.dev；在 npm 发布 `todopi` / `@todopi` 占位；创建 GitHub org；人工商标检索（USPTO、EUIPO）；为导入器测试准备两份真实 Beads Classic 导出。

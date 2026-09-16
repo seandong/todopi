@@ -10,10 +10,14 @@
 
 ## 2. 没有 debug artifact
 
-- 没有 `console.log` / `console.debug` / `debugger` 残留
+- `src/` 与 `tests/` 里没有 `console.log` / `console.debug` 残留
+- 任何地方都没有 `debugger` / `.only(` / `.skip(`
 - 没有被注释掉的测试或断言
 - 没有 `.orig` / `.rej` / `*.tmp` / 临时脚本留在工作区
-- 没有为了让测试通过而加的 `skip` / `only`
+
+`tools/` 与 `scripts/` 不查 `console.log`：那里放的是 harness 自己的命令行脚本，
+打印报告是它们的职责。把正当输出算成残留，只会逼人用 `process.stdout.write` 绕开，
+规则就退化成仪式。
 
 ## 3. 状态文件已更新
 

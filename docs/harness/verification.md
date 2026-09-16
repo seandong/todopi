@@ -36,6 +36,8 @@
 | `docs-links` | Markdown 内部相对链接指向的文件存在 | `pass` |
 | `spec-version` | `spec/todopi-format-v1.md` 含 `version: 1` 声明且与 config 描述一致 | `pass` |
 | `prd-present` | `todopi-prd.md` 存在（多条边界以它为 source）。PRD 自 2026-09-16 起只有中文单本，不再校验双语同步 | `pass` |
+| `fixtures`（Layer 2） | `tools/check-fixtures.mjs`：`spec/fixtures/` 的每个 valid 样例扫描结果与 `.json` 期望值一致，每个 invalid 样例声明了它违反哪条规则，且 spec §6.2 的每条不变量都有对应 fixture | `pass` |
+| `unit-test`（Layer 2） | `node --test`。运行器是 node:test 而非 bun test —— 见 DECISIONS D006 决策 1 | `not_applicable`（尚无 `tests/`） |
 | `arch-rules` | `.harness/arch-rules.json` 全部规则 | 涉及源码的规则 `not_applicable` |
 | `typecheck` | `tsc --noEmit` | `not_applicable`（无 `src/`） |
 

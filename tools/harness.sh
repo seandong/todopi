@@ -380,15 +380,31 @@ cmd_test() {
   header "test — Layer 2（运行时行为）"
   have jq || die "test 需要 jq。安装：brew install jq"
   checks_init
-  if [ ! -d tests ] && [ ! -d src ]; then
-    emit bun-test not_applicable "尚无 tests/ 与 src/：没有可运行的行为。MUST NOT 因此报 pass"
-  elif ! have bun; then
-    emit bun-test blocked "测试本该运行，但环境缺少 bun（curl -fsSL https://bun.sh/install | bash）"
+
+  # 语料库自洽校验。这是 src/ 出现之前 Layer 2 唯一的真实内容——它跑真实文件、
+  # 真实解析，不是静态检查。语料库号称是「规格的可执行形式」，只有真的被执行，
+  # 这个说法才成立。
+  if [ ! -d spec/fixtures ]; then
+    emit fixtures fail "spec/fixtures/ 不存在，但 ARCH-009 要求它存在"
+  elif ! have node; then
+    emit fixtures blocked "校验本该运行，但环境缺少 node（见 .tool-versions）"
+  elif node tools/check-fixtures.mjs; then
+    emit fixtures pass "spec/fixtures 与格式规格自洽"
   else
-    if bun test; then
-      emit bun-test pass "bun test 通过"
+    emit fixtures fail "spec/fixtures 校验失败，输出见上"
+  fi
+
+  # 单元测试。运行器是 node:test 而非 bun test——见 DECISIONS D006 决策 1：
+  # 源码只用 Node API，测试运行器同样不该引入 Bun 专属依赖，否则 CI 与本地会分叉。
+  if [ ! -d tests ] && [ ! -d src ]; then
+    emit unit-test not_applicable "尚无 tests/ 与 src/：没有可运行的行为。MUST NOT 因此报 pass"
+  elif ! have node; then
+    emit unit-test blocked "测试本该运行，但环境缺少 node（见 .tool-versions）"
+  else
+    if node --test; then
+      emit unit-test pass "node --test 通过"
     else
-      emit bun-test fail "bun test 失败，输出见上"
+      emit unit-test fail "node --test 失败，输出见上"
     fi
   fi
   local overall; overall="$(checks_overall)"; checks_done
@@ -570,10 +586,25 @@ cmd_clean_check() {
   # 2. 没有 debug artifact
   # 只扫 TS/JS 源码：console.log 之类的字面量会出现在本脚本和文档里（比如这一行），
   # 把它们算成残留会让这个检查永远红，agent 学到的第一件事就是忽略它。
+  #
+  # 判据按目录职责分两档，因为「什么算残留」取决于这段代码是干什么的：
+  #   src/ tests/  —— 产品代码与测试。console.log 在这里几乎总是忘了删的调试语句。
+  #   tools/ scripts/ —— harness 自己的命令行脚本，它们的职责就是打印报告。
+  #                    把正当输出算成残留，会逼着作者用 process.stdout.write 绕开，
+  #                    规则就变成了纯仪式。这里只查无歧义的标记。
+  # 收窄而非放宽：debugger / .only / .skip 在任何地方都是残留。
   local dbg="" d
-  for d in src tests tools scripts; do
+  for d in src tests; do
     [ -d "$d" ] || continue
     if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|\.skip\(' "$d" \
+         --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
+         2>/dev/null | head -1 | grep -q .; then
+      dbg="$dbg $d"
+    fi
+  done
+  for d in tools scripts; do
+    [ -d "$d" ] || continue
+    if grep -rnE 'debugger;|\.only\(|\.skip\(' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
