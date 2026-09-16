@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `6c1ab7c` —— 技术方案确认、外部事实核实、PRD 合并为中文单本。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `8b81d5b` —— 分发形态调研，六家市场上架降为首发后跟进。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（4 条通过、5 条不适用）/ typecheck（`not_applicable`）
 - `make test`: `not_applicable` —— 尚无 `tests/` 与 `src/`
