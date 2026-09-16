@@ -9,6 +9,14 @@
 // 这同时验证了「写入端一律加引号」使 frontmatter 成为一个可被简单扫描的
 // 子语言（spec §5.1）这个论断。
 //
+// 与 tests/fixtures.test.ts 的分工：
+//   本文件           —— 校验语料**本身**的质量：每个 .json 有 note、每条不变量都有
+//                      样例、invalid 样例声明了违反哪条规则。语料是给第三方用的，
+//                      质量由这里守，即使 src/ 还不存在也能跑。
+//   fixtures.test.ts —— 校验 src/ 的**实现**对不对：解析结果与期望值一致、快路径与
+//                      yaml 路径一致、invalid 样例被对应规则抓到。
+// 两者测的不是一回事，都要留着。
+//
 // 退出码：0 全部通过 · 1 有失败
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
