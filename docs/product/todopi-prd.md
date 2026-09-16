@@ -64,7 +64,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 | CLI | `todopi` / `tp`；TypeScript，Bun 编译单二进制走 brew/curl；npm 包在 Node ≥ 20 上运行 |
 | 数据 | 仓库根目录的 `.todopi/`；格式见 `spec/todopi-format-v1.md` |
 | 看板 | `todopi web`：本地、只绑定 127.0.0.1、单页、无账号；v0.1 只读 |
-| 接入 | `todopi setup <agent>`，支持 claude、codex、opencode、pi、cursor、gemini；每家同时发布到其市场/注册表 |
+| 接入 | `todopi setup <agent>`，支持 claude、codex、opencode、pi、cursor、gemini。市场/注册表上架是首发后的分发动作，不阻塞发布（§13） |
 | 导入器 | `todopi import <plan.md>` 与 `todopi import beads` |
 | 站点 | todopi.com：安装、文档、格式规格；英文为主，中文页为辅 |
 
@@ -140,7 +140,8 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-A2a** 无 post-compaction 事件的两家（Cursor、Gemini CLI）改用**压缩前注入**：在 `preCompact` / `PreCompress` 时把 `prime --budget 400` 的输出交给待生成的摘要，使账本指针**成为摘要的一部分**，从而按定义活过压缩。这不是等价替代——它注入的是压缩发生**那一刻**的状态，此后到下一次会话开始之间的变化不会反映。协议文本因此要求 agent 在察觉上下文被压缩后主动跑一次 `todopi prime`，这一条对所有 agent 都写，对这两家是必需的。
 - **FR-A2b** Cursor 的 CLI（`cursor-agent`）对钩子的支持一直在变动：2026-01 只有 `beforeShellExecution` / `afterShellExecution` 触发，2026-04 扩展到含 `sessionStart`，官方论坛记录显示仍未与 IDE 完全对齐。因此 Cursor 接入包 MUST 同时提供规则文件作为回退路径，且 MUST 在首发前于 CLI 与 IDE 两种形态下各手工验证一次（MVP 验收第 5 条）。
 - **FR-A3** 所有 agent 收到同一份 ≤ 800 token 的说明文本（「协议」，§9）；各家打包只是包装。
-- **FR-A4** 每个接入包首发即发布到对应市场/注册表：Claude Code plugin、Codex plugin、OpenCode plugin、pi package（npm）、Cursor 规则、Gemini 扩展。
+- **FR-A4** 接入的**能力**在首发时必须完整：六家各自 `todopi setup <agent>` 一条命令装好，README 给出六家安装说明。市场/注册表上架（Claude Code plugin、Codex plugin、OpenCode plugin、pi package、Cursor、Gemini 扩展）是首发后一周内的跟进动作，**不阻塞发布**。
+  改这一条的理由是一个反例：rtk 接入了 17 家 agent，一个市场都没上，全部靠 `rtk init --agent <name>` 就地写配置。市场不是这个品类的必要杠杆，而六家审核周期不可控、单人维护——把它放在关键路径上等于把发布日期交给六个第三方。接入能力不缩水，只是审核不再挡住发布。
 
 ### 7.9 本地看板
 
@@ -208,7 +209,7 @@ todopi import <file.md> | import beads [path]
 |---|---|
 | 性能 | 2,000 个任务的仓库上任何命令在笔记本上 < 200 ms（冷缓存 < 1 s）。`prime` 永不超预算。2026-09-16 实测（M 系列 mac，2,000 任务全量扫描）：手写快路径解析 16 ms、通用 YAML 解析器 120 ms、进程启动 10 ms、文件 I/O 20 ms。目标环境含 WSL2、容器挂载卷与网络文件系统，那里 I/O 往返贵一个数量级，余量按最坏环境预留而非按开发机。 |
 | 平台 | 支持 macOS 与 Linux；Windows 尽力（CI 跑，失败不阻塞发布）。 |
-| 运行时 | npm 包在 Node ≥ 20 上运行，不需要 Bun；brew/curl 提供无运行时依赖的 Bun 编译二进制。源码只用 Node API，Bun 仅作编译器（DECISIONS D006）。实测体积：npm 包 228 KB，二进制 61 MB（macOS arm64）/ 90 MB（Linux x64），体积全部来自内嵌运行时，`--minify` 与 `--bytecode` 均无效。curl 安装器先探测 Node ≥ 20：有则装 npm 包，无则下载二进制。 |
+| 运行时 | npm 包在 Node ≥ 20 上运行，不需要 Bun；brew/curl 提供无运行时依赖的 Bun 编译二进制。源码只用 Node API，Bun 仅作编译器（DECISIONS D006）。实测体积：**npm 装完 1.5 MB**（三个零传递依赖），二进制 61 MB（macOS arm64）/ 90 MB（Linux x64）——体积全部来自内嵌运行时，`--minify` 与 `--bytecode` 均无效。对照：同类中最接近的 Backlog.md 同为 Bun + TypeScript，但因使用 Bun 专属 API 而必须发二进制，其 npm 安装量为 67.5 MB（macOS）/ 96.3 MB（Linux）。**45 倍差距来自「源码只用 Node API」这一条决策**，见 DECISIONS D008。curl 安装器先探测 Node ≥ 20：有则装 npm 包，无则下载二进制。 |
 | 安全 | 验证命令仅在按仓库信任后执行，且每次执行前原样打印；看板只绑定回环地址；v0.1 无任何网络访问。文档明确写出：把 `todopi` 加进 agent 的命令白名单**不是**沙箱——`done` 会执行仓库自己的 `verify` 命令，而 agent 的权限检查看不到它。**OS 级沙箱是有效的**：2026-09-16 核实，Claude Code 与 Codex 的沙箱都约束整棵进程树（macOS Seatbelt、Linux bubblewrap+Landlock+seccomp），todopi 派生的 verify 进程继承同一套限制。文档应据此建议：依赖白名单做隔离的用户同时启用 OS 沙箱。 |
 | 隐私 | 永不遥测。文档提醒 `.todopi/` 在公开仓库中是公开的。 |
 | 兼容 | 格式版本 1；CLI 拒绝写入更新的版本（退出码 4）。 |
@@ -219,7 +220,7 @@ todopi import <file.md> | import beads [path]
 
 | 版本 | 范围 |
 |---|---|
-| **v0.1（MVP）** | §7 全部；六家接入包上市场；两个导入器；看板；含格式规格的站点；Show HN 首发 |
+| **v0.1（MVP）** | §7 全部；六家接入包可用（上市场是首发后跟进）；两个导入器；只读看板；含格式规格与语料库的站点；Show HN 首发 |
 | **v0.2** | 看板写操作（FR-B3）、按命令内容信任（FR-D4）、可选的 `project_id` 配置键、原生 todo 镜像（Claude Code `TaskCreated/TaskCompleted` 钩子、OpenCode 插件）、提交/PR 关联、任务文件的 git merge driver、Linear 单向推送（todopi 为事实来源）、`remember` 记忆条目进 `prime`、薄 MCP 适配（≤ 5 工具）、Linear 之后做 GitHub Issues |
 | **v0.3+** | 跨仓视图、托管同步与共享看板（付费）、双向同步、任务级成本归因 |
 
@@ -237,9 +238,9 @@ todopi import <file.md> | import beads [path]
 - [ ] 30 秒录屏：压缩发生，agent 从 `prime` 继续
 - [ ] README：六家安装方式、协议、「vs Beads」段落、读音与名字来源
 - [ ] npm `todopi`、brew tap、curl 安装脚本上线；`@todopi` scope 已占
-- [ ] 六个市场/注册表条目上线
+- [ ] 六家 `todopi setup <agent>` 在全新克隆上各自验证通过（市场条目不在此清单，见 FR-A4）
 - [ ] `import beads` 用至少两份真实 Beads Classic 导出测过
-- [ ] 首发后一周的 awesome 列表 PR 准备好
+- [ ] 首发后一周的跟进动作准备好：awesome 列表 PR、六个市场/注册表条目
 - [ ] 域名：todopi.com 已续费，todopi.dev 已注册
 
 ## 14. 风险
@@ -267,6 +268,8 @@ todopi import <file.md> | import beads [path]
 ## 16. 决策记录
 
 2026-09-14 共做出 30 项产品决策，连同理由与调研记录在 `docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md` §10。
+
+2026-09-16 的分发形态调研推翻了决策 #28（六家市场上架阻塞首发），依据见 DECISIONS D008——反例是 rtk 接入 17 家 agent 而一个市场都没上。brainstorm §10 的原条目保留不改，由 D008 推翻。
 
 2026-09-15 的一次评审解决了那份草稿与格式规格中发现的 11 个问题，产出本文档的 1.1 版。实质变更：rank 在创建时分配（FR-T1/T5）；状态机补上重新认领，`reopen` 清除 `assignee`；验收标准的勾选把标准文本一并写进 Log；通过的验证输出不再进 Log；被拒绝的转换完全不记 Log，改为输出一份结构化报告（FR-D2a）；身份在写入时严格匹配、在展示时宽松匹配（FR-C6）；`prime` 置顶协议提醒并为每一项设子预算（FR-P1a）；v0.1 看板改为只读（FR-B3）；软删除 resolution 更名为 `obsolete`；MVP 验收不再包含一条同义反复。
 
