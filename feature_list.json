@@ -71,9 +71,9 @@
       "id": "F01",
       "behavior": "todopi doctor 指着一个 .todopi/ 目录，逐条报出它违反了格式规格的哪条不变量，全部通过退出 0、有问题退出 1",
       "verification": "对 spec/fixtures/valid/ 的每个样例，解析结果与配套 .json 的 frontmatter 一致且 doctor 退出 0；对 spec/fixtures/invalid/ 的每个样例，doctor 退出 1 且输出点名该 .json 里 violates 字段所指的规则。同时落地 TypeScript 工具链（package.json、tsconfig.json、lockfile、src/ARCHITECTURE.md）——src/ 一旦存在而工具链缺失，check_typecheck 会报 blocked，基线就红了。",
-      "state": "active",
+      "state": "passing",
       "depends_on": [],
-      "evidence": "",
+      "evidence": "commit f5fc504, verified 2026-09-16T11:04:33Z",
       "layers": [
         {
           "label": "static",

@@ -417,16 +417,25 @@ cmd_e2e() {
   header "e2e — Layer 3（系统确认）"
   have jq || die "e2e 需要 jq。安装：brew install jq"
   checks_init
-  if [ ! -d tests/e2e ]; then
-    emit cli-e2e not_applicable "尚无 tests/e2e：没有可执行的 CLI 可做端到端验证"
-  elif ! have bun; then
-    emit cli-e2e blocked "端到端本该运行，但环境缺少 bun"
+  # 每个 feature 一个 tools/e2e/f<NN>-<name>.sh，与 feature_list.json 的 system
+  # layer 命令一一对应。脚本只看用户会看到的东西——进程退出码与 stdout，不 import
+  # 任何模块。这让它能抓到 Layer 2 抓不到的一类错误：模块都对，但装配接错了。
+  if [ ! -f src/cli.ts ]; then
+    emit cli-e2e not_applicable "尚无 src/cli.ts：没有可执行的 CLI 可做端到端验证"
+  elif ! ls tools/e2e/*.sh >/dev/null 2>&1; then
+    emit cli-e2e not_applicable "尚无 tools/e2e/*.sh：没有端到端脚本"
   else
-    if bun test tests/e2e; then
-      emit cli-e2e pass "端到端测试通过"
-    else
-      emit cli-e2e fail "端到端测试失败，输出见上"
-    fi
+    local script name any_fail=0
+    for script in tools/e2e/*.sh; do
+      name="$(basename "$script" .sh)"
+      if bash "$script"; then
+        emit "e2e:$name" pass "端到端脚本通过"
+      else
+        emit "e2e:$name" fail "端到端脚本失败，输出见上"
+        any_fail=1
+      fi
+    done
+    [ "$any_fail" -eq 0 ] || true
   fi
   local overall; overall="$(checks_overall)"; checks_done
   LAST_OVERALL="$overall"

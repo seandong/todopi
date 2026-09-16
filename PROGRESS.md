@@ -7,26 +7,24 @@
 
 - Last commit: `7e0e312` —— activate F01 并写出实现计划。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
-  arch-rules（4 条通过、5 条不适用）/ typecheck（`not_applicable`）
-- `make test`: `pass` —— `fixtures` 通过（`tools/check-fixtures.mjs`：15 valid /
-  9 invalid，spec §6.2 的 8 条不变量 8/8 有对应样例）；`unit-test` 仍
-  `not_applicable`（尚无 `tests/` 与 `src/`）。这是本仓库第一个真实的运行时证据
-- `make e2e`: `not_applicable` —— 尚无可执行 CLI
+  arch-rules（12 条通过、1 条不适用）/ typecheck（`pass`，tsc --noEmit）
+- `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
+  116 个用例）。其中 52 个是语料库驱动的一致性断言，已用变异测试确认它们会咬
+- `make e2e`: `pass` —— `e2e:f01-doctor` 9 项断言（退出码 0/1/4、`--json`、环路径打印）
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省。
   其余 WARN 项同样是有意偏差，逐条见 `docs/harness/index.md` 的「有意缺省的部分」
-- VCR: `n/a` —— 尚无 activated feature
-- 代码状态：**implementation has not started**。仓库中只有产品文档、格式规格、
-  格式语料库（`spec/fixtures/`，14 valid + 9 invalid，已自洽验证）和本 harness。
+- VCR: `1.0` —— F01 `passing`，evidence 由 harness 写入
+- 代码状态：**F01 已完成**。`src/` 有四层（`format` / `domain` / `output` / `commands`）
+  共 11 个文件，`todopi doctor` 可用。依赖三个：`commander`、`yaml`（运行时）与
+  `typescript`、`@types/node`（开发时）。
 
 ## In Progress
 
-**F01 `doctor`** —— `state: active`，实现计划已写：
-[docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)（9 个 task）。
+无。F01 已 `passing`，当前没有 feature 处于 `active`。
 
-尚未开始写代码。VCR = 0（1 个 activated、0 个 passing）。
-下一步是执行 plan 的 Task 1（工具链与 CLI 骨架）。
+工作在分支 `feat/f01-doctor` 上，尚未合回 `main`。
 
 `feature_list.json` 于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
 拆分依据见 DECISIONS D011。
@@ -43,19 +41,12 @@
 3. ~~确认技术方案~~ 已完成（2026-09-16）：十条选型附实测数据，见 DECISIONS D006。
 4. ~~拆出 v0.1 的第一批 feature~~ 已完成（2026-09-16）：21 条，三个里程碑，
    依据见 DECISIONS D011。
-5. ~~activate F01 并写实现计划~~ 已完成（2026-09-16）：计划在
-   [docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)。
-   **执行方式建议 Inline 而非委派**——F01 定下的目录结构、DTO 边界、退出码与错误
-   输出形态会被后面 20 个 feature 全部继承，理由见 DECISIONS D011。
-6. F01 同时要落地工具链：`package.json`（依赖只有三个）、`tsconfig.json`、lockfile、
-   `src/ARCHITECTURE.md`，并更新 `docs/harness/index.md` 的「有意缺省」表。
-   **实测事实**：Node 22.22 直接执行 `.ts` 且 `node --test` 直接吃 `.ts`，
-   不需要构建步骤也不需要 `tsx`/`ts-node`；`typescript` 只作为 devDependency 供
-   `tsc --noEmit` 用。但类型剥离不做类型导向的代码生成——`enum` 会在运行时报
-   SyntaxError 而 `tsc --noEmit` 却能通过（已由 ARCH-013 挡住）。
-7. `src/` 出现后立即生效的规则：ARCH-007（禁 `Bun.*`）、ARCH-008（DTO 边界）、
-   ARCH-011（禁任务索引）、ARCH-013（禁 enum/namespace/装饰器）；
-   `package.json` 出现后生效的：ARCH-010（依赖白名单）、ARCH-012（禁 bun test）。
+5. ~~activate F01、写计划并执行~~ 已完成（2026-09-16）：9 个 task 逐个 TDD 通过，
+   计划在 [docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)。
+6. **把 `feat/f01-doctor` 合回 `main`。** 这是当前的下一步动作。
+7. 然后 `make activate F=F02`（`init`）。F02 依赖 F01，且它是写入端的第一步——
+   会拖进 config.yml 的写、`.gitignore`、AGENTS.md 追加与幂等判定，但**还不需要**
+   发射器、原子写与文件锁（那些在 F03 `add`）。
 
 ## Blockers
 

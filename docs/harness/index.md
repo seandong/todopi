@@ -56,8 +56,8 @@ dogfood 自己的 `.todopi/` 格式。字段映射、迁移触发条件和迁移
 
 | 组件 | 为什么现在不建 | 何时补 |
 |---|---|---|
-| 依赖 lockfile | 还没有任何依赖，也没有 `package.json`。伪造空 lockfile 只会骗过校验器。 | 第一个需要依赖的 feature 落地时 |
-| `src/ARCHITECTURE.md` | 还没有 `src/`。 | `src/` 建立时 |
+| ~~依赖 lockfile~~ | ~~还没有任何依赖，也没有 `package.json`~~ —— 2026-09-16 随 F01 落地，`package-lock.json` 已存在 | 已补齐 |
+| ~~`src/ARCHITECTURE.md`~~ | ~~还没有 `src/`~~ —— 2026-09-16 随 F01 落地 | 已补齐 |
 | `docs/quality-document.md`（模块健康分） | 还没有模块可评分。 | 有 3 个以上模块时 |
 | `templates/sprint-contract.md`、`templates/evaluator-rubric.md`、`scripts/session-trace.sh`（课程 L11 观测层） | 单人 + 少量 agent，观测层的成本高于收益。 | 出现并行 agent 或返工率变高时 |
 | `.harness/traces/` 与 session 事件流 | 同上，属于 L11 观测层。 | 同上 |
