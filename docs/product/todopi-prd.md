@@ -114,10 +114,44 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
 ### 7.6 上下文注入
 
-- **FR-P1** `prime [--budget <tokens>]`（默认 1500）按此顺序打印 Markdown：(1) 6 行协议提醒；(2) 调用者正在进行的任务：标题、带状态的验收标准、最近 3 条 Log；(3) 本机其他 actor 持有的任务：id、标题、持有者——让调用者不去重做另一个 agent 正在做的事，并明确标注这不是它自己的；(4) ready 队列前 5 条：id 与标题；(5) 计数：open / in progress / blocked / closed；(6) 最近关闭的 3 条标题。token 按字符数 ÷ 4 估算。
-- **FR-P1a** 预算规则。协议提醒**置顶且不参与裁剪**：它是约 100 token 的常量，而且压缩之后正是它告诉 agent 该怎么用 todopi，绝不能是被丢掉的那一项。其余每一项都有自己的子预算，**先在项内截断再丢下一项**——任务内部保留未勾选的验收标准而非已勾选的、保留最新一条 Log 而非更早的——这样即便调用者持有五个长任务，也仍然拿得到 ready 队列。丢弃从末尾开始。
+- **FR-P1** `prime [--budget <tokens>]`（默认 600）**推送「你正在做什么」，指向其余一切**。输出 Markdown：
+
+  1. 调用者正在进行的任务：标题、带状态的验收标准、最近 2 条 Log。**这一段是推送的**。
+  2. 一行指针，给出可领任务数、本机其他 actor 持有的任务数，以及取用它们的命令。
+
+  没有进行中的任务时退化为单行：可领数量加一条 `todopi ls --ready`。
+
+  **协议文本不在 `prime` 里**（这是 1.2 版的改动）。`setup` 已经把它装进各家的
+  规则/技能文件，而那些文件在压缩后由 agent 自己从磁盘重读——Claude Code 官方
+  文档明确写出「project-root CLAUDE.md survives compaction: after `/compact`,
+  Claude re-reads it from disk and re-injects it」。每次注入重复 112 token 是纯浪费。
+  （其余五家的规则文件是否同样在压缩后重读，未逐一核实，记入 §15。）
+
+- **FR-P1c** 推送与指针的分界由「需要的概率」决定，不由体积决定。**当前任务的
+  验收标准与最近 Log 是推送的**，因为持有任务时它接近 100% 需要——而按需读取只在
+  概率低时划算：一次工具调用的成本是命令、输出、模型重读三者之和，加上一个回合
+  的延迟，对 100% 需要的内容严格更差。更要紧的是，指针本质上是 prompt，而这个
+  产品的立论（§14 风险表）正是「用 hooks 而不是靠 prompt 记得」；压缩之后恰恰是
+  agent 注意力在别处、最可能漏掉指针的时刻，而漏掉的后果就是重做已完成的工作。
+  ready 队列、计数、最近关闭、其他 actor 持有的任务都不满足这个条件，因此是指针。
+
+  实测（tiktoken，中文内容）：典型一个任务两条验收两条 Log 为 145 token，
+  极端情形（10 条验收 + 3 条长 Log）368 token，无持有任务 22 token。
+  对照 1.1 版的全量推送 427 token。
+- **FR-P1a** 预算规则。默认 600 由最坏情形推出：一个合法任务的推送上限实测 368
+  token（10 条验收 + 3 条长 Log），600 给了约 1.6 倍余量。这是一个真实约束，
+  而不是一个没人会碰到的天花板。
+
+  超出预算时在**项内**截断而不是丢掉整项：验收标准保留未勾选的、丢已勾选的；
+  Log 只保留最新一条。末尾那行指针**永不裁剪**——它是 22 token 的常量，而且裁掉
+  它就等于让 agent 既拿不到内容也不知道去哪取。持有多个任务时按 `updated` 由新到旧，
+  装不下的任务退化为一行「另有 N 个你持有的任务」。
 - **FR-P1b** `prime` 把调用时间按**会话**记录在 FR-C5 的运行时目录，供 FR-H1 使用。会话标识的可得性于 2026-09-16 核实：Claude Code、Codex、Gemini CLI 在钩子 stdin 里给 `session_id`；Cursor 的钩子载荷同样带会话标识；OpenCode 在事件对象上给 `session_id` 或 `sessionID`（两种拼法都要处理）；pi 不把它传进事件，扩展需调 `ctx.sessionManager.getSessionId()` 自取。六家都拿得到，因此按 actor 记录只是**防御性**回退，不是常态。
 - **FR-P2** `prime --json` 以结构化数据输出相同内容。
+- **FR-P3** `prime --full` 输出 1.1 版那种全量上下文：当前任务、本机其他 actor
+  持有的任务、ready 前 5 条、计数、最近关闭 3 条。它是**给 agent 主动调用的**——
+  FR-P1 的指针指向的就是它。默认 `prime` 服务于钩子（每次注入都要付钱），
+  `--full` 服务于「我现在确实需要全景」这个明确时刻。不是新子命令，是一个 flag。
 
 ### 7.7 交接
 
@@ -161,7 +195,8 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-Q2** 退出码：0 成功 · 1 用法/校验错误 · 2 门禁失败（verify/验收标准/子任务）· 3 冲突（租约被占、并发写）· 4 格式版本不支持。
 - **FR-Q3** `--json` 的输出结构有文档并随 CLI 版本化；破坏性变更升 CLI 主版本。
 - **FR-Q4** 动词宽容：`done|finish|complete`、`close|cancel`、`ls|list`、`add|new|create`、`note|log`、`dep|block` 作为别名接受；别名不计入子命令数。
-- **FR-Q5** `init` 创建含 `config.yml`、`tasks/`、`.gitignore` 的 `.todopi/`，并把协议文本追加到 `AGENTS.md`（不存在则创建）。除非运行 `setup claude`，否则不碰 `CLAUDE.md`。
+- **FR-Q5** `init` 创建含 `config.yml`、`tasks/`、`.gitignore` 的 `.todopi/`，并把协议文本追加到 `AGENTS.md`（不存在则创建）。重复运行是幂等的：已存在的协议段落被原地替换而不是再追加一份。
+- **FR-Q5a** 只跑 `init` 不足以让 Claude Code 读到协议：官方文档明确写出「Claude Code reads `CLAUDE.md`, not `AGENTS.md`」。因此 `setup claude` MUST 确保存在一个 `CLAUDE.md`，其中含有对 `AGENTS.md` 的导入（`@AGENTS.md`），已有 `CLAUDE.md` 则只在缺少该导入时追加一行，不改动其余内容。这一条同时是协议能活过压缩的前提——project-root 的 `CLAUDE.md` 在压缩后由 Claude Code 从磁盘重读，这正是 FR-P1 把协议移出 `prime` 的依据。
 
 ## 8. 命令参考（20 个子命令）
 
@@ -181,7 +216,7 @@ todopi claim <id> [--as actor] [--steal]
 todopi release <id>
 todopi note <id> <text>
 todopi check <id> <n> [--undo]
-todopi prime [--budget n] [--json]
+todopi prime [--budget n] [--full] [--json]
 todopi handoff [--check]
 todopi web [--port n] [--open]
 todopi doctor [--fix]
@@ -237,7 +272,7 @@ todopi import <file.md> | import beads [path]
 ## 12. MVP 验收
 
 1. 本仓库用 todopi 管理自己的开发，跨 ≥ 3 个会话、同时使用 Claude Code 与 Codex，没有可归因于账本的进度丢失或重复工作。
-2. 在本仓库真实账本上，`prime` 在预算内打印的内容，足以让一个全新会话不打开任何其他文件就正确接续——跨 3 个会话人工确认。测「输出没超预算」证明不了任何事，因为它本来就是按预算截断的；需要被证明的是**裁剪顺序先丢掉的是最没用的内容**。
+2. 在本仓库真实账本上，`prime` 打印的内容足以让一个全新会话正确接续——要么直接够用，要么让 agent 知道该去取什么并真的取了；跨 3 个会话人工确认。测「输出没超预算」证明不了任何事，因为它本来就是按预算截断的。需要被证明的是两件事：**裁剪顺序先丢掉的是最没用的内容**，以及**指针真的被 agent 用了**——后者是 FR-P1c 那个赌注的唯一验证方式，若 agent 反复忽略指针，就把对应内容改回推送。
 3. 新用户按 README 从零安装到一个可认领任务 ≤ 2 分钟。
 4. 每个发布 tag 上 `doctor` 对本仓库账本通过。
 5. 六个 `setup` 目标各自在全新克隆上干净安装，且 agent 在会话开始时收到 `prime` 输出（首发前逐家手工验证）。
@@ -266,11 +301,13 @@ todopi import <file.md> | import beads [path]
 
 ## 15. 待办项
 
-实现默认值（除非有异议即按此执行）：6 位 base36 随机 ID；UTC 秒级时间戳；`.todopi/` 只在仓库根；无 git 时租约回退到 `.cache/`；`prime` 的裁剪顺序如 FR-P1/P1a；字符数 ÷ 4 估算 token；「本会话」= 自本**会话**上次 `prime` 起，agent 不暴露会话 id 时回退为本 actor；阻塞项关闭即解除阻塞而不论 resolution；无硬删除。
+实现默认值（除非有异议即按此执行）：6 位 base36 随机 ID；UTC 秒级时间戳；`.todopi/` 只在仓库根；无 git 时租约回退到 `.cache/`；`prime` 的裁剪顺序如 FR-P1/P1a；token 估算方式**待定**（见下方待决项，原「字符数 ÷ 4」经实测对中文低估 2–3 倍，已撤下）；「本会话」= 自本**会话**上次 `prime` 起，agent 不暴露会话 id 时回退为本 actor；阻塞项关闭即解除阻塞而不论 resolution；无硬删除。
 
 **带触发条件的推迟项**，避免「以后再说」变成「一直没做」：
 
 - **跨仓视图**（`ls --all`）留在 v0.3。它需要一份用户级的仓库注册表和带仓库限定的输出，而且服务的是维护者而不是首发：MVP 的五条验收标准没有一条涉及一个以上的仓库。dogfooding 时若发现日常回路确实跨仓库，再重新考虑——最小形态是一个 flag 加一份自动积累的注册表，约半天工作量，且不占 20 个子命令的额度。在那之前 README 给出基于 `-C` 的 shell 循环写法。
+- **token 估算方式未定。** §15 此前把「字符数 ÷ 4」列为默认值，实测（tiktoken）它对英文准确（0.8–1.1×）而对中文低估 2.0–2.8×。FR-P1 把推送内容从 427 降到约 145 token 之后，这条的危害从「每次注入悄悄多吃 2000 token」降为「截断判据偏松，但实际很少触发截断」——因此不再阻塞，但仍须在实现 `prime` 前定下来。候选：真 tokenizer（准确但只能对准一家的 BPE，且多一个 1.6 MB 的依赖）／按 UTF-8 字节数估算／按字符类别加权（ASCII ÷ 4、CJK × 0.6、其余 ÷ 2，实测中英均在 ±15% 内，零依赖且可测）。倾向第三种。
+- **其余五家的规则文件是否在压缩后重读，未核实。** FR-P1 把协议移出 `prime` 的依据是 Claude Code 的官方陈述；Codex、OpenCode、pi、Cursor、Gemini CLI 是否有同样行为需要在做各家接入包时逐一确认。若某家不重读，该家的接入包需要单独把协议放回它的注入点——这是接入包的差异，不是 `prime` 的差异。
 - **导入器与 `forced=true` 的相互作用**（FR-I1/I2，本轮未展开）。FR-I1 规定导入时已勾选的条目建成 `closed/done` 且 `forced=true`，而 `forced=true` 在列表与看板中标记为「未验证」（FR-D3）。导入 500 个 Beads 已关闭 issue 会产生 500 个「未验证」标记——语义上没错（确实没验证过），但会把一个本用于警示「有人跳过了验证」的标记变成噪音。另需定义：重复导入（按 source + title 幂等）时 `rank` 保留还是重算，因为 rank 现在于创建时分配（FR-T1）。拆到导入器 feature 时展开。
 - **裸仓库明确不支持。** 实测裸仓库中 `git rev-parse --git-common-dir` 返回 `.`，租约目录会落在裸仓库内部。规格 §1 定义 `.todopi/` 位于「包含 `.git` 的目录」，而裸仓库没有工作区。应在规格中显式声明不支持，而不是留给实现去猜。（git worktree 场景实测正确：`--git-common-dir` 正确指向共享的 `.git`。）
 - **Windows 的原子 rename 是已知风险点。** 原子写是临时文件 + rename，而 Windows 上 rename 覆盖一个被其他进程打开的文件会失败。Windows 是尽力而为（CI 跑但不阻塞发布），但这一条应当是 Windows CI **明确要测**的用例，而不是等用户报告。本条未经实测，仅为推理。
