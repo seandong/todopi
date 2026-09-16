@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `8b81d5b` —— 分发形态调研，六家市场上架降为首发后跟进。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `2fcac98` —— 方案自查修掉五处缺口，语料库接入 Layer 2。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（4 条通过、5 条不适用）/ typecheck（`not_applicable`）
 - `make test`: `pass` —— `fixtures` 通过（`tools/check-fixtures.mjs`：15 valid /
