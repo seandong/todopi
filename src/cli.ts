@@ -18,6 +18,20 @@ program
   .option("--quiet", "抑制进度与提示性输出，只保留结果本身与错误")
   .exitOverride();
 
+program
+  .command("doctor")
+  .description("检查账本是否符合格式规格，并报出违反的不变量")
+  .action(async () => {
+    // 动态 import 是为了让 --version 与 --help 不去加载 yaml——实测加载 yaml
+    // 模块本身就要 10 ms，而那两条路径根本用不到它。
+    const { runDoctor } = await import("./commands/doctor.ts");
+    const { renderText, renderJson } = await import("./output/render/doctor.ts");
+    const opts = program.opts();
+    const report = runDoctor({ directory: (opts["directory"] as string | undefined) ?? process.cwd() });
+    process.stdout.write(opts["json"] ? renderJson(report) + "\n" : renderText(report));
+    if (!report.ok) throw new CliError(EXIT.usage, "");
+  });
+
 try {
   await program.parseAsync(process.argv);
   process.exitCode = EXIT.ok;
