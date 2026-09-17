@@ -167,7 +167,7 @@ Grammar (one item):
 - `<timestamp>`: RFC 3339 UTC seconds, `Z` suffix.
 - `<actor>`: `[^\s:]{1,64}`.
 - `<verb>`: one of the verbs below. Unknown verbs MUST be preserved and ignored.
-- `<key>=<value>`: `key` is `[a-z_]+`; `value` is `[^\s]+` (no spaces). Order is not significant.
+- `<key>=<value>`: `key` is `[a-z_]+`; `value` is `[^\s]+` (no spaces). Order is not significant. Every space-separated token after the verb and before any `: ` MUST be of this form; a token that is not is a malformed line. This is what makes the grammar checkable: because the fields are positional, a defect in an earlier field surfaces as a structural fault later in the line — an actor containing a space, for instance, shifts the verb one field to the right and leaves a bare word where only a `key=value` pair may stand.
 - `<text>`: free text to end of line. A multi-line text continues on following lines indented by two spaces; readers join them with `\n`.
 
 Verbs and their arguments:

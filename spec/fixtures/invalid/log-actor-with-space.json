@@ -1,0 +1,5 @@
+{
+  "violates": "field",
+  "reason": "Log 行的 actor 含空格。它不能通过检查 actor 字段检出——空格就是字段分隔符，actor 会被读成 \"Sean\"，完全合法。检出线索在后面：verb 变成了 \"Zhang\"，而 \"created\" 出现在只允许 key=value 或 \": text\" 的位置，整行不符合 §5.3.3 的语法。一个只抽取前两个字段的实现会把这个文件报成干净的。",
+  "reader_must": "reject or report; MUST NOT silently accept"
+}

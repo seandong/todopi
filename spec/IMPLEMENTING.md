@@ -1,6 +1,6 @@
 # Implementing the `.todopi/` Format
 
-Status: advisory · 2026-09-16
+Status: advisory · 2026-09-17
 
 This document is **not normative**. It explains reasoning and suggests an order of work;
 it introduces no requirement of its own. Where it appears to disagree with
@@ -103,6 +103,34 @@ Two consequences that are easy to get wrong:
 The grammar has a multi-line form: continuation lines are indented by two spaces and joined
 with `\n`. `fixtures/valid/log-grammar.md` covers every shape including an unknown verb.
 
+#### Parse the whole line, not just the fields you need
+
+The temptation is to pull out the two fields that matter with a regular expression —
+timestamp and actor — and skip the rest. That works until it doesn't, and the case where it
+doesn't is the one §5.4 warns about.
+
+An actor containing a space cannot be detected by looking at the actor. The space **is** the
+field separator, so
+
+```
+- 2026-09-14T09:00:00Z Sean Zhang created
+```
+
+yields actor `"Sean"`, which satisfies the actor grammar perfectly. The corruption is real
+but it has moved one field to the right: the verb is now `"Zhang"`, and `"created"` sits
+where only `key=value` pairs or a `: text` section may appear. A parser that consumes the
+entire line rejects it; a parser that stops after the actor reports the file as clean.
+
+This generalizes. The Log grammar is positional, so **every** field-level defect surfaces as
+a structural one somewhere later in the line. Parse `- <timestamp> <actor> <verb>`, then
+require each remaining space-separated token to contain `=` until an optional `: ` begins the
+free text. Report a line that does not fit as a grammar violation, and check the actor only
+on lines that do.
+
+Two defects the actor field can catch on its own, because they survive the split: an actor
+longer than 64 characters, and one containing `:` — the colon ends the actor and starts the
+text section, so the token itself becomes visibly wrong.
+
 ---
 
 ## Smaller things worth knowing before you hit them
@@ -113,7 +141,8 @@ checkbox. `updated` doubles as the cross-machine heartbeat behind stale detectio
 
 **Normalize actor strings.** The obvious default for a human actor is the version-control
 user name, and those routinely contain spaces, which §5.4 forbids. A space inside an actor
-is read as a field separator and corrupts the Log line it appears in. Lowercase, replace
+is read as a field separator and corrupts the Log line it appears in — see "Parse the whole
+line" above for why a validator cannot catch this by inspecting the actor. Lowercase, replace
 whitespace runs with `-`, strip what remains outside the allowed set, truncate to 64.
 
 **An actor identifies a worker, not a session.** If a new session produces a new actor
