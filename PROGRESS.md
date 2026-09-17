@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `d8db39e` —— F01 合回 main，doctor 可用，三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `a5898b0` —— Log 整行解析的说明与语料。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（12 条通过、1 条不适用）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
@@ -22,10 +22,10 @@
 
 ## In Progress
 
-无。F01 已 `passing` 并已合回 `main`（`--no-ff`，合并后在 main 上重跑三层确认绿），
-分支已删除。当前没有 feature 处于 `active`。
+**F02 `init`** —— `state: active`，尚未开始写代码。
 
-**尚未推送到 remote。**
+F01 已 `passing` 并合回 `main`（`--no-ff`，合并后在 main 上重跑三层确认绿），
+分支已删除。**尚未推送到 remote。**
 
 `feature_list.json` 于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
 拆分依据见 DECISIONS D011。
@@ -45,7 +45,12 @@
 5. ~~activate F01、写计划并执行~~ 已完成（2026-09-16）：9 个 task 逐个 TDD 通过，
    计划在 [docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)。
 6. ~~把 `feat/f01-doctor` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-7. **`make activate F=F02`**（`init`）。这是当前的下一步动作。F02 依赖 F01，且它是写入端的第一步——
+7. ~~`make activate F=F02`~~ 已 activate。**下一步：为 F02 写实现计划**
+   （`superpowers:writing-plans`，存 `docs/plans/`），然后逐 task 执行。
+   F02 会拖进 config.yml 的写、`.gitignore`、AGENTS.md 追加与幂等判定，
+   但**还不需要**发射器、原子写与文件锁——那些在 F03 `add`。
+   注意 FR-Q5a：`setup claude` 要确保 `CLAUDE.md` 含 `@AGENTS.md` 导入，
+   但那属于 F14；F02 只管 `init` 写 `AGENTS.md` 这一半。F02 依赖 F01，且它是写入端的第一步——
    会拖进 config.yml 的写、`.gitignore`、AGENTS.md 追加与幂等判定，但**还不需要**
    发射器、原子写与文件锁（那些在 F03 `add`）。
 
