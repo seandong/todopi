@@ -22,7 +22,9 @@
 
 ## In Progress
 
-**F02 `init`** —— `state: active`，尚未开始写代码。
+**F02 `init`** —— `state: active`，实现计划已写：
+[docs/plans/2026-09-17-f02-init.md](docs/plans/2026-09-17-f02-init.md)（5 个 task）。
+尚未开始写代码。
 
 F01 已 `passing` 并合回 `main`（`--no-ff`，合并后在 main 上重跑三层确认绿），
 分支已删除。**尚未推送到 remote。**
@@ -45,12 +47,11 @@ F01 已 `passing` 并合回 `main`（`--no-ff`，合并后在 main 上重跑三�
 5. ~~activate F01、写计划并执行~~ 已完成（2026-09-16）：9 个 task 逐个 TDD 通过，
    计划在 [docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)。
 6. ~~把 `feat/f01-doctor` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-7. ~~`make activate F=F02`~~ 已 activate。**下一步：为 F02 写实现计划**
-   （`superpowers:writing-plans`，存 `docs/plans/`），然后逐 task 执行。
-   F02 会拖进 config.yml 的写、`.gitignore`、AGENTS.md 追加与幂等判定，
-   但**还不需要**发射器、原子写与文件锁——那些在 F03 `add`。
-   注意 FR-Q5a：`setup claude` 要确保 `CLAUDE.md` 含 `@AGENTS.md` 导入，
-   但那属于 F14；F02 只管 `init` 写 `AGENTS.md` 这一半。F02 依赖 F01，且它是写入端的第一步——
+7. ~~activate F02 并写计划~~ 已完成。**下一步：执行 plan 的 Task 1**（协议文本）。
+   计划对 F02 的边界做了两处收紧：**原子写包含在内**（config.yml 写到一半账本就坏了，
+   15 行的事，F03 的锁建在它之上而不是替换它），**文件锁不包含**（spec §8 的锁针对
+   任务文件的读-校验-写，init 不写任务文件）；**不碰 `CLAUDE.md`**——那是 FR-Q5a 与
+   F14 `setup claude` 的事，它就在 FR-Q5 隔壁，很容易顺手做掉而撑大 F02。F02 依赖 F01，且它是写入端的第一步——
    会拖进 config.yml 的写、`.gitignore`、AGENTS.md 追加与幂等判定，但**还不需要**
    发射器、原子写与文件锁（那些在 F03 `add`）。
 
