@@ -7,10 +7,11 @@
 
 - Last commit: `e63a73f` —— F02 完成，init 可用，三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
-  arch-rules（12 条通过、1 条不适用）/ typecheck（`pass`，tsc --noEmit）
+  arch-rules（**16 条全部通过**）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  151 个用例）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬
-- `make e2e`: `pass` —— `e2e:f01-doctor` 9 项 + `e2e:f02-init` 15 项断言
+  **160 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬
+- `make e2e`: `pass` —— `e2e:f01-doctor` 11 项 + `e2e:f02-init` 19 项断言（新增语言、
+  `--quiet`、高版本零副作用三个维度）
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省。
@@ -46,7 +47,12 @@ F01 已合回 `main`；**F02 在分支 `feat/f02-init` 上，尚未合回**。
    计划在 [docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)。
 6. ~~把 `feat/f01-doctor` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
 7. ~~执行 F02 的 plan~~ 已完成，5 个 task 逐个 TDD 通过。
-8. **把 `feat/f02-init` 合回 `main`**，然后 `make activate F=F03`（`add`）。
+8. ~~Codex review~~ 已完成（2026-09-21）：No-go，7 项全部属实并已修复，
+   三类错误提升为 ARCH-014/015/016，详见 DECISIONS D012。
+   顺带修掉一个 harness 缺陷：`verify-feature` 验证工作区却记录 HEAD，
+   导致 F01 与 F02 的 evidence 都指向不含被验证代码的 commit；
+   现在工作区脏时会拒绝，并新增 `make reverify` 修复坏掉的记录。
+9. **把 `feat/f02-init` 合回 `main`**，然后 `make activate F=F03`（`add`）。
    F03 是写入端基座：发射器（spec §5.1 的引号规则）、id 生成与碰撞检查、
    `fractional-indexing` 的 rank 分配、以及**文件锁**（`O_EXCL` + pid 判活 +
    退出清理）。锁建在 F02 的 `src/fs/atomic.ts` 之上，不替换它。

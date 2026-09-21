@@ -539,3 +539,59 @@
   D003（先建空表）的条件已满足，本条不推翻它——它当时的理由是「FR 是需求粒度、
   feature 是行为粒度，提前机械翻译会产生长期噪音」，这个判断成立，
   而现在拆出来的 21 条确实不是 FR 的机械翻译。
+
+## D012 — Codex review 修掉 7 项，三类错误提升为架构规则，并修复 evidence 的可信度
+
+- 日期：2026-09-21
+- 状态：accepted
+- 背景：`feat/f02-init` 合并前请 Codex 做了一次独立评审，结论是 No-go：
+  Standards 4 项 + Spec 3 项。逐条验证后全部属实。
+- 最值得记下的不是那 7 项本身，而是**它们为什么能穿过三层验证**：
+
+  1. **S1 全部用户可见文案是中文。** F01 与 F02 的 help、stdout、stderr、
+     全部 finding 消息都是中文，而 AGENTS.md 与 engineering-rules 都明文要求
+     English-first。**e2e 只断言退出码与 JSON 可解析性，从不检查语言。**
+  2. **S3 测试里有显式 `any`。** `tsc --strict` **不禁止**显式 `any`——
+     `noImplicitAny` 只管推断不出类型的情况，写出来的 `any` 它照收。
+     typecheck 全绿不代表没有 `any`。
+  3. **P2 `--quiet` 从未实现。** 我在 PRD 里定义了它、在 CLI 里声明了它，
+     然后两条命令都忽略它。没有一个用例碰过它。
+
+  共同形态：**检查项本身是对的，但它检查的维度里没有这一项。** 三层验证的
+  覆盖面由写它的人决定，而写它的人恰恰看不见自己的盲区。这是请外部评审的理由，
+  也是把每一类新错误提升为 arch-rules 的理由（AGENTS.md 早有此条）。
+
+- 新增三条架构规则：**ARCH-014**（`src/` 的代码非注释部分不得含中文；注释保持中文
+  是有意的——英文是分发语言、中文是思考语言）、**ARCH-015**（禁止显式 `any`，
+  因为 tsc strict 挡不住）、**ARCH-016**（`src/` 的每个目录必须在
+  `src/ARCHITECTURE.md` 中登记——那份文档是 M3 委派给 subagent 时的唯一地图）。
+
+- 阻塞项（Spec P1）：**高版本账本上 `init` 继续写且退出 0。** 实测 `version: 2`
+  的账本跑 `init`，`.gitignore` 与 `AGENTS.md` 都被创建。spec §9 禁止写入未知
+  高版本，FR-Q2 定为退出 4，F02 的验收标准写的是「任何命令退出 4」。
+  根因是 `init` 不走 `discoverLedger`（它的职责恰恰是账本不存在时创建），
+  于是版本闸门从来没被施加。抽出 `assertSupportedVersionIfPresent`，
+  在任何写入之前调用。
+
+- **由这次评审牵出的一个更根本的缺陷：`verify-feature` 验证工作区却记录 HEAD。**
+  Codex 指出 F02 的 evidence 指向 5591a3d，而那个 commit 不含最终的 `init` CLI、
+  命令测试与 e2e。查下来 F01 同样如此——两条 evidence 都指向不含被验证代码的 commit
+  （15 / 19 个 src 文件，而实际是 22）。
+
+  这不是记账瑕疵。scope.md 明文：`state` 与 `evidence` 由 harness 写入、不得手工
+  编辑，其全部价值在于「做完了」不由 agent 说了算。**一个指向错误 commit 的
+  evidence 比没有 evidence 更糟**——它看起来可复核，实际不可复核。
+
+  两处修改：
+  - `verify-feature` 在工作区脏时**拒绝**，而不是记一个含糊的 dirty 标记。
+    含糊的标记会让人继续往下走，而这里需要的是停下来。
+  - 新增 `make reverify F=<id>`，在已 passing 的 feature 上重跑三层并刷新 evidence。
+    它存在的唯一理由是修复坏掉的记录：scope.md 说 passing 是终态、evidence 不得
+    改写，理由是「历史证据的价值在于它不被改写」——但那个理由预设了证据是真的。
+    **由 bug 产生的记录不是证据，修它不是改写历史。** 它不放宽状态机：feature
+    仍是 passing，行为要改仍须新开一个 feature；它只换那一行 evidence，
+    且必须在干净工作区上真的重跑完三层。F01 与 F02 已据此修复。
+
+- 影响：测试 151 → 160，架构规则 13 → 16，e2e 补上语言、`--quiet`、高版本零副作用
+  三个此前缺失的断言维度。`src/fs/` 正式登记为第五层（`format/` 懂 todopi 的格式，
+  `fs/` 只懂文件系统；分开的实际收益在 F03——锁的并发压测不需要构造任何任务文件）。
