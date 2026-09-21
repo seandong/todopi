@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `3e89ce4` —— F02 实现计划。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `e63a73f` —— F02 完成，init 可用，三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（12 条通过、1 条不适用）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
