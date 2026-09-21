@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `c50dc76` —— F03 合回 main，add 可用，四轮评审后三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `5ebd472` —— F04 实现计划。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**16 条全部通过**）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
@@ -24,8 +24,11 @@
 
 ## In Progress
 
-无。F01–F03 均 `passing` 且都已合回 `main`（`--no-ff`，合并后在 main 上重跑三层
-确认绿），分支已删除。**整个仓库尚未推送到 remote。**
+**F04 `ls`** —— `state: active`，实现计划已写：
+[docs/plans/2026-09-21-f04-ls.md](docs/plans/2026-09-21-f04-ls.md)（5 个 task）。
+尚未开始写代码。
+
+F01–F03 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
 
 自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
 doctor 能检出违规 ✅、五个命令 passing 进度 2/5（`init`、`add` 已完成，
@@ -60,9 +63,11 @@ doctor 能检出违规 ✅、五个命令 passing 进度 2/5（`init`、`add` �
 11. ~~Codex review 并合回 main~~ 已完成。**四轮**评审：前两轮是架构级（文件锁的
     整个「自动接管」设计被推翻），后两轮是细节级，且第四轮的两个阻塞项都是第三轮
     修复时新引入的。结论与方法论记在 DECISIONS D013。
-12. **`make activate F=F04`**（`ls`）。这是当前的下一步动作。
-    F04 是派生态层：ready / blocked / stale 的定义、排序、容器判定，全是纯函数，
-    用例直接构造任务集合即可——这一层跑得最快也最该测密。
+12. ~~activate F04 并写计划~~ 已完成。**下一步：执行 plan 的 Task 1**（派生态）。
+    F04 几乎全部落在 `domain/`，是 D006 决策 3「纯函数领域层」第一次真正兑现。
+    一处设计要点写进了 plan：`isStale` 需要的「现在几点」与「本机有无租约」
+    **注入**而不在 domain 里读——注入之后每个分支都能用普通用例覆盖，
+    不需要 sleep、不需要造租约文件、也不会有时序 flake。
    F03 是写入端基座：发射器（spec §5.1 的引号规则）、id 生成与碰撞检查、
    `fractional-indexing` 的 rank 分配、以及**文件锁**（`O_EXCL` + pid 判活 +
    退出清理）。锁建在 F02 的 `src/fs/atomic.ts` 之上，不替换它。
