@@ -87,6 +87,51 @@ program
     );
   });
 
+type LsCmdOptions = {
+  all?: boolean; closed?: boolean; ready?: boolean; blocked?: boolean;
+  mine?: boolean; label?: string; limit?: number;
+};
+
+/**
+ * `ls` 与它的别名 `ready` 共享同一套选项和同一个 action。
+ *
+ * 别名必须接受基础命令的全部选项，否则 `todopi ready --limit 5` 会被拒——
+ * 那就不是别名了。实现上转发，不复制逻辑。
+ * 别名不计入 20 个子命令的上限（PRD §8 明文）。
+ */
+function lsOptions(cmd: Command): Command {
+  return cmd
+    .option("--all", "include closed tasks")
+    .option("--closed", "only closed tasks")
+    .option("--blocked", "only tasks waiting on another task")
+    .option("--mine", "only tasks assigned to you or to an agent on this machine")
+    .option("--label <label>", "only tasks carrying this label")
+    .option("--limit <n>", "show at most this many", (v: string) => Number.parseInt(v, 10));
+}
+
+async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
+  const { runLs } = await import("./commands/ls.ts");
+  const { renderText, renderJson } = await import("./output/render/ls.ts");
+  const opts = program.opts();
+  const report = runLs({
+    directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+    ...cmdOpts,
+    actor: opts["as"] as string | undefined,
+  });
+  process.stdout.write(
+    opts["json"] === true
+      ? renderJson(report) + "\n"
+      : renderText(report, { quiet: opts["quiet"] === true }),
+  );
+}
+
+lsOptions(program.command("ls").description("list tasks in the ledger"))
+  .option("--ready", "only tasks that can be claimed right now")
+  .action(lsAction);
+
+lsOptions(program.command("ready").description("alias for `ls --ready`"))
+  .action(async (cmdOpts: LsCmdOptions) => { await lsAction({ ...cmdOpts, ready: true }); });
+
 try {
   await program.parseAsync(process.argv);
   process.exitCode = EXIT.ok;
