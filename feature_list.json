@@ -96,11 +96,11 @@
       "id": "F02",
       "behavior": "todopi init 在没有 .todopi/ 的仓库里生成它，重复运行不产生第二份内容",
       "verification": "init 后目录含 config.yml（version: 1）、tasks/、.gitignore（含 .cache/），doctor 退出 0；协议文本被追加进 AGENTS.md（不存在则创建）；再跑一次 init，AGENTS.md 里协议段落仍只有一份（FR-Q5 幂等）；config.yml 的 version 大于本实现支持的版本时，任何命令退出 4（FR-Q2）。",
-      "state": "active",
+      "state": "passing",
       "depends_on": [
         "F01"
       ],
-      "evidence": "",
+      "evidence": "commit 5591a3d, verified 2026-09-21T10:03:05Z",
       "layers": [
         {
           "label": "static",

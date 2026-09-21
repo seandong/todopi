@@ -32,6 +32,21 @@ program
     if (!report.ok) throw new CliError(EXIT.usage, "");
   });
 
+program
+  .command("init")
+  .description("在仓库里生成 .todopi/，并把 todopi 协议写进 AGENTS.md")
+  .option("--prefix <prefix>", "新任务 id 的前缀", "tp")
+  .action(async (cmdOpts: { prefix: string }) => {
+    const { runInit } = await import("./commands/init.ts");
+    const { renderText, renderJson } = await import("./output/render/init.ts");
+    const opts = program.opts();
+    const report = runInit({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      prefix: cmdOpts.prefix,
+    });
+    process.stdout.write(opts["json"] ? renderJson(report) + "\n" : renderText(report));
+  });
+
 try {
   await program.parseAsync(process.argv);
   process.exitCode = EXIT.ok;
