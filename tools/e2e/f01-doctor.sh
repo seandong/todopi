@@ -74,6 +74,23 @@ write_task "$TMP/cycle" "tp-000001" 'parent: "tp-000002"'
 write_task "$TMP/cycle" "tp-000002" 'parent: "tp-000001"'
 out="$(cli -C "$TMP/cycle" doctor 2>&1)"; code=$?
 [ "$code" -eq 1 ] && ok "有环的账本退出 1" || fail "应退出 1，实际 $code"
-case "$out" in *"→"*) ok "输出打印出环的路径" ;; *) fail "输出未打印环路径：$out" ;; esac
+case "$out" in *"tp-000001 -> tp-000002"*|*"tp-000002 -> tp-000001"*) ok "输出打印出环的路径" ;; *) fail "输出未打印环路径：$out" ;; esac
+
+# 8. 输出是英文 —— CLI 的 stdout 是产品表面（AGENTS.md）
+out="$(cli -C "$TMP/bad" doctor 2>&1)"
+if printf '%s' "$out" | grep -q '[一-鿿]'; then
+  fail "doctor 输出含中文（CLI 的 stdout 是产品表面，MUST 是英文）：$out"
+else
+  ok "doctor 输出是英文"
+fi
+
+# 9. --quiet：干净时静默，有问题时结果不得被吞
+out="$(cli -C "$TMP/clean" --quiet doctor 2>&1)"
+[ -z "$out" ] && ok "--quiet 在干净账本上完全静默" || fail "--quiet 仍有输出：$out"
+out="$(cli -C "$TMP/bad" --quiet doctor 2>&1)"
+case "$out" in
+  *invariant-2*) ok "--quiet 不吞掉问题" ;;
+  *)             fail "--quiet 把结果吞掉了：$out" ;;
+esac
 
 [ "$FAILED" -eq 0 ] && { echo "f01-doctor: pass"; exit 0; } || { echo "f01-doctor: fail"; exit 1; }

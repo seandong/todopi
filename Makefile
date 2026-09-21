@@ -4,7 +4,7 @@
 H := tools/harness.sh
 
 .PHONY: help setup dev doctor status check test e2e check-arch vcr \
-        activate release verify-feature clean-check ci audit
+        activate release verify-feature reverify clean-check ci audit
 
 help:
 	@$(H)
@@ -51,6 +51,9 @@ release:
 
 verify-feature:
 	@$(H) verify-feature "$(F)"
+
+reverify:
+	@$(H) reverify "$(F)"
 
 ## 清洁态
 clean-check:

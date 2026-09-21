@@ -11,11 +11,16 @@ export function renderJson(r: DoctorReport): string {
   return JSON.stringify(r, null, 2);
 }
 
-export function renderText(r: DoctorReport): string {
+/**
+  * quiet 只去掉**提示**，不去掉结果与错误。doctor 通过时的那一行是提示性的
+  * （没有问题就没什么要报的）；发现问题时的每一条都是结果，quiet 不得吞掉它们。
+  */
+export function renderText(r: DoctorReport, opts: { quiet?: boolean } = {}): string {
   if (r.ok) {
+    if (opts.quiet) return "";
     return r.scanned === 0
-      ? "doctor: 账本是空的，没有任务可检查。\n"
-      : `doctor: ${r.scanned} 个任务，未发现问题。\n`;
+      ? "doctor: the ledger is empty; no tasks to check.\n"
+      : `doctor: ${r.scanned} task(s), no problems found.\n`;
   }
   const lines: string[] = [];
   const byPath = new Map<string, FindingDto[]>();
@@ -29,6 +34,6 @@ export function renderText(r: DoctorReport): string {
     for (const f of findings) lines.push(`  ${f.rule}  ${f.message}`);
   }
   lines.push("");
-  lines.push(`doctor: ${r.scanned} 个任务，${r.findings.length} 个问题。`);
+  lines.push(`doctor: ${r.scanned} task(s), ${r.findings.length} problem(s).`);
   return lines.join("\n") + "\n";
 }

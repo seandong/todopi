@@ -74,7 +74,7 @@ test("不变量 8：assignee 含空格", () => {
 test("Log 行的 actor 含空格 → 报语法错位（空格就是字段分隔符，actor 本身看起来合法）", () => {
   const t = task({}, { body: "\n## Log\n\n- 2026-09-14T09:00:00Z Sean Zhang created\n" });
   const fs = validateFile(t);
-  assert.ok(fs.some((f) => f.rule === "field" && /语法|错位/.test(f.message)), JSON.stringify(fs));
+  assert.ok(fs.some((f) => f.rule === "field" && /grammar/.test(f.message)), JSON.stringify(fs));
 });
 
 test("不变量 8：Log 行的 actor 超长（这种才是 actor 自身可检出的）", () => {

@@ -5,29 +5,28 @@
 
 ## Current State
 
-- Last commit: `3e89ce4` —— F02 实现计划。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `e63a73f` —— F02 完成，init 可用，三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
-  arch-rules（12 条通过、1 条不适用）/ typecheck（`pass`，tsc --noEmit）
+  arch-rules（**16 条全部通过**）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  116 个用例）。其中 52 个是语料库驱动的一致性断言，已用变异测试确认它们会咬
-- `make e2e`: `pass` —— `e2e:f01-doctor` 9 项断言（退出码 0/1/4、`--json`、环路径打印）
+  **160 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬
+- `make e2e`: `pass` —— `e2e:f01-doctor` 11 项 + `e2e:f02-init` 19 项断言（新增语言、
+  `--quiet`、高版本零副作用三个维度）
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省。
   其余 WARN 项同样是有意偏差，逐条见 `docs/harness/index.md` 的「有意缺省的部分」
-- VCR: `1.0` —— F01 `passing`，evidence 由 harness 写入
-- 代码状态：**F01 已完成**。`src/` 有四层（`format` / `domain` / `output` / `commands`）
-  共 11 个文件，`todopi doctor` 可用。依赖三个：`commander`、`yaml`（运行时）与
-  `typescript`、`@types/node`（开发时）。
+- VCR: `2/2` —— F01、F02 均 `passing`，evidence 由 harness 写入
+- 代码状态：**F01、F02 已完成**。`todopi doctor` 与 `todopi init` 可用。
+  `src/` 四层加 `protocol.ts`（协议文本，411 token）与 `fs/atomic.ts`（原子写）。
+  运行时依赖两个：`commander`、`yaml`。
 
 ## In Progress
 
-**F02 `init`** —— `state: active`，实现计划已写：
-[docs/plans/2026-09-17-f02-init.md](docs/plans/2026-09-17-f02-init.md)（5 个 task）。
-尚未开始写代码。
+无。F01、F02 均 `passing`。
 
-F01 已 `passing` 并合回 `main`（`--no-ff`，合并后在 main 上重跑三层确认绿），
-分支已删除。**尚未推送到 remote。**
+F01 已合回 `main`；**F02 在分支 `feat/f02-init` 上，尚未合回**。
+整个仓库尚未推送到 remote。
 
 `feature_list.json` 于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
 拆分依据见 DECISIONS D011。
@@ -47,13 +46,22 @@ F01 已 `passing` 并合回 `main`（`--no-ff`，合并后在 main 上重跑三�
 5. ~~activate F01、写计划并执行~~ 已完成（2026-09-16）：9 个 task 逐个 TDD 通过，
    计划在 [docs/plans/2026-09-16-f01-doctor.md](docs/plans/2026-09-16-f01-doctor.md)。
 6. ~~把 `feat/f01-doctor` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-7. ~~activate F02 并写计划~~ 已完成。**下一步：执行 plan 的 Task 1**（协议文本）。
-   计划对 F02 的边界做了两处收紧：**原子写包含在内**（config.yml 写到一半账本就坏了，
-   15 行的事，F03 的锁建在它之上而不是替换它），**文件锁不包含**（spec §8 的锁针对
-   任务文件的读-校验-写，init 不写任务文件）；**不碰 `CLAUDE.md`**——那是 FR-Q5a 与
-   F14 `setup claude` 的事，它就在 FR-Q5 隔壁，很容易顺手做掉而撑大 F02。F02 依赖 F01，且它是写入端的第一步——
-   会拖进 config.yml 的写、`.gitignore`、AGENTS.md 追加与幂等判定，但**还不需要**
-   发射器、原子写与文件锁（那些在 F03 `add`）。
+7. ~~执行 F02 的 plan~~ 已完成，5 个 task 逐个 TDD 通过。
+8. ~~Codex review~~ 已完成（2026-09-21）：No-go，7 项全部属实并已修复，
+   三类错误提升为 ARCH-014/015/016，详见 DECISIONS D012。
+   顺带修掉一个 harness 缺陷：`verify-feature` 验证工作区却记录 HEAD，
+   导致 F01 与 F02 的 evidence 都指向不含被验证代码的 commit；
+   现在工作区脏时会拒绝，并新增 `make reverify` 修复坏掉的记录。
+9. **把 `feat/f02-init` 合回 `main`**，然后 `make activate F=F03`（`add`）。
+   F03 是写入端基座：发射器（spec §5.1 的引号规则）、id 生成与碰撞检查、
+   `fractional-indexing` 的 rank 分配、以及**文件锁**（`O_EXCL` + pid 判活 +
+   退出清理）。锁建在 F02 的 `src/fs/atomic.ts` 之上，不替换它。
+   D006 决策 5 明确把「并发压力测试进 CI 且不得 flaky」列为 F03 的真实成本。
+
+   F02 与 F03 的实际边界（D011 拆分时说 F02「不需要原子写」，执行时收紧过一次）：
+   **原子写在 F02**（`src/fs/atomic.ts`——config.yml 写到一半账本就坏了），
+   **文件锁在 F03**（spec §8 的锁针对任务文件的读-校验-写，`init` 不写任务文件）。
+   锁建在原子写之上，不替换它。
 
 ## Blockers
 

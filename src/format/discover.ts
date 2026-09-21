@@ -18,6 +18,18 @@ export type Config = {
 
 export type Ledger = { root: string; dir: string; config: Config };
 
+/**
+ * 读一个已存在的 .todopi/ 的版本并施加版本闸门；目录或 config.yml 不存在时返回 null。
+ *
+ * 抽出来是因为 init 需要它：spec §9 与 FR-Q2 要求**任何命令**在遇到高版本账本时
+ * 退出 4，而 init 不走 discoverLedger（它的职责恰恰是账本还不存在时创建）。
+ * 没有这一步，init 会在一个自己读不懂的账本上继续写——Codex review 抓到的阻塞项。
+ */
+export function assertSupportedVersionIfPresent(dir: string): number | null {
+  if (!existsSync(join(dir, "config.yml"))) return null;
+  return readConfig(dir).version;
+}
+
 /** 从 startDir 向上走，直到找到含 .todopi/ 的目录或到达文件系统根。 */
 export function discoverLedger(startDir: string): Ledger {
   let cur = resolve(startDir);
@@ -32,31 +44,31 @@ export function discoverLedger(startDir: string): Ledger {
   }
   throw new CliError(
     EXIT.usage,
-    `从 ${resolve(startDir)} 向上没有找到 .todopi/ 目录。先运行 todopi init。`,
+    `No .todopi/ directory found at or above ${resolve(startDir)}. Run "todopi init" first.`,
   );
 }
 
 function readConfig(dir: string): Config {
   const path = join(dir, "config.yml");
   if (!existsSync(path)) {
-    throw new CliError(EXIT.usage, `${path} 不存在。.todopi/ 目录不完整。`);
+    throw new CliError(EXIT.usage, `${path} is missing. The .todopi/ directory is incomplete.`);
   }
   let raw: Record<string, unknown>;
   try {
     const parsed = parseYaml(readFileSync(path, "utf8")) as unknown;
     raw = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
   } catch (err) {
-    throw new CliError(EXIT.usage, `${path} 无法解析：${(err as Error).message.split("\n")[0]}`);
+    throw new CliError(EXIT.usage, `${path} could not be parsed: ${(err as Error).message.split("\n")[0]}`);
   }
 
   const version = typeof raw["version"] === "number" ? raw["version"] : NaN;
   if (!Number.isInteger(version)) {
-    throw new CliError(EXIT.usage, `${path} 缺少必填的整数字段 version。`);
+    throw new CliError(EXIT.usage, `${path} is missing the required integer field "version".`);
   }
   if (version > SUPPORTED_VERSION) {
     throw new CliError(
       EXIT.unsupportedVersion,
-      `这个账本是格式版本 ${version}，本实现只支持到 ${SUPPORTED_VERSION}。升级 todopi 后再试。`,
+      `This ledger is format version ${version}; this build supports up to ${SUPPORTED_VERSION}. Upgrade todopi and try again.`,
     );
   }
   return {
