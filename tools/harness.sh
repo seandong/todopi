@@ -531,15 +531,38 @@ cmd_release() {
   printf '%s%s 已退回 not_started。请在 PROGRESS.md 的 Blockers 写明原因。%s\n' "$C_YEL" "$id" "$C_RST"
 }
 
+# reverify —— 在**已 passing** 的 feature 上重跑三层并刷新 evidence。
+#
+# 它存在的唯一理由是修复坏掉的记录。scope.md 说 passing 是终态、evidence 不得手工
+# 编辑，理由是「历史证据的价值在于它不被改写」——但那个理由预设了证据是真的。
+# 2026-09-21 发现 verify-feature 验证工作区却记录 HEAD，于是 F01 与 F02 的 evidence
+# 都指向了不含被验证代码的 commit。由 bug 产生的记录不是证据，修它不是改写历史。
+#
+# 它不放宽状态机：feature 仍是 passing，行为要改仍须新开一个 feature。它只换那一行
+# evidence，而且必须在干净工作区上真的重跑完三层。
+cmd_reverify() {
+  features_guard
+  local id="${1:-}"
+  [ -n "$id" ] || die "用法：make reverify F=<id>"
+  feature_exists "$id" || die "feature '$id' 不存在"
+  local st; st="$(feature_field "$id" state)"
+  [ "$st" = "passing" ] || die "reverify 只用于已 passing 的 feature；'$id' 当前是 '$st'"
+  cmd_verify_feature "$id" --reverify
+}
+
 cmd_verify_feature() {
   features_guard
   local id="${1:-}"
   [ -n "$id" ] || die "用法：make verify-feature F=<id>"
   feature_exists "$id" || die "feature '$id' 不存在"
 
-  local st; st="$(feature_field "$id" state)"
-  [ "$st" != "passing" ] || { printf '%s%s 已经是 passing（终态）。行为要改就新开一个 feature。%s\n' "$C_YEL" "$id" "$C_RST"; return 0; }
-  [ "$st" = "active" ] || die "feature '$id' 当前是 '$st'。先 make activate F=$id —— 状态机不允许跳级"
+  local st reverify=""
+  [ "${2:-}" = "--reverify" ] && reverify=1
+  st="$(feature_field "$id" state)"
+  if [ -z "$reverify" ]; then
+    [ "$st" != "passing" ] || { printf '%s%s 已经是 passing（终态）。行为要改就新开一个 feature；evidence 指向错误的 commit 时用 make reverify F=%s。%s\n' "$C_YEL" "$id" "$id" "$C_RST"; return 0; }
+    [ "$st" = "active" ] || die "feature '$id' 当前是 '$st'。先 make activate F=$id —— 状态机不允许跳级"
+  fi
 
   # evidence 声称「在 commit X 上验证通过」，而验证跑的是**工作区**。工作区有未提交
   # 改动时，这句话就是假的——被验证的代码不在那个 commit 里。这个 harness 的全部
@@ -755,6 +778,7 @@ main() {
     activate)       cmd_activate "$@" ;;
     release)        cmd_release "$@" ;;
     verify-feature) cmd_verify_feature "$@" ;;
+    reverify)       cmd_reverify "$@" ;;
     clean-check)    cmd_clean_check "$@" ;;
     ci)             cmd_ci "$@" ;;
     -h|--help|help|"") usage ;;

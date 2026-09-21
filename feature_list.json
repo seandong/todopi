@@ -123,7 +123,7 @@
       "id": "F03",
       "behavior": "todopi add \"标题\" 生成一个任务文件，它通过 doctor，且并发运行不会互相覆盖",
       "verification": "生成的文件 frontmatter 按 spec §5.2 顺序、每个标量加双引号、rank 在创建时分配（FR-T1）；标题含冒号、# 号、纯数字、前导零时 round-trip 无损（spec/fixtures/valid 里那批对抗样例的写入方向）；20 个并发 add 产出 20 个不同 id、无文件损坏、无丢失——这是 D006 决策 5 明确列出的真实成本。",
-      "state": "active",
+      "state": "not_started",
       "depends_on": [
         "F02"
       ],
