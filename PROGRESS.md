@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `94bcd5f` —— F02 合回 main，init 可用，三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `ac67d53` —— F03 实现计划。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**16 条全部通过**）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
@@ -23,8 +23,11 @@
 
 ## In Progress
 
-无。F01、F02 均 `passing` 且都已合回 `main`（`--no-ff`，合并后在 main 上重跑三层
-确认绿），分支已删除。**整个仓库尚未推送到 remote。**
+**F03 `add`** —— `state: active`，实现计划已写：
+[docs/plans/2026-09-21-f03-add.md](docs/plans/2026-09-21-f03-add.md)（5 个 task）。
+尚未开始写代码。
+
+F01、F02 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
 
 `feature_list.json` 于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
 拆分依据见 DECISIONS D011。
@@ -51,7 +54,11 @@
    导致 F01 与 F02 的 evidence 都指向不含被验证代码的 commit；
    现在工作区脏时会拒绝，并新增 `make reverify` 修复坏掉的记录。
 9. ~~把 `feat/f02-init` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-10. **`make activate F=F03`**（`add`）。这是当前的下一步动作。
+10. ~~activate F03 并写计划~~ 已完成。**下一步：执行 plan 的 Task 1**（文件锁）。
+    F03 是 M1 最重的一个，计划把它拆成五块：锁 → id → 发射器 → 写入入口 → 命令。
+    两处刻意不做，写进了 plan 的 Self-Review：**actor 解析链留给 F05**
+    （在这里实现半套，F05 里就要拆掉一套重复实现）、**嵌套值的发射留给 F10 `edit`**
+    （现在遇到就抛错，比悄悄写出半个结构好）。
    F03 是写入端基座：发射器（spec §5.1 的引号规则）、id 生成与碰撞检查、
    `fractional-indexing` 的 rank 分配、以及**文件锁**（`O_EXCL` + pid 判活 +
    退出清理）。锁建在 F02 的 `src/fs/atomic.ts` 之上，不替换它。
