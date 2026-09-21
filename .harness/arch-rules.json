@@ -161,6 +161,16 @@
       "what": "src/ 下存在未在 ARCHITECTURE.md 的分层表中登记的目录。",
       "why": "ARCHITECTURE.md 是后续每个 feature 的地图，尤其是 DECISIONS D011 允许委派的 M3 八个 feature——subagent 拿不到设计讨论的过程，只有这份文档。一个没登记的目录意味着它的职责与依赖方向没有被声明过，下一个人只能猜。2026-09-21 的 Codex review 就抓到 src/fs/ 是这样引入的。",
       "fix": "在 src/ARCHITECTURE.md 的分层表里加一行，写明该层的职责与它允许 import 什么；或者把代码并入已有的层。"
+    },
+    {
+      "id": "ARCH-017",
+      "description": "并发相关的模块必须有多进程测试",
+      "applies_when": "test -f src/fs/lock.ts",
+      "check": "grep -lE 'spawnSync|execFileSync' tests/fs/lock.test.ts >/dev/null 2>&1 && echo '' || echo 'tests/fs/lock.test.ts 里没有多进程测试'",
+      "expect": "empty",
+      "what": "文件锁没有多进程测试。",
+      "why": "单进程测试对互斥失效完全无感。2026-09-21 实测过两次：第一版锁有致命竞态（openSync 与 writeSync 之间锁文件为空，被「损坏的锁当成陈旧锁」规则删掉），10 个单进程用例全部通过；后来把 readTasks 移出锁（等于没锁），8 个用例仍然全绿。两次都只有多进程测试变红。D006 决策 5 把「并发压力测试进 CI 且不得 flaky」列为文件锁的真实成本，这条规则确保那个成本不会在某次重构里被悄悄删掉。",
+      "fix": "在 tests/fs/lock.test.ts 里保留至少一条真正启动多个进程的用例（spawnSync 起 N 个进程各在锁内做一次读-改-写，断言计数等于 N）。不要用 Promise 或 worker 代替——同一进程内的并发测不出文件锁。"
     }
   ]
 }

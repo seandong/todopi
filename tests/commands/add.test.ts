@@ -137,3 +137,13 @@ test("拒绝之后账本仍然干净，后续的合法 add 照常工作", () => 
   assert.equal(runDoctor({ directory: d }).scanned, 1);
   assert.ok(t.id);
 });
+
+test("图校验在 add 的校验器里 —— 自环这类问题写不进去", () => {
+  // 复审指出单文件校验不等于 doctor：doctor 还跑 validateGraph。add 传给
+  // createTask 的校验器现在两者都跑，所以「通过校验」与「通过 doctor」是同一件事。
+  const d = repo();
+  const a = runAdd({ directory: d, title: "A" });
+  const b = runAdd({ directory: d, title: "B", parent: a.id });
+  assert.equal(runDoctor({ directory: d }).ok, true);
+  assert.ok(b.id !== a.id);
+});

@@ -2,6 +2,8 @@
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { createTask } from "../format/write.ts";
+import { validateFile } from "../domain/validate.ts";
+import { validateGraph } from "../domain/graph.ts";
 import { EXIT, CliError } from "../exit.ts";
 import type { AddReport } from "../output/dto/add.ts";
 
@@ -46,25 +48,39 @@ export function runAdd(opts: AddOptions): AddReport {
   // 含 spec §5.4 的规范化）是 F05 claim 的内容。这里只接受调用方给的值——
   // 实现半套会在 F05 里变成需要拆掉的重复实现。
   const actor = opts.actor ?? "unknown";
-  const created = createTask(ledger, (ctx) => ({
-    id: ctx.newId(),
-    title,
-    status: "open",
-    rank: ctx.nextRank(),
-    created: ctx.now,
-    updated: ctx.now,
-    parent: opts.parent,
-    blocked_by: opts.blockedBy,
-    verify: opts.verify,
-    labels: opts.labels,
-    description: opts.description,
-    acceptance: opts.acceptance,
-    log: [`${ctx.now} ${actor} created${opts.from ? ` from=${opts.from}` : ""}`],
-  }));
+  const created = createTask(
+    ledger,
+    (ctx) => ({
+      id: ctx.newId(),
+      title,
+      status: "open",
+      rank: ctx.nextRank(),
+      created: ctx.now,
+      updated: ctx.now,
+      parent: opts.parent,
+      blocked_by: opts.blockedBy,
+      verify: opts.verify,
+      labels: opts.labels,
+      description: opts.description,
+      acceptance: opts.acceptance,
+      log: [`${ctx.now} ${actor} created${opts.from ? ` from=${opts.from}` : ""}`],
+    }),
+    // 校验器与 doctor 用的是同一对函数，所以「通过校验」与「通过 doctor」
+    // 是同一件事——FR-T1 的验收要求的正是这个。图校验不可省：只做单文件校验时，
+    // parent 指向自身这类自环能写进去，随后 doctor 报错。
+    (candidate, existing) => {
+      const single = validateFile(candidate);
+      const graph = validateGraph([...existing, candidate]);
+      const findings = [...single, ...graph.filter((f) => f.path === candidate.path)];
+      return findings.length === 0
+        ? null
+        : findings.map((f) => `${f.rule}: ${f.message}`).join("; ");
+    },
+  );
 
   return {
     id: created.idFromFilename,
-    title,
+      title,
     path: created.path,
     rank: String(created.frontmatter["rank"] ?? ""),
   };

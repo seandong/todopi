@@ -5,7 +5,10 @@ import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
-import { withLock } from "../../src/fs/lock.ts";
+import { withLock, type LockHolder } from "../../src/fs/lock.ts";
+
+/** 早于任何合理宽限期的时间戳。 */
+const longAgo = () => new Date(Date.now() - 120_000).toISOString();
 
 const lockPath = () => join(mkdtempSync(join(tmpdir(), "todopi-lock-")), "lock");
 
@@ -22,81 +25,91 @@ test("fn 结束后锁被释放", () => {
 test("fn 抛错时锁仍被释放", () => {
   const p = lockPath();
   assert.throws(() => withLock(p, () => { throw new Error("boom"); }), /boom/);
-  assert.ok(!existsSync(p), "抛错路径也必须释放锁，否则账本被永久锁死");
+  assert.ok(!existsSync(p), "抛错路径也必须释放锁");
 });
 
-test("持锁期间锁文件记录 pid、host 与时间", () => {
+test("持锁期间锁文件记录 pid、host、时间与 nonce", () => {
   const p = lockPath();
   withLock(p, () => {
-    const h = JSON.parse(readFileSync(p, "utf8")) as { pid: number; host: string; at: string };
+    const h = JSON.parse(readFileSync(p, "utf8")) as LockHolder;
     assert.equal(h.pid, process.pid);
     assert.equal(h.host, hostname());
     assert.match(h.at, /^\d{4}-\d{2}-\d{2}T/);
+    assert.match(h.nonce, /^[0-9a-f-]{36}$/, "每次获取都要有唯一的 nonce");
   });
 });
 
-/** 早于宽限期的时间戳。 */
-const longAgo = () => new Date(Date.now() - 120_000).toISOString();
-
-test("接管死进程留下的陈旧锁", () => {
+test("锁文件从存在的第一刻内容就完整 —— 不能有「已创建但为空」的瞬间", () => {
+  // 第一版用 openSync(path,"wx") + writeSync，那是两步，中间那一瞬文件是空的。
+  // 别的进程读到 ""、JSON.parse 抛错，按当时的「损坏的锁当成陈旧锁」规则把这把
+  // 刚合法获取的锁删掉。改用 link 之后这个瞬间不存在。
   const p = lockPath();
-  writeFileSync(p, JSON.stringify({ pid: 999999, host: hostname(), at: longAgo(), nonce: "n1" }));
-  assert.equal(withLock(p, () => "taken"), "taken");
+  withLock(p, () => {
+    const raw = readFileSync(p, "utf8");
+    assert.notEqual(raw, "", "锁文件不得为空");
+    assert.doesNotThrow(() => JSON.parse(raw), "锁文件内容必须一直是合法 JSON");
+  });
 });
 
-test("死进程的锁若刚写下则不接管 —— 宽限期是 ABA 竞态的主要防线", () => {
-  // 刚被取得的锁 at 是新的。不设宽限期的话，一把「看起来已死」的新锁会被立刻
-  // 接管，而它可能正是别人在这一瞬刚取得的。
-  const p = lockPath();
-  writeFileSync(p, JSON.stringify({ pid: 999999, host: hostname(), at: new Date().toISOString(), nonce: "n1" }));
-  assert.throws(() => withLock(p, () => undefined, { timeoutMs: 120 }), /lock/i);
+test.describe("不接管任何已存在的锁 —— 判定陈旧与删除无法原子完成", () => {
+  // 三种写法都试过并被实测打败（见 src/fs/lock.ts 的注释）。清理陈旧租约是
+  // doctor --fix 的职责（PRD FR-Q1），那是用户的显式动作而不是一次竞态。
+  const held: Array<[string, () => LockHolder]> = [
+    ["死进程留下的陈旧锁", () => ({ pid: 999999, host: hostname(), at: longAgo(), nonce: "stale" })],
+    ["活着的本机进程的锁", () => ({ pid: process.pid, host: hostname(), at: new Date().toISOString(), nonce: "live" })],
+    ["异主机的锁", () => ({ pid: 1, host: "some-other-machine", at: longAgo(), nonce: "remote" })],
+  ];
+  for (const [name, make] of held) {
+    test(name, () => {
+      const p = lockPath();
+      const before = make();
+      writeFileSync(p, JSON.stringify(before));
+      assert.throws(() => withLock(p, () => undefined, { timeoutMs: 120 }), /lock/i);
+      const after = JSON.parse(readFileSync(p, "utf8")) as LockHolder;
+      assert.equal(after.nonce, before.nonce, "已存在的锁必须原封不动");
+    });
+  }
+
+  test("内容损坏的锁同样不接管，但错误信息要说明怎么办", () => {
+    const p = lockPath();
+    writeFileSync(p, "not json at all");
+    assert.throws(
+      () => withLock(p, () => undefined, { timeoutMs: 120 }),
+      /doctor --fix|remove the file/i,
+      "错误信息必须告诉用户怎么清理",
+    );
+    assert.equal(readFileSync(p, "utf8"), "not json at all", "损坏的锁也不得被动");
+  });
 });
 
-test("stale-handoff：接管过程中出现新持有者时，不得删掉它的活锁", () => {
-  // Codex review 指出的 ABA 竞态：B 判定 A 陈旧 → A 释放 → C 取得 → B 删掉 C 的锁。
-  // 这里模拟「移走的不是预期的那把」这一步：锁里是一把**活着的**新锁，
-  // 而 withLock 被告知去接管——它必须把锁放回去而不是据为己有。
+test("超时错误说明持有者是谁、进程还在不在、怎么清理", () => {
   const p = lockPath();
-  const live = { pid: process.pid, host: hostname(), at: new Date().toISOString(), nonce: "live" };
-  writeFileSync(p, JSON.stringify(live));
-  assert.throws(() => withLock(p, () => undefined, { timeoutMs: 150 }), /lock/i);
-  const after = JSON.parse(readFileSync(p, "utf8")) as { nonce: string };
-  assert.equal(after.nonce, "live", "活锁必须还在，且内容未被替换");
+  writeFileSync(p, JSON.stringify({ pid: 999999, host: hostname(), at: longAgo(), nonce: "stale" }));
+  try {
+    withLock(p, () => undefined, { timeoutMs: 120 });
+    assert.fail("应当抛错");
+  } catch (e: unknown) {
+    const msg = (e as Error).message;
+    assert.match(msg, /999999/, "要报出持有者的 pid");
+    assert.match(msg, /no longer running|stale/i, "要说明进程是否还在");
+    assert.match(msg, /doctor --fix/, "要给出清理办法");
+  }
 });
 
 test("释放时确认锁还是自己的 —— 不删后继者的锁", () => {
   const p = lockPath();
-  const stolen = { pid: process.pid, host: hostname(), at: new Date().toISOString(), nonce: "successor" };
+  const successor = { pid: process.pid, host: hostname(), at: new Date().toISOString(), nonce: "successor" };
   withLock(p, () => {
-    // 模拟「我持锁期间被误判陈旧而遭接管」：锁已经换成别人的了
-    writeFileSync(p, JSON.stringify(stolen));
+    // 模拟「持锁期间锁被 doctor --fix 清掉、又被别人取得」
+    writeFileSync(p, JSON.stringify(successor));
   });
   assert.ok(existsSync(p), "后继者的锁必须还在");
-  assert.equal((JSON.parse(readFileSync(p, "utf8")) as { nonce: string }).nonce, "successor");
+  assert.equal((JSON.parse(readFileSync(p, "utf8")) as LockHolder).nonce, "successor");
 });
 
-test("接管内容损坏的锁 —— 否则一个坏文件会把账本永久锁死", () => {
-  const p = lockPath();
-  writeFileSync(p, "not json at all");
-  assert.equal(withLock(p, () => "taken"), "taken");
-});
-
-test("不接管异主机的锁 —— pid 在别的机器上无意义", () => {
-  const p = lockPath();
-  writeFileSync(p, JSON.stringify({ pid: 1, host: "some-other-machine", at: longAgo(), nonce: "n1" }));
-  assert.throws(() => withLock(p, () => undefined, { timeoutMs: 120 }), /lock/i);
-});
-
-test("不接管活着的本机进程的锁", () => {
-  const p = lockPath();
-  writeFileSync(p, JSON.stringify({ pid: process.pid, host: hostname(), at: longAgo(), nonce: "n1" }));
-  assert.throws(() => withLock(p, () => undefined, { timeoutMs: 120 }), /lock/i);
-});
-
-test("锁目录不存在时自动创建 —— 首次 add 时 leases/ 还不存在", () => {
+test("锁目录不存在时自动创建 —— 首次写入时 leases/ 还不存在", () => {
   const dir = mkdtempSync(join(tmpdir(), "todopi-lock-"));
-  const p = join(dir, "deep", "nested", "lock");
-  assert.equal(withLock(p, () => "ok"), "ok");
+  assert.equal(withLock(join(dir, "deep", "nested", "lock"), () => "ok"), "ok");
 });
 
 test("嵌套调用同一把锁会失败 —— 提醒实现不要在持锁中再取锁", () => {
@@ -106,6 +119,13 @@ test("嵌套调用同一把锁会失败 —— 提醒实现不要在持锁中再
     /lock/i,
   );
   assert.ok(!existsSync(p), "外层的释放仍要发生");
+});
+
+test("正常路径不产生任何临时文件或隔离文件", () => {
+  const dir = mkdtempSync(join(tmpdir(), "todopi-lock-"));
+  const p = join(dir, "lock");
+  withLock(p, () => undefined);
+  assert.deepEqual(readdirSync(dir), [], "目录里不得有残留");
 });
 
 test("真并发互斥：30 个进程各在锁内做一次读-改-写", { timeout: 60000 }, () => {
