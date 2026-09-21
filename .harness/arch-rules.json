@@ -106,11 +106,11 @@
       "id": "ARCH-011",
       "description": "不得引入提交或缓存的任务索引",
       "applies_when": "test -d src",
-      "check": "grep -rniE 'index\\\\.json|buildIndex|taskIndex|cacheIndex' src --include='*.ts' --include='*.tsx' || true",
+      "check": "grep -rniE 'index\\\\.json|readIndex|writeIndex|loadIndex|saveIndex|cacheIndex|persistIndex' src --include='*.ts' --include='*.tsx' || true",
       "expect": "empty",
-      "what": "src/ 中出现了任务索引的构建或读取。",
-      "why": "读路径只有一条：每次全量扫描，读到的就是磁盘真相（DECISIONS D006 决策 3）。派生缓存要安全，需要「垄断写入」或「监听文件系统」二者之一，而这两扇门都被已定的产品决策关死了——格式规格明文允许人工编辑与第三方写入，AGENTS.md 明文禁止 daemon。缓存过期时 CLI 不会报错，而是自信地给出过期的 ready 队列，agent 领走别人正在做的任务——正是 MVP 验收第 1 条要排除的「重复工作」。规模顶上来时的解法是归档已关闭任务，不是缓存。",
-      "fix": "删除索引逻辑。若全量扫描确实慢，先上手写快路径解析（实测 120ms → 16ms，零一致性风险），再考虑归档 closed 任务；触发条件写在 D006：单仓库 open 任务 > 5000，或全量扫描在目标平台上 > 500 ms。"
+      "what": "src/ 中出现了**持久化**任务索引的读写（磁盘上的 index 文件）。",
+      "why": "读路径只有一条：每次全量扫描，读到的就是磁盘真相（DECISIONS D006 决策 3）。派生缓存要安全，需要「垄断写入」或「监听文件系统」二者之一，而这两扇门都被已定的产品决策关死了——格式规格明文允许人工编辑与第三方写入，AGENTS.md 明文禁止 daemon。缓存过期时 CLI 不会报错，而是自信地给出过期的 ready 队列，agent 领走别人正在做的任务——正是 MVP 验收第 1 条要排除的「重复工作」。规模顶上来时的解法是归档已关闭任务，不是缓存。 本规则禁的是**磁盘上的持久化索引**，不是内存里的现场结构：一次命令内由全量扫描构建、随进程消失的 Map（如 domain/derive.ts 的 TaskIndex）没有一致性问题——它就是那次扫描的结果本身。规则的全部论证都是关于缓存过期的，那只适用于跨进程存活的东西。2026-09-21 误伤过 TaskIndex 一次。",
+      "fix": "删除索引逻辑。若全量扫描确实慢，先上手写快路径解析（实测 120ms → 16ms，零一致性风险），再考虑归档 closed 任务；触发条件写在 D006：单仓库 open 任务 > 5000，或全量扫描在目标平台上 > 500 ms。 若被误报的是内存结构（构建于本次调用、不写磁盘、随进程消失），那不在本规则范围内——但也不要把它命名成 cacheIndex / persistIndex 这类暗示持久化的名字。"
     },
     {
       "id": "ARCH-012",
