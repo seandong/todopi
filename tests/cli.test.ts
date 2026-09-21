@@ -6,8 +6,9 @@ function runCli(args: string[]): { stdout: string; status: number } {
   try {
     const stdout = execFileSync("node", ["src/cli.ts", ...args], { encoding: "utf8" });
     return { stdout, status: 0 };
-  } catch (e: any) {
-    return { stdout: (e.stdout ?? "") + (e.stderr ?? ""), status: e.status ?? -1 };
+  } catch (e: unknown) {
+    const err = e as { stdout?: string; stderr?: string; status?: number };
+    return { stdout: (err.stdout ?? "") + (err.stderr ?? ""), status: err.status ?? -1 };
   }
 }
 

@@ -16,11 +16,11 @@ export function validateGraph(tasks: TaskFile[]): Finding[] {
   for (const t of tasks) {
     const parent = t.frontmatter["parent"];
     if (typeof parent === "string" && !byId.has(parent)) {
-      out.push({ rule: "invariant-4", path: t.path, message: `parent 指向不存在的任务 ${parent}` });
+      out.push({ rule: "invariant-4", path: t.path, message: `parent references a task that does not exist: ${parent}` });
     }
     for (const b of asIdList(t.frontmatter["blocked_by"])) {
       if (!byId.has(b)) {
-        out.push({ rule: "invariant-4", path: t.path, message: `blocked_by 指向不存在的任务 ${b}` });
+        out.push({ rule: "invariant-4", path: t.path, message: `blocked_by references a task that does not exist: ${b}` });
       }
     }
   }
@@ -64,7 +64,7 @@ function findCycles(
       if (!reported.has(key)) {
         reported.add(key);
         const t = byId.get(id)!;
-        out.push({ rule: "invariant-5", path: t.path, message: `${label} 图有环：${cycle.join(" → ")}` });
+        out.push({ rule: "invariant-5", path: t.path, message: `cycle in the ${label} graph: ${cycle.join(" -> ")}` });
       }
       return;
     }

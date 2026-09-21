@@ -62,13 +62,34 @@ test("替换是可重入的：替换之后再跑一次得到 unchanged 且内容
 test("只有起始标记而没有结束标记时拒绝，不猜边界", () => {
   const p = file();
   writeFileSync(p, `# Head\n\n${PROTOCOL_BEGIN}\n\n半个段落\n`);
-  assert.throws(() => upsertProtocol(p), /标记/);
+  assert.throws(() => upsertProtocol(p), /end marker/);
 });
 
-test("追加时与原有内容之间留空行，不粘连", () => {
-  const p = file();
-  writeFileSync(p, "# My Manual\n最后一行没有换行符");
-  upsertProtocol(p);
-  const after = readFileSync(p, "utf8");
-  assert.match(after, /最后一行没有换行符\n\n<!-- todopi:protocol:begin -->/);
+test.describe("追加时原文一个字节都不动，只补足分隔符", () => {
+  // 段落之外的内容必须逐字节保留。早先的实现先削平所有尾部换行再补两个，
+  // 一个以三个以上 LF 结尾的文件会被静默改写——而那也是「段落之外的内容」。
+  const cases: Array<[string, string]> = [
+    ["没有尾部换行", "# My Manual\n最后一行没有换行符"],
+    ["一个 LF", "# My Manual\n"],
+    ["两个 LF", "# My Manual\n\n"],
+    ["三个 LF", "# My Manual\n\n\n"],
+    ["五个 LF", "# My Manual\n\n\n\n\n"],
+    ["空文件", ""],
+  ];
+  for (const [name, before] of cases) {
+    test(name, () => {
+      const p = file();
+      writeFileSync(p, before);
+      assert.equal(upsertProtocol(p), "appended");
+      const after = readFileSync(p, "utf8");
+
+      assert.ok(after.startsWith(before), `原文必须逐字节保留，${name} 被改写了`);
+      assert.ok(after.endsWith(protocolSection()));
+      // 段落之前恰好一个空行：既不粘连，也不因原文本来就有换行而堆叠
+      const between = after.slice(before.length, after.length - protocolSection().length);
+      const totalNewlines = (/\n*$/.exec(before)?.[0].length ?? 0) + between.length;
+      assert.equal(totalNewlines, Math.max(2, /\n*$/.exec(before)?.[0].length ?? 0),
+        `${name}：分隔符应补足到至少两个换行，且不削减原有的`);
+    });
+  }
 });

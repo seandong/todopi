@@ -34,7 +34,7 @@ export function readTasks(ledger: Ledger): TaskFile[] {
     if (env === null) {
       out.push({
         path, idFromFilename: id, frontmatter: {}, body: "", raw,
-        parseError: "文件不是合法的信封：必须以 --- 行开始，并有一个 --- 结束行",
+        parseError: "not a valid envelope: the file must begin with a --- line and have a closing --- line",
       });
       continue;
     }

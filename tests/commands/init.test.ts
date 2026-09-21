@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
-import { EXIT } from "../../src/exit.ts";
+import { renderText } from "../../src/output/render/init.ts";
+import { EXIT, CliError } from "../../src/exit.ts";
 import { PROTOCOL_BEGIN } from "../../src/protocol.ts";
 
 const dir = () => mkdtempSync(join(tmpdir(), "todopi-cmd-init-"));
@@ -51,7 +52,7 @@ test("非法 prefix 抛出退出码 1", () => {
   for (const bad of ["TP", "1tp", "toolongprefix", "", "tp-x"]) {
     assert.throws(
       () => runInit({ directory: dir(), prefix: bad }),
-      (e: any) => e.code === EXIT.usage,
+      (e: unknown) => e instanceof CliError && e.code === EXIT.usage,
       `prefix ${JSON.stringify(bad)} 应当被拒绝`,
     );
   }
@@ -68,4 +69,28 @@ test("合法 prefix 被接受并写进 config.yml", () => {
   const d = dir();
   runInit({ directory: d, prefix: "xy9" });
   assert.match(readFileSync(join(d, ".todopi", "config.yml"), "utf8"), /^id_prefix: xy9$/m);
+});
+
+test("高版本账本：退出 4 且零副作用（spec §9、FR-Q2）", () => {
+  const d = dir();
+  mkdirSync(join(d, ".todopi", "tasks"), { recursive: true });
+  writeFileSync(join(d, ".todopi", "config.yml"), "version: 2\nid_prefix: tp\n");
+  assert.throws(
+    () => runInit({ directory: d, prefix: "tp" }),
+    (e: unknown) => e instanceof CliError && e.code === EXIT.unsupportedVersion,
+  );
+  assert.ok(!existsSync(join(d, "AGENTS.md")), "版本闸门必须在任何写入之前");
+  assert.ok(!existsSync(join(d, ".todopi", ".gitignore")));
+  assert.equal(readFileSync(join(d, ".todopi", "config.yml"), "utf8"), "version: 2\nid_prefix: tp\n");
+});
+
+test("--quiet 去掉提示但保留结果；输出是英文", () => {
+  const d = dir();
+  const r = runInit({ directory: d, prefix: "tp" });
+  const full = renderText(r);
+  const quiet = renderText(r, { quiet: true });
+  assert.match(full, /Next: todopi add/);
+  assert.doesNotMatch(quiet, /Next: todopi add/);
+  assert.match(quiet, /Ledger:/, "结果不得被 quiet 吞掉");
+  assert.doesNotMatch(full, /[一-鿿]/, "CLI 输出 MUST 是英文");
 });

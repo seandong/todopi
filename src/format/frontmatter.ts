@@ -20,12 +20,12 @@ export function parseFrontmatter(head: string): ParseResult {
     const data = parseYaml(head) as unknown;
     if (data === null || data === undefined) return { ok: true, data: {}, path: "yaml" };
     if (typeof data !== "object" || Array.isArray(data)) {
-      return { ok: false, error: "frontmatter 不是一个 YAML 映射" };
+      return { ok: false, error: "frontmatter is not a YAML mapping" };
     }
     return { ok: true, data: data as Record<string, unknown>, path: "yaml" };
   } catch (err) {
     const code = (err as { code?: string }).code;
-    if (code === "DUPLICATE_KEY") return { ok: false, error: "frontmatter 有重复的键" };
-    return { ok: false, error: `frontmatter 无法解析：${(err as Error).message.split("\n")[0]}` };
+    if (code === "DUPLICATE_KEY") return { ok: false, error: "frontmatter has a duplicate key" };
+    return { ok: false, error: `frontmatter could not be parsed: ${(err as Error).message.split("\n")[0]}` };
   }
 }

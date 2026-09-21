@@ -131,6 +131,36 @@
       "what": "src/ 中出现了 enum、namespace 或装饰器。",
       "why": "Node 22 通过类型剥离直接执行 .ts，而剥离只删类型、不做类型导向的代码生成。enum 会在运行时报 SyntaxError（已实测），namespace 与装饰器同理。这三样一旦出现，node --test 与直接执行 src/cli.ts 都会挂，而 tsc --noEmit 却能通过——静态检查绿、运行时红，是最难查的一类。 装饰器不在本规则的正则里，由 tsconfig.json 的 erasableSyntaxOnly 在 typecheck 层拦下（报 TS1294）——正则匹配装饰器会误伤普通的函数调用。两者分工：tsc 管语法层面的完整判定，本规则管 tsc 不可用或被绕过时的兜底。",
       "fix": "enum 改为 as const 对象加联合类型（例如 const STATUS = ['open','in_progress','closed'] as const; type Status = typeof STATUS[number]），namespace 改为模块，装饰器改为普通高阶函数。"
+    },
+    {
+      "id": "ARCH-014",
+      "description": "src/ 中面向用户的输出必须是英文",
+      "applies_when": "test -d src",
+      "check": "grep -rn '[一-鿿]' src --include='*.ts' --include='*.tsx' | grep -vE ':[[:space:]]*(//|\\\\*|/\\\\*)' | grep -vE '//[^\"'\"'\"'`]*[一-鿿]' || true",
+      "expect": "empty",
+      "what": "src/ 的代码（非注释）里出现了中文字符。",
+      "why": "CLI 的 stdout / stderr / help 是产品表面，MUST 是英文（AGENTS.md「用户可见文案 English-first」、engineering-rules「改动措辞等同改 UI，先写英文」）。注释保持中文是有意的——那是内部设计文档，英文是分发语言、中文是思考语言，混同会让其中一种长期失真。这条规则之所以需要，是因为 e2e 只断言退出码与 JSON 可解析性，从不检查语言：2026-09-21 的 Codex review 发现 F01 与 F02 的全部用户可见文案都是中文，而三层验证全绿。",
+      "fix": "把该行的字符串字面量改成英文。行尾的中文注释请移到独立的注释行——本规则按行首是否为注释判断，行尾注释会被误报。"
+    },
+    {
+      "id": "ARCH-015",
+      "description": "不得使用显式 any",
+      "applies_when": "test -d src",
+      "check": "grep -rnE '\\\\bany\\\\b[^a-zA-Z]' src tests --include='*.ts' --include='*.tsx' | grep -E ':[[:space:]]*[^/*]' | grep -E '(:[[:space:]]*any|as any|<any>|Array<any>|any\\\\[\\\\])' || true",
+      "expect": "empty",
+      "what": "src/ 或 tests/ 中出现了显式 any。",
+      "why": "engineering-rules：「TypeScript 严格模式：不用 any，不用 as 绕过类型，不用 @ts-ignore。类型报错是设计信号，不是噪音。」而 tsc 的 strict **不禁止显式 any**——`noImplicitAny` 只管推断不出类型的情况，写出来的 any 它照收。所以 typecheck 全绿不代表没有 any，必须由本规则挡。",
+      "fix": "改成 unknown 再用 instanceof / typeof 收窄。捕获错误时用 `catch (e: unknown)` 加 `e instanceof CliError`，不要用 `(e: any) => e.code`。"
+    },
+    {
+      "id": "ARCH-016",
+      "description": "src/ 的每个目录都必须在 ARCHITECTURE.md 中登记",
+      "applies_when": "test -d src && test -f src/ARCHITECTURE.md",
+      "check": "ls -d src/*/ 2>/dev/null | sed 's|src/||; s|/$||' | while read -r layer; do grep -q \"\\`$layer/\\`\" src/ARCHITECTURE.md || echo \"src/$layer/ 未在 src/ARCHITECTURE.md 中登记\"; done",
+      "expect": "empty",
+      "what": "src/ 下存在未在 ARCHITECTURE.md 的分层表中登记的目录。",
+      "why": "ARCHITECTURE.md 是后续每个 feature 的地图，尤其是 DECISIONS D011 允许委派的 M3 八个 feature——subagent 拿不到设计讨论的过程，只有这份文档。一个没登记的目录意味着它的职责与依赖方向没有被声明过，下一个人只能猜。2026-09-21 的 Codex review 就抓到 src/fs/ 是这样引入的。",
+      "fix": "在 src/ARCHITECTURE.md 的分层表里加一行，写明该层的职责与它允许 import 什么；或者把代码并入已有的层。"
     }
   ]
 }

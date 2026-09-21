@@ -61,4 +61,42 @@ else
   fail "--json 输出不是合法 JSON"
 fi
 
+# 9. 高版本账本 → 退出 4，且零副作用（spec §9、FR-Q2）
+mkdir -p "$TMP/future/.todopi/tasks"
+printf 'version: 2\nid_prefix: tp\n' > "$TMP/future/.todopi/config.yml"
+cli -C "$TMP/future" init >/dev/null 2>&1
+code=$?
+[ "$code" -eq 4 ] && ok "高版本账本退出 4" || fail "应退出 4，实际 $code"
+if [ -e "$TMP/future/AGENTS.md" ]; then fail "版本闸门必须在任何写入之前"; else ok "高版本账本零副作用"; fi
+
+# 10. 输出是英文 —— CLI 的 stdout 是产品表面（AGENTS.md）
+mkdir -p "$TMP/lang"
+out="$(cli -C "$TMP/lang" init 2>&1)"
+if printf '%s' "$out" | grep -q '[一-鿿]'; then
+  fail "init 输出含中文（CLI 的 stdout 是产品表面，MUST 是英文）：$out"
+else
+  ok "init 输出是英文"
+fi
+out="$(cli -C "$TMP/lang" init --prefix BAD 2>&1)"
+if printf '%s' "$out" | grep -q '[一-鿿]'; then
+  fail "错误信息含中文（CLI 的 stdout 是产品表面，MUST 是英文）：$out"
+else
+  ok "错误信息是英文"
+fi
+
+# 11. --quiet 去掉提示但保留结果
+out="$(cli -C "$TMP/lang" --quiet init 2>&1)"
+case "$out" in
+  *"Next: todopi add"*) fail "--quiet 不应打印提示" ;;
+  *"Ledger:"*)          ok "--quiet 去掉提示、保留结果" ;;
+  *)                    fail "--quiet 把结果也吞掉了：$out" ;;
+esac
+
+# 12. --json --quiet 仍是合法 JSON
+if cli -C "$TMP/lang" --json --quiet init | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{JSON.parse(s)})' 2>/dev/null; then
+  ok "--json --quiet 输出是合法 JSON"
+else
+  fail "--json --quiet 输出不是合法 JSON"
+fi
+
 [ "$FAILED" -eq 0 ] && { echo "f02-init: pass"; exit 0; } || { echo "f02-init: fail"; exit 1; }

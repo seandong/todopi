@@ -49,3 +49,21 @@ test("JSON 渲染是合法 JSON 且结构稳定", () => {
   assert.equal(parsed.scanned, 1);
   assert.equal(Array.isArray(parsed.findings), true);
 });
+
+test("--quiet 去掉提示但不吞掉结果", () => {
+  const clean = runDoctor({ directory: ledger({ "tp-a1b2c3.md": OK }) });
+  assert.equal(renderText(clean, { quiet: true }), "", "干净时 quiet 应完全静默");
+  assert.notEqual(renderText(clean), "", "非 quiet 时应有提示");
+
+  const bad = runDoctor({ directory: ledger({ "tp-a1b2c3.md": BAD }) });
+  const quiet = renderText(bad, { quiet: true });
+  assert.match(quiet, /invariant-1/, "有问题时 quiet 不得吞掉结果");
+});
+
+test("输出是英文：不含 CJK 字符", () => {
+  // CLI 的 stdout 是产品表面，MUST 是英文（AGENTS.md）。e2e 只看退出码与 JSON
+  // 可解析性，查不到语言——2026-09-21 的 review 正是这样漏掉全部中文文案的。
+  const r = runDoctor({ directory: ledger({ "tp-a1b2c3.md": BAD }) });
+  assert.doesNotMatch(renderText(r), /[一-鿿]/);
+  assert.doesNotMatch(renderJson(r), /[一-鿿]/);
+});

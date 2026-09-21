@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { initLedger } from "../format/init.ts";
+import { assertSupportedVersionIfPresent } from "../format/discover.ts";
 import { upsertProtocol } from "../format/agents-md.ts";
 import { EXIT, CliError } from "../exit.ts";
 import type { InitReport } from "../output/dto/init.ts";
@@ -31,11 +32,15 @@ export function runInit(opts: { directory: string; prefix: string }): InitReport
   if (!PREFIX_RE.test(opts.prefix)) {
     throw new CliError(
       EXIT.usage,
-      `id_prefix ${JSON.stringify(opts.prefix)} 不合法。` +
-        `它必须匹配 ${PREFIX_RE.source}：小写字母开头，1–8 个小写字母或数字（spec §3）。`,
+      `Invalid id_prefix ${JSON.stringify(opts.prefix)}. It must match ${PREFIX_RE.source}: ` +
+        `a lowercase letter followed by up to seven lowercase letters or digits (spec §3).`,
     );
   }
   const root = resolveRoot(opts.directory);
+  // 版本闸门必须在**任何**写入之前。spec §9：读者 MUST 拒绝写入版本高于自己的账本；
+  // FR-Q2 把它定为退出码 4。init 不走 discoverLedger（它的职责是账本不存在时创建），
+  // 所以这里单独施加——否则会在一个自己读不懂的账本上继续写。
+  assertSupportedVersionIfPresent(join(root, ".todopi"));
   const { created, kept } = initLedger(root, { prefix: opts.prefix });
   // FR-Q5：写 AGENTS.md，不存在则创建。MUST NOT 碰 CLAUDE.md——让 Claude Code
   // 读到协议是 FR-Q5a 的事，属于 setup claude（F14）。

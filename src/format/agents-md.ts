@@ -24,17 +24,21 @@ export function upsertProtocol(path: string): UpsertResult {
   const begin = before.indexOf(PROTOCOL_BEGIN);
 
   if (begin < 0) {
-    // 没有段落：追加。与原有内容之间保证恰好一个空行，不粘连也不堆叠。
-    const body = before.replace(/\n*$/, "");
-    writeFileAtomic(path, `${body}\n\n${section}`);
+    // 没有段落：追加。原文**一个字节都不动**——只在末尾补足分隔符，使段落之前
+    // 恰好有一个空行。早先的实现先用 /\n*$/ 削平所有尾部换行再补两个，那会让
+    // 一个以三个以上 LF 结尾的文件被静默改写，而它属于「段落之外的内容」。
+    const trailing = /\n*$/.exec(before)?.[0].length ?? 0;
+    const separator = "\n".repeat(Math.max(0, 2 - trailing));
+    writeFileAtomic(path, `${before}${separator}${section}`);
     return "appended";
   }
 
   const endAt = before.indexOf(PROTOCOL_END, begin);
   if (endAt < 0) {
     throw new Error(
-      `${path} 里有 todopi 协议的起始标记但没有结束标记。段落的边界无法确定，` +
-        `拒绝改写以免破坏文件。手工删掉那行起始标记再重跑，或补上结束标记。`,
+      `${path} has the todopi protocol begin marker but no end marker. The section's ` +
+        `boundary cannot be determined, so the file was left untouched. Remove the stray ` +
+        `begin marker or add the matching end marker, then run init again.`,
     );
   }
 

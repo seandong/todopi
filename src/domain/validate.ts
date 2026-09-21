@@ -16,7 +16,7 @@ export function validateFile(t: TaskFile): Finding[] {
 
   // 不变量 7 —— 冲突标记。先查，因为它会让其他所有检查的结果变得没有意义。
   if (CONFLICT_RE.test(t.raw) || CONFLICT_RE.test(t.body)) {
-    at("invariant-7", "文件含未解决的 git 冲突标记（行首的 <<<<<<< / ======= / >>>>>>>）");
+    at("invariant-7", "file contains unresolved git conflict markers (<<<<<<< / ======= / >>>>>>> at line start)");
   }
 
   // 不变量 1 —— 解析成功且 id 与文件名一致
@@ -26,60 +26,60 @@ export function validateFile(t: TaskFile): Finding[] {
   }
   const id = fm["id"];
   if (typeof id !== "string") {
-    at("invariant-1", "缺少必填字段 id，或它不是字符串");
+    at("invariant-1", "missing the required field \"id\", or it is not a string");
   } else {
-    if (!ID_RE.test(id)) at("field", `id ${JSON.stringify(id)} 不符合 spec §4 的形式 <prefix>-<六位 base36>`);
+    if (!ID_RE.test(id)) at("field", `id ${JSON.stringify(id)} does not match the spec §4 form <prefix>-<six base36 chars>`);
     if (id !== t.idFromFilename) {
-      at("invariant-1", `frontmatter 的 id 是 ${JSON.stringify(id)}，文件名要求它是 ${JSON.stringify(t.idFromFilename)}`);
+      at("invariant-1", `frontmatter id is ${JSON.stringify(id)} but the file name requires ${JSON.stringify(t.idFromFilename)}`);
     }
   }
 
   // 必填标量
   const title = fm["title"];
   if (typeof title !== "string" || title.trim() === "") {
-    at("field", "缺少必填字段 title，或它不是非空字符串");
+    at("field", "missing the required field \"title\", or it is not a non-empty string");
   } else if (title.includes("\n") || title.trim().length > 200) {
-    at("field", "title 必须是单行、1–200 个字符（去除首尾空白后）");
+    at("field", "title must be a single line of 1-200 characters after trimming");
   }
 
   const status = fm["status"];
   const isStatus = typeof status === "string" && (STATUSES as readonly string[]).includes(status);
-  if (!isStatus) at("field", `status 必须是 ${STATUSES.join(" / ")} 之一，当前是 ${JSON.stringify(status)}`);
+  if (!isStatus) at("field", `status must be one of ${STATUSES.join(" / ")}; found ${JSON.stringify(status)}`);
 
   // 不变量 2 —— resolution present iff closed
   const resolution = fm["resolution"];
   if (status === "closed") {
-    if (resolution === undefined) at("invariant-2", "status 是 closed，但缺少 resolution");
+    if (resolution === undefined) at("invariant-2", "status is closed but resolution is missing");
     else if (typeof resolution !== "string" || !(RESOLUTIONS as readonly string[]).includes(resolution)) {
-      at("field", `resolution 必须是 ${RESOLUTIONS.join(" / ")} 之一，当前是 ${JSON.stringify(resolution)}`);
+      at("field", `resolution must be one of ${RESOLUTIONS.join(" / ")}; found ${JSON.stringify(resolution)}`);
     }
   } else if (resolution !== undefined) {
-    at("invariant-2", `resolution 只能在 status 为 closed 时出现，当前 status 是 ${JSON.stringify(status)}`);
+    at("invariant-2", `resolution may only appear when status is closed; status is ${JSON.stringify(status)}`);
   }
 
   // 不变量 3 —— assignee present iff in_progress，closed 时可选
   const assignee = fm["assignee"];
   if (status === "in_progress" && assignee === undefined) {
-    at("invariant-3", "status 是 in_progress，但缺少 assignee");
+    at("invariant-3", "status is in_progress but assignee is missing");
   }
   if (status === "open" && assignee !== undefined) {
-    at("invariant-3", "status 是 open 时 assignee 必须缺席（reopen 要同时清除 resolution 与 assignee）");
+    at("invariant-3", "assignee must be absent when status is open (reopen clears resolution and assignee together)");
   }
 
   // 不变量 8 —— actor 语法
   if (assignee !== undefined) {
     if (typeof assignee !== "string" || !ACTOR_RE.test(assignee)) {
-      at("invariant-8", `assignee ${JSON.stringify(assignee)} 不符合 spec §5.4（1–64 个字符，不含空白与冒号）`);
+      at("invariant-8", `assignee ${JSON.stringify(assignee)} does not match spec §5.4 (1-64 characters, no whitespace or colon)`);
     }
   }
   for (const line of logLines(t.body)) {
     const parsed = parseLogLine(line);
     if (!parsed.ok) {
-      at("field", `Log 行不符合 spec §5.3.3 的语法：${parsed.error}  ——  ${line}`);
+      at("field", `Log line does not match the spec §5.3.3 grammar: ${parsed.error}  --  ${line}`);
       continue;
     }
     if (!ACTOR_RE.test(parsed.actor)) {
-      at("invariant-8", `Log 行的 actor ${JSON.stringify(parsed.actor)} 不符合 spec §5.4`);
+      at("invariant-8", `Log line actor ${JSON.stringify(parsed.actor)} does not match spec §5.4`);
     }
   }
 
@@ -88,36 +88,36 @@ export function validateFile(t: TaskFile): Finding[] {
   const updated = fm["updated"];
   for (const [name, v] of [["created", created], ["updated", updated]] as const) {
     if (typeof v !== "string" || !TIMESTAMP_RE.test(v)) {
-      at("field", `${name} 必须是 RFC 3339 的 UTC 秒级时间戳（形如 2026-09-14T09:00:00Z），当前是 ${JSON.stringify(v)}`);
+      at("field", `${name} must be an RFC 3339 UTC second-precision timestamp such as 2026-09-14T09:00:00Z; found ${JSON.stringify(v)}`);
     }
   }
   if (typeof created === "string" && typeof updated === "string" && updated < created) {
-    at("invariant-6", `updated (${updated}) 早于 created (${created})`);
+    at("invariant-6", `updated (${updated}) is earlier than created (${created})`);
   }
 
   // 可选字段的类型与取值
   const rank = fm["rank"];
   if (rank !== undefined && (typeof rank !== "string" || !RANK_RE.test(rank))) {
-    at("field", `rank 必须是匹配 ${RANK_RE.source} 的字符串，当前是 ${JSON.stringify(rank)}（不带引号的 007 会被 YAML 读成数字 7）`);
+    at("field", `rank must be a string matching ${RANK_RE.source}; found ${JSON.stringify(rank)} (an unquoted 007 is read by YAML as the number 7)`);
   }
   const verify = fm["verify"];
-  if (verify !== undefined && typeof verify !== "string") at("field", "verify 必须是字符串");
+  if (verify !== undefined && typeof verify !== "string") at("field", "verify must be a string");
   const labels = fm["labels"];
   if (labels !== undefined) {
-    if (!Array.isArray(labels)) at("field", "labels 必须是列表");
+    if (!Array.isArray(labels)) at("field", "labels must be a list");
     else {
       const seen = new Set<string>();
       for (const l of labels) {
-        if (typeof l !== "string" || !LABEL_RE.test(l)) at("field", `标签 ${JSON.stringify(l)} 不符合 spec §5.2 字段 10`);
-        else if (seen.has(l)) at("field", `标签 ${JSON.stringify(l)} 重复`);
+        if (typeof l !== "string" || !LABEL_RE.test(l)) at("field", `label ${JSON.stringify(l)} does not match spec §5.2 field 10`);
+        else if (seen.has(l)) at("field", `label ${JSON.stringify(l)} is duplicated`);
         else seen.add(l);
       }
     }
   }
   const parent = fm["parent"];
-  if (parent !== undefined && typeof parent !== "string") at("field", "parent 必须是字符串");
+  if (parent !== undefined && typeof parent !== "string") at("field", "parent must be a string");
   const blockedBy = fm["blocked_by"];
-  if (blockedBy !== undefined && !Array.isArray(blockedBy)) at("field", "blocked_by 必须是列表");
+  if (blockedBy !== undefined && !Array.isArray(blockedBy)) at("field", "blocked_by must be a list");
 
   return out;
 }
@@ -151,7 +151,7 @@ export type ParsedLogLine =
  * 两者都不是。§5.4 说空格「会让 Log 行的解析错位」，错位的证据就在这里。
  */
 export function parseLogLine(line: string): ParsedLogLine {
-  if (!line.startsWith("- ")) return { ok: false, error: "不是以 \"- \" 开头的列表项" };
+  if (!line.startsWith("- ")) return { ok: false, error: 'does not start with "- "' };
   const rest = line.slice(2);
 
   // 文本段以 ": " 开始，且它之前不能再有空格分隔的非 key=value 记号
@@ -160,11 +160,11 @@ export function parseLogLine(line: string): ParsedLogLine {
   const text = colonAt < 0 ? undefined : rest.slice(colonAt + 2);
 
   const parts = head.split(" ").filter((p) => p !== "");
-  if (parts.length < 3) return { ok: false, error: "至少要有时间戳、actor 与动词三段" };
+  if (parts.length < 3) return { ok: false, error: "needs at least a timestamp, an actor and a verb" };
 
   const [timestamp, actor, verb, ...tail] = parts as [string, string, string, ...string[]];
   if (!TIMESTAMP_RE.test(timestamp)) {
-    return { ok: false, error: `第一段 ${JSON.stringify(timestamp)} 不是 RFC 3339 的 UTC 秒级时间戳` };
+    return { ok: false, error: `first field ${JSON.stringify(timestamp)} is not an RFC 3339 UTC second-precision timestamp` };
   }
   const args: Record<string, string> = {};
   for (const tok of tail) {
@@ -172,8 +172,8 @@ export function parseLogLine(line: string): ParsedLogLine {
     if (eq < 1) {
       return {
         ok: false,
-        error: `动词之后只能是 key=value，但出现了 ${JSON.stringify(tok)}` +
-          `（若 actor 含空格，错位就表现为这一条）`,
+        error: `only key=value tokens may follow the verb, but found ${JSON.stringify(tok)} ` +
+          `(an actor containing a space shows up exactly like this)`,
       };
     }
     args[tok.slice(0, eq)] = tok.slice(eq + 1);

@@ -32,7 +32,7 @@ export function renderConfig(prefix: string): string {
 }
 
 const GITIGNORE = [
-  "# 派生数据。可随时删除，不承载任何必要状态（spec §2）。",
+  "# Derived data. May be deleted at any time; holds no state needed to reconstruct the ledger (spec §2).",
   ".cache/",
   "",
 ].join("\n");
