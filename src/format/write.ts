@@ -1,12 +1,13 @@
 // src/format/write.ts
 import { existsSync, readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
 import { withLock } from "../fs/lock.ts";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { readTasks } from "./read.ts";
 import { emitTask, nextRank, type NewTask } from "./emit.ts";
 import { newIdBody, makeId } from "./id.ts";
+import { gitCommonDir } from "./gitdir.ts";
+import { leaseDirFor } from "./lease.ts";
 import { splitEnvelope } from "./envelope.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 import type { Ledger } from "./discover.ts";
@@ -46,23 +47,11 @@ export type CreateContext = {
  * 子目录 `../.git`），必须相对仓库根解析成绝对路径——实测过，直接当路径用会错。
  */
 export function lockPathFor(ledger: Ledger): string {
-  const common = gitCommonDir(ledger.root);
-  return common === null
-    ? join(ledger.dir, ".cache", "lock")
-    : join(common, "todopi", "leases", "lock");
+  return gitCommonDir(ledger.root) === null
+    ? join(ledger.dir, ".cache", "lock")   // 注意这一侧**不**在 leases/ 里
+    : join(leaseDirFor(ledger), "lock");
 }
 
-function gitCommonDir(root: string): string | null {
-  try {
-    const out = execFileSync("git", ["rev-parse", "--git-common-dir"], {
-      cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    if (out === "") return null;
-    return isAbsolute(out) ? out : resolve(root, out);
-  } catch {
-    return null;                     // 不在 git 仓库里（spec §1.3 允许）
-  }
-}
 
 /**
  * 创建一个任务。**整段「扫描 → 生成 → 写」在锁内完成**，因为两个并发的 add
