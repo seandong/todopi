@@ -89,7 +89,7 @@ program
 
 type LsCmdOptions = {
   all?: boolean; closed?: boolean; ready?: boolean; blocked?: boolean;
-  mine?: boolean; label?: string; limit?: number;
+  mine?: boolean; label?: string; limit?: string; open?: boolean;
 };
 
 /**
@@ -101,21 +101,26 @@ type LsCmdOptions = {
  */
 function lsOptions(cmd: Command): Command {
   return cmd
+    .option("--open", "only tasks that are not closed (the default)")
     .option("--all", "include closed tasks")
     .option("--closed", "only closed tasks")
     .option("--blocked", "only tasks waiting on another task")
     .option("--mine", "only tasks assigned to you or to an agent on this machine")
     .option("--label <label>", "only tasks carrying this label")
-    .option("--limit <n>", "show at most this many", (v: string) => Number.parseInt(v, 10));
+    // 不给 commander 传解析函数：Number.parseInt 会把 "1.5" 读成 1、"0x10" 读成 0，
+    // 于是坏的输入悄悄变成一个合法但错误的数。原样收下字符串，由 parseLimit 严格校验。
+    .option("--limit <n>", "show at most this many");
 }
 
 async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
-  const { runLs } = await import("./commands/ls.ts");
-  const { renderText, renderJson } = await import("./output/render/ls.ts");
+  const { runLs, parseLimit } = await import("./commands/ls.ts");
+  const { renderText, renderJson, renderDiagnostics } = await import("./output/render/ls.ts");
   const opts = program.opts();
+  const { limit, ...rest } = cmdOpts;
   const report = runLs({
     directory: (opts["directory"] as string | undefined) ?? process.cwd(),
-    ...cmdOpts,
+    ...rest,
+    ...(limit === undefined ? {} : { limit: parseLimit(limit) }),
     actor: opts["as"] as string | undefined,
   });
   process.stdout.write(
@@ -123,6 +128,8 @@ async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
       ? renderJson(report) + "\n"
       : renderText(report, { quiet: opts["quiet"] === true }),
   );
+  // 诊断走 stderr：stdout 在 --json 下必须是一个干净的数组
+  process.stderr.write(renderDiagnostics(report));
 }
 
 lsOptions(program.command("ls").description("list tasks in the ledger"))

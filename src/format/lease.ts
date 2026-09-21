@@ -4,19 +4,32 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ID_RE, TIMESTAMP_RE } from "../domain/types.ts";
-import { gitCommonDir } from "./gitdir.ts";
+import { gitCommonDir } from "../fs/git.ts";
 import type { Ledger } from "./discover.ts";
 
 /**
- * spec §8：`<git-common-dir>/todopi/leases/`，无 git 时 `.todopi/.cache/leases/`。
+ * spec §8：`<git-common-dir>/todopi/leases/`，无 git 时 `.todopi/.cache/leases/`；
+ * 锁是该目录下的 `lock`，无 git 时是 `.todopi/.cache/lock`（不在 leases/ 里）。
+ *
  * 用公共目录是为了同一仓库的多个 worktree 共用一套租约——两个 worktree 里的
  * agent 认领同一个任务必须互相看得见。
+ *
+ * 两条路径由**同一次** gitCommonDir 调用派生。分成两次调用曾经存在过：
+ * 第一次判断出在 git 里、第二次若瞬时失败，锁就会落到 .cache/leases/lock，
+ * 恰好破坏「锁与租约共用同一次 git-ness 判断」这个前提（Codex 评审指出）。
  */
-export function leaseDirFor(ledger: Ledger): string {
+export function leasePaths(ledger: Ledger): { leaseDir: string; lockPath: string } {
   const common = gitCommonDir(ledger.root);
-  return common === null
-    ? join(ledger.dir, ".cache", "leases")
-    : join(common, "todopi", "leases");
+  if (common === null) {
+    // 无 git 时锁**不**在 leases/ 里——规格本身是这么不对称的
+    return { leaseDir: join(ledger.dir, ".cache", "leases"), lockPath: join(ledger.dir, ".cache", "lock") };
+  }
+  const leaseDir = join(common, "todopi", "leases");
+  return { leaseDir, lockPath: join(leaseDir, "lock") };
+}
+
+export function leaseDirFor(ledger: Ledger): string {
+  return leasePaths(ledger).leaseDir;
 }
 
 /**

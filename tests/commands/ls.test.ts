@@ -3,10 +3,10 @@ import assert from "node:assert";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
-import { runLs } from "../../src/commands/ls.ts";
+import { runLs, parseLimit } from "../../src/commands/ls.ts";
 import { runInit } from "../../src/commands/init.ts";
 import { runAdd } from "../../src/commands/add.ts";
-import { renderText, renderJson } from "../../src/output/render/ls.ts";
+import { renderText, renderJson, renderDiagnostics } from "../../src/output/render/ls.ts";
 import { EXIT } from "../../src/exit.ts";
 
 function repo(): string {
@@ -120,8 +120,8 @@ test("容器带 n/m 进度（FR-G3）", () => {
   runAdd({ directory: d, title: "b", parent: parent.id });
   closeTask(d, a.id);
   const dto = runLs({ directory: d, all: true }).tasks.find((t) => t.id === parent.id);
-  assert.deepEqual(dto?.children, { closed: 1, total: 2 });
-  assert.equal(runLs({ directory: d, all: true }).tasks.find((t) => t.id === a.id)?.children,
+  assert.deepEqual(dto?.child_progress, { closed: 1, total: 2 });
+  assert.equal(runLs({ directory: d, all: true }).tasks.find((t) => t.id === a.id)?.child_progress,
     undefined, "叶子任务没有 children 字段");
 });
 
@@ -136,18 +136,17 @@ test("--json 经 DTO 映射，字段名跟格式规格走", () => {
   const d = repo();
   const blocker = runAdd({ directory: d, title: "blocker" });
   runAdd({ directory: d, title: "t", labels: ["auth"], blockedBy: [blocker.id] });
-  const parsed = JSON.parse(renderJson(runLs({ directory: d }))) as
-    { tasks: Array<Record<string, unknown>>; total: number; unreadable: string[] };
-  const dto = parsed.tasks.find((t) => t["title"] === "t");
+  const parsed = JSON.parse(renderJson(runLs({ directory: d }))) as Array<Record<string, unknown>>;
+  assert.ok(Array.isArray(parsed), "FR-T2 明文：--json 输出数组，不套信封");
+  const dto = parsed.find((t) => t["title"] === "t");
   assert.ok(dto);
-  for (const key of ["id", "title", "status", "rank", "labels", "blocked_by", "ready", "blocked", "stale", "mine"]) {
+  for (const key of ["id", "title", "status", "rank", "labels", "blocked_by", "ready", "blocked", "stale", "mine", "unverified"]) {
     assert.ok(key in dto, `--json 缺少字段 ${key}`);
   }
   assert.equal(dto["blocked"], true);
   assert.equal(dto["ready"], false);
   assert.deepEqual(dto["labels"], ["auth"]);
   assert.equal(dto["resolution"], undefined, "没有 resolution 的任务不该冒出这个键");
-  assert.ok(Array.isArray(parsed.unreadable));
 });
 
 test("输出是英文，且空账本有明确提示", () => {
@@ -168,7 +167,7 @@ test("stale 的 in_progress 任务在 ready 队列里且被标记（spec §7.5 �
   assert.match(renderText(runLs({ directory: d, ready: true })), /stale/i, "文本输出也要标出来");
 });
 
-test("读不出来的任务文件被单独报告，不混进正常列表", () => {
+test("不合法的任务文件被单独报告，不混进正常列表", () => {
   // readTasks 不丢弃坏文件——它们带着 parseError 进结果（doctor 靠这个报告损坏）。
   // ls 若照单全收，会列出一条标题为空、状态为空的幽灵任务；若悄悄丢掉，
   // agent 会以为这个任务不存在，转头又建一个重复的。两者都不行，所以单独报。
@@ -177,10 +176,10 @@ test("读不出来的任务文件被单独报告，不混进正常列表", () =>
   writeFileSync(join(d, ".todopi", "tasks", "tp-zzzzzz.md"), "no envelope here\n");
   const r = runLs({ directory: d });
   assert.deepEqual(ids(r), [ok.id], "坏文件不出现在任务列表里");
-  assert.deepEqual(r.unreadable, ["tp-zzzzzz"]);
-  assert.match(renderText(r), /tp-zzzzzz/, "但必须在输出里看得见");
-  assert.match(renderText(r), /doctor/, "并且指向能查明白的命令");
-  assert.match(renderText(r, { quiet: true }), /tp-zzzzzz/, "--quiet 压提示不压问题");
+  assert.deepEqual(r.invalid, ["tp-zzzzzz"]);
+  assert.equal(renderText(r).includes("tp-zzzzzz"), false, "诊断不进 stdout");
+  assert.match(renderDiagnostics(r), /tp-zzzzzz/, "但必须在 stderr 上看得见");
+  assert.match(renderDiagnostics(r), /doctor/, "并且指向能查明白的命令");
 });
 
 test("任务多到几十万条时渲染不炸栈", () => {
@@ -189,7 +188,75 @@ test("任务多到几十万条时渲染不炸栈", () => {
   const tasks = Array.from({ length: 200_000 }, (_, i) => ({
     id: `tp-${String(i).padStart(6, "0")}`, title: "t", status: "open",
     blocked_by: [], labels: [], created: "", updated: "",
-    ready: true, blocked: false, stale: false, mine: false,
+    ready: true, blocked: false, stale: false, mine: false, unverified: false,
   }));
-  assert.doesNotThrow(() => renderText({ tasks, total: tasks.length, unreadable: [] }));
+  assert.doesNotThrow(() => renderText({ tasks, total: tasks.length, invalid: [] }));
 });
+
+test("parseLimit 从**字符串**出发拒绝所有非十进制非负整数", () => {
+  // 这条是 Codex 评审抓到的：原先的用例直接往 runLs 塞 number，
+  // 而真正有缺陷的是 CLI 那层的 Number.parseInt——它把 "1.5" 读成 1、
+  // "1foo" 读成 1、"0x10" 读成 0。于是用例全绿而边界是坏的。
+  for (const bad of ["1.5", "1foo", "0x10", "1e3", " 2", "2 ", "-1", "+3", "", "abc", "01", "١٢"]) {
+    assert.throws(() => parseLimit(bad),
+      (e: unknown) => (e as { code: number }).code === EXIT.usage, `--limit ${JSON.stringify(bad)} 应当被拒`);
+  }
+  assert.equal(parseLimit("0"), 0);
+  assert.equal(parseLimit("2"), 2);
+  assert.equal(parseLimit("100"), 100);
+});
+
+test("--open 是可以显式给出的模式，不只是默认行为（FR-T2）", () => {
+  const d = repo();
+  const open = runAdd({ directory: d, title: "open" });
+  const done = runAdd({ directory: d, title: "done" });
+  closeTask(d, done.id);
+  assert.deepEqual(ids(runLs({ directory: d, open: true })), [open.id]);
+  assert.deepEqual(ids(runLs({ directory: d, open: true })), ids(runLs({ directory: d })),
+    "--open 与默认一致");
+  assert.throws(() => runLs({ directory: d, open: true, closed: true }),
+    (e: unknown) => (e as { code: number }).code === EXIT.usage, "--open 也参与互斥校验");
+});
+
+test("forced=true 完成的任务标为 unverified（FR-D3 / spec §5.3.3）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "rushed" });
+  closeTask(d, t.id);
+  appendLog(d, t.id, "- 2026-09-14T11:02:00Z sean done forced=true: no time");
+  const dto = runLs({ directory: d, closed: true }).tasks.find((x) => x.id === t.id);
+  assert.equal(dto?.unverified, true);
+  assert.match(renderText(runLs({ directory: d, closed: true })), /\[unverified\]/);
+});
+
+test("正常完成的任务不是 unverified", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "proper" });
+  closeTask(d, t.id);
+  appendLog(d, t.id, "- 2026-09-14T11:02:00Z sean done verify=pass commit=3f2a1c9");
+  assert.equal(runLs({ directory: d, closed: true }).tasks[0]?.unverified, false);
+});
+
+test("字段非法的文件被挡下，但「字段合法、组合非法」的照常列出", () => {
+  // 这条线是刻意划的：envelope / invariant-1 / field 说的是某个字段本身不合法，
+  // 这样的文件没法渲染也没法派生；invariant-2/3/7/8 说的是字段都合法但组合非法
+  // （open 却带 assignee），那种任务照样能渲染，按 spec §7 派生的结果也是对的，
+  // 报告它们是 doctor 的职责。
+  const d = repo();
+  const good = runAdd({ directory: d, title: "fine" });
+  // 字段非法：缺 title / status
+  writeFileSync(join(d, ".todopi", "tasks", "tp-nofld1.md"), '---\nid: "tp-nofld1"\n---\n\nbody\n');
+  // 组合非法：open 却带 assignee（不变量 3）
+  const odd = runAdd({ directory: d, title: "open with assignee" });
+  patch(d, odd.id, (l) => (l.startsWith("status:") ? 'status: "open"\nassignee: "sean"' : l));
+
+  const r = runLs({ directory: d });
+  assert.deepEqual(r.invalid, ["tp-nofld1"], "只有字段非法的进 invalid");
+  assert.ok(ids(r).includes(odd.id), "组合非法的照常列出——那是 doctor 的地盘");
+  assert.ok(ids(r).includes(good.id));
+});
+
+function appendLog(dir: string, id: string, line: string): void {
+  const p = join(dir, ".todopi", "tasks", `${id}.md`);
+  const src = readFileSync(p, "utf8");
+  writeFileSync(p, src.includes("## Log") ? `${src.trimEnd()}\n${line}\n` : `${src.trimEnd()}\n\n## Log\n\n${line}\n`);
+}

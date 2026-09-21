@@ -4,6 +4,7 @@
 // 落在跑得最快的那一层。
 
 import { TIMESTAMP_RE, type TaskFile } from "./types.ts";
+import { logLines, parseLogLine } from "./validate.ts";
 
 export type TaskIndex = {
   byId: Map<string, TaskFile>;
@@ -110,4 +111,56 @@ export function isReady(index: TaskIndex, t: TaskFile, input: StaleInput): boole
   const status = statusOf(t);
   if (status === "open") return true;
   return status === "in_progress" && isStale(t, input);
+}
+
+/**
+ * spec §5.3.3 末句 / FR-D3：**已关闭**且最近一次 `done` 或 `closed` 事件带
+ * `forced=true` 的任务，显示为「未验证」。
+ *
+ * 难点全在「最近一次」上：取「有没有出现过 forced」会把「先强制完成、
+ * 重开、再正常完成」判错。所以要顺着 Log 走到最后一个 done/closed 事件再看。
+ *
+ * 前置条件是任务已关闭——spec 的措辞是「A **closed** task whose most recent ...」。
+ * 强制完成后又被重开的任务不该继续挂着这个标记。
+ *
+ * Log 的动词是 `closed`（命令才叫 `close`，spec §5.3.3 的表里两列写得很清楚）。
+ * 坏掉的行按 spec「Unknown verbs MUST be preserved and ignored」处理：跳过。
+ */
+export function isUnverified(t: TaskFile): boolean {
+  if (statusOf(t) !== "closed") return false;
+  let forced = false;
+  for (const line of logLines(t.body)) {
+    const parsed = parseLogLine(line);
+    if (!parsed.ok) continue;
+    if (parsed.verb !== "done" && parsed.verb !== "closed") continue;
+    forced = parsed.args["forced"] === "true";   // 覆盖前一次：只有最后一次算数
+  }
+  return forced;
+}
+
+/**
+ * 一个任务的全部派生态，一次算完。
+ *
+ * 抽出这个函数是 Codex 评审 F04 第 7 项的结果：原先 dto 层逐个调用上面的谓词，
+ * 等于在「只搬字段」的那一层里算派生态（ARCHITECTURE.md 明令禁止，现由
+ * ARCH-020 机器执行）。派生态属于 domain，dto 只负责把算好的结果搬到对外形状上。
+ */
+export type DerivedState = {
+  ready: boolean;
+  blocked: boolean;
+  stale: boolean;
+  unverified: boolean;
+  /** 容器才有；叶子为 undefined */
+  childProgress?: { closed: number; total: number };
+};
+
+export function deriveState(index: TaskIndex, t: TaskFile, input: StaleInput): DerivedState {
+  const out: DerivedState = {
+    ready: isReady(index, t, input),
+    blocked: isBlocked(index, t),
+    stale: isStale(t, input),
+    unverified: isUnverified(t),
+  };
+  if (isContainer(index, t)) out.childProgress = childProgress(index, t);
+  return out;
 }

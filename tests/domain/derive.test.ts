@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import {
-  indexTasks, isContainer, childProgress, isBlocked, isStale, isReady,
+  indexTasks, isContainer, childProgress, isBlocked, isStale, isReady, isUnverified,
   type StaleInput,
 } from "../../src/domain/derive.ts";
 import type { TaskFile } from "../../src/domain/types.ts";
@@ -155,4 +155,80 @@ test.describe("ready（spec §7.5 的三个条件）", () => {
     const ix = indexTasks([t]);
     assert.equal(isReady(ix, t, noLeases()), false);
   });
+});
+
+// ---- spec §5.3.3 末句 / FR-D3：最近一次 done|closed 带 forced=true 则显示为未验证 ----
+
+function closedWithLog(lines: string[]): TaskFile {
+  return {
+    path: "tasks/tp-000001.md", idFromFilename: "tp-000001",
+    frontmatter: { id: "tp-000001", title: "T", status: "closed", resolution: "done",
+      created: "2026-09-14T09:00:00Z", updated: "2026-09-14T12:00:00Z" },
+    body: ["## Log", "", ...lines].join("\n"), raw: "",
+  };
+}
+
+test("forced=true 的 done 使已关闭任务成为 unverified", () => {
+  assert.equal(isUnverified(closedWithLog([
+    '- 2026-09-14T11:02:00Z claude-code@mbp done forced=true: no time to run it',
+  ])), true);
+});
+
+test("正常 done 不是 unverified", () => {
+  assert.equal(isUnverified(closedWithLog([
+    "- 2026-09-14T11:02:00Z claude-code@mbp done verify=pass commit=3f2a1c9",
+  ])), false);
+});
+
+test("closed 动词同样算（spec 的动词是 closed，命令才叫 close）", () => {
+  assert.equal(isUnverified(closedWithLog([
+    "- 2026-09-14T11:02:00Z sean closed resolution=wontfix forced=true",
+  ])), true);
+});
+
+test("看的是**最近**一次：更早 forced、最新未 forced → 不是 unverified", () => {
+  // 这是这条规则的全部难点。取「有没有出现过 forced」会把这个例子判错。
+  assert.equal(isUnverified(closedWithLog([
+    "- 2026-09-14T10:00:00Z sean done forced=true: rushed",
+    "- 2026-09-14T11:00:00Z sean reopened",
+    "- 2026-09-14T12:00:00Z sean done verify=pass",
+  ])), false);
+});
+
+test("反过来：更早正常、最新 forced → 是 unverified", () => {
+  assert.equal(isUnverified(closedWithLog([
+    "- 2026-09-14T10:00:00Z sean done verify=pass",
+    "- 2026-09-14T11:00:00Z sean reopened",
+    "- 2026-09-14T12:00:00Z sean done forced=true: rushed",
+  ])), true);
+});
+
+test("非 done/closed 的动词不参与判断", () => {
+  assert.equal(isUnverified(closedWithLog([
+    "- 2026-09-14T10:00:00Z sean done verify=pass",
+    "- 2026-09-14T11:00:00Z sean note forced=true",
+  ])), false, "note 上的 forced=true 与完成态无关");
+});
+
+test("未关闭的任务永远不是 unverified", () => {
+  // spec 的措辞是「A **closed** task whose most recent ...」。
+  // 强制完成后又被重开的任务，不该继续挂着未验证的标记。
+  const t = closedWithLog(['- 2026-09-14T11:02:00Z sean done forced=true: rushed']);
+  t.frontmatter["status"] = "open";
+  assert.equal(isUnverified(t), false);
+});
+
+test("没有 Log、或 Log 行坏掉时不算 unverified", () => {
+  assert.equal(isUnverified(closedWithLog([])), false);
+  assert.equal(isUnverified(closedWithLog(["- garbage line"])), false);
+  assert.equal(isUnverified(closedWithLog([
+    "- 2026-09-14T10:00:00Z sean done forced=true",
+    "- not a log line at all",
+  ])), true, "坏行被忽略，不影响前面那条有效的");
+});
+
+test("forced 不是 true 时不算（只有 forced=true 才算）", () => {
+  assert.equal(isUnverified(closedWithLog([
+    "- 2026-09-14T11:02:00Z sean done forced=false",
+  ])), false);
 });

@@ -44,8 +44,13 @@ case "$out" in *"first task"*) fail "--blocked 不该列出未被阻塞的" ;; *
 # 5. --limit 生效，坏的 --limit 报用法错误而不是悄悄不限
 n=$(cli -C "$W" ls --limit 1 | grep -c '^tp-')
 if [ "$n" -eq 1 ]; then ok "--limit 生效"; else fail "--limit 1 应只有 1 行，实际 $n"; fi
-cli -C "$W" ls --limit abc >/dev/null 2>&1
-[ $? -eq 1 ] && ok "坏的 --limit 退出 1" || fail "坏的 --limit 应退出 1（FR-Q2）"
+# parseInt 会把 1.5/1foo 读成 1、0x10 读成 0——必须从 CLI 这一层测，
+# 直接往 runLs 塞 number 会绕开真正有缺陷的解析
+for bad in abc 1.5 1foo 0x10 1e3 -1; do
+  cli -C "$W" ls --limit "$bad" >/dev/null 2>&1
+  [ $? -eq 1 ] || fail "--limit $bad 应退出 1（FR-Q2）"
+done
+ok "坏的 --limit 一律退出 1"
 cli -C "$W" ls --all --closed >/dev/null 2>&1
 [ $? -eq 1 ] && ok "互斥选项退出 1" || fail "互斥选项应退出 1"
 
@@ -61,20 +66,37 @@ case "$out" in *"$B"*) fail "默认不该列出已关闭的" ;; *) ok "默认隐
 out="$(cli -C "$W" ls --closed 2>&1)"
 case "$out" in *"$B"*) ok "--closed 列出已关闭的" ;; *) fail "--closed 没列出：$out" ;; esac
 
-# 7. --json 可解析且含派生态字段
-if cli -C "$W" --json ls | node -e '
+# 7. --json 的 stdout 是一个数组（FR-T2 明文），且含派生态字段
+if cli -C "$W" --json ls 2>/dev/null | node -e '
 let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
   const r=JSON.parse(s);
-  if(!Array.isArray(r.tasks)) throw new Error("tasks 不是数组");
-  if(typeof r.total!=="number") throw new Error("缺 total");
-  if(!Array.isArray(r.unreadable)) throw new Error("缺 unreadable");
-  for(const k of ["id","title","status","ready","blocked","stale","mine","blocked_by","labels"])
-    if(!(k in r.tasks[0])) throw new Error("缺字段 "+k);
+  if(!Array.isArray(r)) throw new Error("--json 的 stdout 必须是数组，不套信封");
+  for(const k of ["id","title","status","ready","blocked","stale","mine","unverified","blocked_by","labels"])
+    if(!(k in r[0])) throw new Error("缺字段 "+k);
 })'; then
-  ok "--json 可解析且含派生态字段"
+  ok "--json stdout 是数组且含派生态字段"
 else
   fail "--json 输出不合格"
 fi
+
+# 7b. --open 是可以显式给出的模式（FR-T2）
+if [ "$(cli -C "$W" ls --open 2>/dev/null)" = "$(cli -C "$W" ls 2>/dev/null)" ]; then
+  ok "--open 与默认一致"
+else
+  fail "--open 的结果应与默认一致"
+fi
+
+# 7c. forced=true 的任务标为 unverified（FR-D3 / spec §5.3.3）
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+let s=fs.readFileSync(p,"utf8").trimEnd();
+s += s.includes("## Log") ? "\n" : "\n\n## Log\n\n";
+fs.writeFileSync(p, s + "- 2026-09-14T11:02:00Z sean done forced=true: no time\n");
+' "$W/.todopi/tasks/$B.md"
+case "$(cli -C "$W" ls --closed 2>/dev/null)" in
+  *unverified*) ok "forced 完成的任务标为 unverified" ;;
+  *) fail "forced=true 的任务应标为 unverified" ;;
+esac
 
 # 8. 输出是英文
 out="$(cli -C "$W" ls 2>&1)"
@@ -93,11 +115,25 @@ case "$out" in *"No tasks"*) ok "空账本有明确提示" ;; *) fail "空账本
 if [ "$(cli -C "$W" ready)" = "$(cli -C "$W" ls --ready)" ]; then ok "ready 是 ls --ready 的别名"; else fail "别名输出不一致"; fi
 if cli -C "$W" ready --limit 1 >/dev/null 2>&1; then ok "别名接受基础命令的选项"; else fail "ready --limit 被拒，那就不是别名"; fi
 
-# 11. 读不出来的文件被报告，而不是当成幽灵任务列出来
+# 11. 不合法的文件走 stderr 报告，stdout 保持干净可解析
 printf 'no envelope here\n' > "$W/.todopi/tasks/tp-zzzzzz.md"
-out="$(cli -C "$W" ls 2>&1)"
-case "$out" in *"tp-zzzzzz"*) ok "坏文件在输出里看得见" ;; *) fail "坏文件被悄悄吞了：$out" ;; esac
-case "$out" in *doctor*) ok "并指向 doctor" ;; *) fail "没指向能查明白的命令" ;; esac
+err="$(cli -C "$W" ls 2>&1 >/dev/null)"
+out="$(cli -C "$W" ls 2>/dev/null)"
+case "$err" in *"tp-zzzzzz"*) ok "坏文件在 stderr 上看得见" ;; *) fail "坏文件被悄悄吞了：$err" ;; esac
+case "$err" in *doctor*) ok "并指向 doctor" ;; *) fail "没指向能查明白的命令" ;; esac
+case "$out" in *"tp-zzzzzz"*) fail "诊断不该进 stdout" ;; *) ok "stdout 不含诊断" ;; esac
+# 有坏文件时 --json 的 stdout 仍必须是可解析的数组
+if cli -C "$W" --json ls 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{if(!Array.isArray(JSON.parse(s)))throw new Error("不是数组")})'; then
+  ok "有坏文件时 --json 仍是干净数组"
+else
+  fail "坏文件污染了 --json 的 stdout"
+fi
 rm -f "$W/.todopi/tasks/tp-zzzzzz.md"
+
+# 12. 身份解析链（FR-C4）：非法的 --as / TODOPI_ACTOR 当场报错
+cli -C "$W" ls --mine --as "bad actor" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "非法的 --as 退出 1" || fail "非法的 --as 应退出 1"
+TODOPI_ACTOR="has space" cli -C "$W" ls --mine >/dev/null 2>&1
+[ $? -eq 1 ] && ok "非法的 TODOPI_ACTOR 退出 1" || fail "非法的 TODOPI_ACTOR 应退出 1"
 
 [ "$FAILED" -eq 0 ] && { echo "f04-ls: pass"; exit 0; } || { echo "f04-ls: fail"; exit 1; }

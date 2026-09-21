@@ -24,3 +24,20 @@ export function gitCommonDir(root: string): string | null {
     return null;
   }
 }
+
+/**
+ * `git config user.name` 的值；没配置或不在仓库里返回 null。
+ *
+ * 返回**原始值**，不做规范化——spec §5.4 的规范化是纯函数，属于 domain。
+ * 这一层只负责把外部事实取回来。
+ */
+export function gitUserName(root: string): string | null {
+  try {
+    const out = execFileSync("git", ["config", "user.name"], {
+      cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return out === "" ? null : out;
+  } catch {
+    return null;
+  }
+}

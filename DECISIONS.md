@@ -648,3 +648,75 @@
   `createTask` 的校验器改由调用方注入（`format/` 不再 import `domain/`，
   修复 ARCHITECTURE.md 的依赖违规），`add` 注入的那个同时跑 `validateFile` 与
   `validateGraph`，与 `doctor` 是同一对函数。
+
+## D014 — F04 的 Codex 评审：`--json` 形状、非法文件的处置边界、身份解析链
+
+**日期**：2026-09-21。**触发**：Codex 对 `feat/f04-ls` 给出 No-go，8 个阻塞项。
+逐条核实后 7 条完全属实、1 条（第 6 条）只认一半。三条需要记录理由的决定：
+
+### 1. `--json` 输出数组，诊断走 stderr
+
+FR-T2 明文写的是「`--json` 输出数组」。我第一版输出了 `{tasks, total, unreadable}`
+的信封，理由是信封能带上 total 与坏文件清单。**这是实现在静默改写需求**：
+FR-Q3 给了 `--json` 版本承诺，数组↔信封的互换在任一方向上都是破坏性变更，
+必须先改 PRD 再改实现，不能倒过来。
+
+采纳权威条文：stdout 就是 `TaskDto[]`，`jq '.[].id'` 直接可用。丢掉的两样东西
+各有去处——`total` 在文本模式下以 `Showing N of M` 呈现；坏文件清单走 stderr。
+让诊断离开 stdout 是标准做法，也是让 stdout 在任何情况下都可解析的唯一办法。
+e2e 因此分开断言两条流：stdout 必须解析成干净数组，stderr 必须含坏文件的 id。
+
+**这条值得产品负责人复核**：若认为信封更重要，改的是 PRD 而不是实现。
+
+### 2. `ls` 挡下哪些非法文件：按 validateFile 已有的 rule 分类划线
+
+Codex 主张「能解析但违反不变量的文件也该被 ls 排除」。只认一半：
+
+- **认**：缺 `title`/`status` 的文件会渲染成一行空标题的幽灵记录。这类文件
+  没法渲染也没法派生，必须排除并单独报告。
+- **不认**：`open` 却带 `assignee`（不变量 3）这类任务照常渲染，按 spec §7.5
+  派生出的 `ready: true` **是对的**——§7.5 的 ready 定义只看状态与图，不看不变量。
+  报告不变量违规是 doctor 的职责。ls 兼职做校验器，等于把一份校验逻辑写两遍，
+  两份一定会漂移。
+
+划线依据用的是 `validateFile` 已有的 `rule` 分类，不另起炉灶：
+`envelope` / `invariant-1` / `field` 说的是「某个字段本身不合法」→ 排除并报告；
+`invariant-2/3/7/8` 说的是「字段都合法但组合非法」→ 照常列出，交给 doctor。
+
+### 3. FR-C4 的解析链只实现有事实依据的三级
+
+`--as` > `TODOPI_ACTOR` > `git config user.name`（经 spec §5.4 规范化）。
+**agent 环境推断这一级不实现**：PRD §17 记录的六家 agent 外部事实里没有环境变量
+标记，而实测表明按变量名猜不可靠——`CODEX_HOME` 在一个 Claude Code 会话里同样
+存在（它是 codex CLI 的配置目录，不是「正在运行的 agent 是 codex」的证据）。
+猜错身份的代价是任务归属错乱，比少一级回退严重得多。记入 PRD §15 待核实。
+
+`--as` 与 `TODOPI_ACTOR` **不规范化，非法即报错退出 1**：它们是人手输入的，
+悄悄改掉会让人纳闷自己的过滤器为什么不匹配。只有 `git config user.name` 属于
+spec §5.4 说的「取自外部来源的值」，需要规范化。规范化步骤**有序**（小写 →
+空白换 `-` → 删非法字符 → 截断 64 → 空则拒绝）：顺序反了 "Sean Dong" 会变成
+`seandong` 而不是 `sean-dong`。纯空白按规格字面得到 `-` 而不是拒绝——规格的
+拒绝条件只有「结果为空」，私自收紧会与第三方实现产生互操作分歧。
+
+### 附带修正
+
+- **提交历史**：`9cf74d1` 引入 `TaskIndex` 时旧的 ARCH-011 仍会命中它，该提交
+  独立跑 `make check` 必红。已重排为「先收窄规则、再引入类型」，并逐个 commit
+  验证 `make check` 通过。
+- **ARCH-020**（新增）：`src/output/dto/` 只能从 `domain/` 做类型导入。
+  ARCHITECTURE.md 早就写了「dto 只搬字段不做计算」，但没有机器执行，于是
+  第一版 dto 直接调用了六个领域谓词。派生态改由 `deriveState` 一次算完。
+- **ARCH-001 收窄**：包名（`got`/`axios`/`undici` 等）只在 import 说明符里匹配。
+  原规则全文匹配裸词，把 CLI 错误文案里的 "got" 判成了网络调用。这是
+  ARCH-002/011/013 之后第四条误伤真实代码的规则——规则本身也需要测试。
+- **ARCH-011 放宽回去**：上一轮为消除 `TaskIndex` 误报删掉了 `buildIndex`，
+  让 `buildIndex(){ writeFileSync(".todopi/.cache/tasks.db") }` 完全逃逸。
+- **`leasePaths`**：租约目录与锁路径由**同一次** `gitCommonDir` 调用派生。
+  分两次调用时，第二次若瞬时失败，锁会落到 `.cache/leases/lock`，恰好破坏
+  「两者共用同一次 git-ness 判断」这个前提。
+- **`child_progress`**：原名 `children` 与 spec §7.1 的 `children(t)`（子任务
+  **集合**）撞名，而 `show --tree` 将来要的正是那个集合。趁未发布改名。
+- **`parseLimit`**：`Number.parseInt` 把 `1.5`/`1foo` 读成 1、`0x10` 读成 0，
+  于是 `--limit 0x10` 静默地一条都不列。改为整串匹配 `^(0|[1-9][0-9]*)$`。
+  **原用例直接往 runLs 塞 number，绕开了真正有缺陷的那一层**——和单进程锁用例
+  同一个形状的错误：测了个不会失败的边界。凡有解析步骤的，用例必须从字符串出发。

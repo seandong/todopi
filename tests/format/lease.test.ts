@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { leaseDirFor, readHeartbeats } from "../../src/format/lease.ts";
+import { leaseDirFor, leasePaths, readHeartbeats } from "../../src/format/lease.ts";
 import { lockPathFor } from "../../src/format/write.ts";
 import { discoverLedger } from "../../src/format/discover.ts";
 import { initLedger } from "../../src/format/init.ts";
@@ -37,6 +37,17 @@ test("有 git 时锁就在租约目录里 —— 两者不能各自判断 git-ne
   // 分别写一遍，某天改动一处就会让两边各锁各的，完全不互斥。
   const l = ledger({ git: true });
   assert.equal(lockPathFor(l), join(leaseDirFor(l), "lock"));
+});
+
+test("leasePaths 一次调用同时给出两条路径 —— 不能各问一次 git", () => {
+  // 分两次调用曾经存在过：第一次判断出在 git 里、第二次若瞬时失败，
+  // 锁就会落到 .cache/leases/lock，恰好破坏「共用同一次 git-ness 判断」这个前提。
+  for (const git of [true, false]) {
+    const l = ledger({ git });
+    const p = leasePaths(l);
+    assert.equal(p.leaseDir, leaseDirFor(l));
+    assert.equal(p.lockPath, lockPathFor(l));
+  }
 });
 
 test("无 git 时锁**不**在 leases/ 里 —— 规格本身是不对称的", () => {

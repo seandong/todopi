@@ -6,8 +6,7 @@ import { writeFileAtomic } from "../fs/atomic.ts";
 import { readTasks } from "./read.ts";
 import { emitTask, nextRank, type NewTask } from "./emit.ts";
 import { newIdBody, makeId } from "./id.ts";
-import { gitCommonDir } from "./gitdir.ts";
-import { leaseDirFor } from "./lease.ts";
+import { leasePaths } from "./lease.ts";
 import { splitEnvelope } from "./envelope.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 import type { Ledger } from "./discover.ts";
@@ -47,9 +46,7 @@ export type CreateContext = {
  * 子目录 `../.git`），必须相对仓库根解析成绝对路径——实测过，直接当路径用会错。
  */
 export function lockPathFor(ledger: Ledger): string {
-  return gitCommonDir(ledger.root) === null
-    ? join(ledger.dir, ".cache", "lock")   // 注意这一侧**不**在 leases/ 里
-    : join(leaseDirFor(ledger), "lock");
+  return leasePaths(ledger).lockPath;
 }
 
 
