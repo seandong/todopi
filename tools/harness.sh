@@ -541,6 +541,19 @@ cmd_verify_feature() {
   [ "$st" != "passing" ] || { printf '%s%s 已经是 passing（终态）。行为要改就新开一个 feature。%s\n' "$C_YEL" "$id" "$C_RST"; return 0; }
   [ "$st" = "active" ] || die "feature '$id' 当前是 '$st'。先 make activate F=$id —— 状态机不允许跳级"
 
+  # evidence 声称「在 commit X 上验证通过」，而验证跑的是**工作区**。工作区有未提交
+  # 改动时，这句话就是假的——被验证的代码不在那个 commit 里。这个 harness 的全部
+  # 价值在于 evidence 可信，所以这里必须挡住，而不是记一个含糊的 dirty 标记。
+  # 发现于 2026-09-21：F01 与 F02 的 evidence 都指向了不含最终代码的 commit。
+  if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+    printf '%s工作区有未提交的改动。%s\n' "$C_RED$C_BLD" "$C_RST"
+    printf '  verify-feature 跑的是工作区，记录的是 HEAD——两者不一致时 evidence 会指向\n'
+    printf '  一个不含被验证代码的 commit，而 evidence 是这个 harness 唯一的可信输出。\n'
+    printf '  先提交（或 stash），再重跑 make verify-feature F=%s。\n\n' "$id"
+    git status --short
+    return 1
+  fi
+
   header "verify-feature $id"
   local n i label cmd repair
   n="$(jq -r --arg id "$id" '.features[] | select(.id==$id) | .layers // [] | length' "$FEATURES")"
