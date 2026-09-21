@@ -5,11 +5,11 @@
 
 ## Current State
 
-- Last commit: `aa21eb1` —— F03 完成，add 可用，三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `c50dc76` —— F03 合回 main，add 可用，四轮评审后三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**16 条全部通过**）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **210 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **228 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项。
   其中 f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）是单元测试抓不到的那类
@@ -24,10 +24,8 @@
 
 ## In Progress
 
-无。F01–F03 均 `passing`。
-
-F01、F02 已合回 `main`；**F03 在分支 `feat/f03-add` 上，尚未合回**。
-整个仓库尚未推送到 remote。
+无。F01–F03 均 `passing` 且都已合回 `main`（`--no-ff`，合并后在 main 上重跑三层
+确认绿），分支已删除。**整个仓库尚未推送到 remote。**
 
 自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
 doctor 能检出违规 ✅、五个命令 passing 进度 2/5（`init`、`add` 已完成，
@@ -59,9 +57,12 @@ doctor 能检出违规 ✅、五个命令 passing 进度 2/5（`init`、`add` �
    现在工作区脏时会拒绝，并新增 `make reverify` 修复坏掉的记录。
 9. ~~把 `feat/f02-init` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
 10. ~~执行 F03 的 plan~~ 已完成，5 个 task 逐个 TDD 通过。
-11. **请 Codex review `feat/f03-add`**，然后合回 `main`。并发正确性尤其值得
-    第二双眼睛——上一轮它在 F02 上查出 7 项，其中 3 项延伸到已合入 main 的 F01 代码。
-12. 然后 `make activate F=F04`（`ls`）。
+11. ~~Codex review 并合回 main~~ 已完成。**四轮**评审：前两轮是架构级（文件锁的
+    整个「自动接管」设计被推翻），后两轮是细节级，且第四轮的两个阻塞项都是第三轮
+    修复时新引入的。结论与方法论记在 DECISIONS D013。
+12. **`make activate F=F04`**（`ls`）。这是当前的下一步动作。
+    F04 是派生态层：ready / blocked / stale 的定义、排序、容器判定，全是纯函数，
+    用例直接构造任务集合即可——这一层跑得最快也最该测密。
    F03 是写入端基座：发射器（spec §5.1 的引号规则）、id 生成与碰撞检查、
    `fractional-indexing` 的 rank 分配、以及**文件锁**（`O_EXCL` + pid 判活 +
    退出清理）。锁建在 F02 的 `src/fs/atomic.ts` 之上，不替换它。
