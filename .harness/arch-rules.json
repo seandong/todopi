@@ -16,10 +16,10 @@
       "id": "ARCH-002",
       "description": "不得引入常驻进程或非 loopback 监听",
       "applies_when": "test -d src",
-      "check": "grep -rnE '\\b(setInterval|\\.listen\\(|createServer|child_process\\.spawn.*detached)\\b' src --include='*.ts' --include='*.tsx' | grep -v 'src/board/' || true",
+      "check": "grep -rnE '\\b(setInterval|\\.listen\\(|createServer|child_process\\.spawn.*detached)\\b' src --include='*.ts' --include='*.tsx' | grep -v 'src/board/' | grep -vE ':[[:space:]]*(//|\\\\*|/\\\\*)' || true",
       "expect": "empty",
       "what": "board 之外的代码里出现了常驻循环、端口监听或 detached 子进程。",
-      "why": "README 承诺 no resident process。CLI 必须是跑完就退出的短命进程，否则台账的并发模型（基于文件锁与租约）会被长期持有的状态破坏。",
+      "why": "README 承诺 no resident process。CLI 必须是跑完就退出的短命进程，否则台账的并发模型（基于文件锁与租约）会被长期持有的状态破坏。 本规则只看代码行：注释里提到 setInterval 这个词不算违规——解释「为什么不用它」的注释恰恰是我们希望存在的（2026-09-21 误伤过一次）。",
       "fix": "把逻辑改成一次性执行并退出。board 是唯一例外，它的监听必须绑定 127.0.0.1，且代码放在 src/board/ 下。"
     },
     {
