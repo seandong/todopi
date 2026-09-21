@@ -3,7 +3,37 @@ import { writeFileSync, linkSync, readFileSync, unlinkSync, mkdirSync } from "no
 import { dirname, join } from "node:path";
 import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
-import { EXIT, CliError } from "../exit.ts";
+
+/**
+ * 锁被占用。**中性错误**——`fs/` 只 import `node:*`，不认识 CLI 的退出码协议
+ * （ARCHITECTURE.md）。把它映射成 `CliError(EXIT.conflict)` 是 `commands/` 的事。
+ *
+ * 带上结构化的 `lockPath` 与 `holder`，调用方才能自己决定怎么呈现，
+ * 而不是从消息文本里再解析一遍。
+ */
+export class LockBusyError extends Error {
+  readonly lockPath: string;
+  readonly holder: LockHolder | null;
+  readonly holderAlive: boolean;
+  constructor(message: string, lockPath: string, holder: LockHolder | null, holderAlive: boolean) {
+    super(message);
+    this.name = "LockBusyError";
+    this.lockPath = lockPath;
+    this.holder = holder;
+    this.holderAlive = holderAlive;
+  }
+}
+
+/**
+ * 把路径包成 POSIX shell 里可安全粘贴的单个参数。
+ *
+ * 打印 `rm ${path}` 而不引用是危险的：路径含空格会让 rm 收到多个参数、
+ * 含 glob 字符会展开成别的文件。单引号里除了单引号本身没有元字符，
+ * 所以只需把 ' 换成 '\'' 这个惯用写法。
+ */
+export function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
 
 export type LockHolder = {
   pid: number;
@@ -50,11 +80,14 @@ export type LockOptions = {
  */
 export function withLock<T>(lockPath: string, fn: () => T, opts: LockOptions = {}): T {
   const timeoutMs = opts.timeoutMs ?? 5000;
-  const mine = acquire(lockPath, timeoutMs);
 
-  // 进程被 SIGINT/SIGTERM 打断时也要释放。注册在获取之后、执行之前，
-  // 否则一次 Ctrl-C 就会留下一把需要手工清理的锁。
+  // 信号处理器必须在**获取之前**注册。注册在获取之后的话，信号恰好落在
+  // 「link 成功」与「注册完成」之间时，进程按默认行为退出并留下一把锁。
+  // 窗口虽窄，但它正是 SIGKILL 之外唯一会留下残锁的路径——而那条路径是
+  // 这个设计（不接管）唯一的代价，不该再自己放大它。
+  let mine: LockHolder | null = null;
   const release = () => {
+    if (mine === null) return;        // 还没拿到锁，没什么可释放的
     // 释放前确认锁还是自己的。本实现不接管，所以正常情况下它一定是自己的；
     // 这条检查防的是外部（用户手工 rm、将来的 doctor --fix）在我们持锁期间清掉了
     // 它，而此时又有别人取得了新锁——无条件 unlink 会删掉那把活锁。
@@ -66,23 +99,41 @@ export function withLock<T>(lockPath: string, fn: () => T, opts: LockOptions = {
     if (current !== null && current.nonce !== mine.nonce) return;
     try { unlinkSync(lockPath); } catch { /* 已经被释放 */ }
   };
-  // 收到信号时释放锁，然后**恢复默认行为并重新发给自己**——而不是 process.exit()。
-  // 直接 exit 会截断尚未 flush 的 stdout，而且 ARCHITECTURE.md 明文禁止在
-  // src/cli.ts 之外调用它。重新发信号让进程以正确的「被信号终止」状态退出。
+  // 临界区是**同步**的，所以信号在它执行期间无法送达——Node 的信号处理器跑在
+  // 事件循环上，而同步代码把事件循环堵死了。实测（Node 22）：
+  //
+  //   不注册处理器 → 同步期间被 OS 立即杀死，退出 143，**锁留在原地**
+  //   注册处理器   → 信号被推迟；同步活干完、finally 释放锁，进程退出 0
+  //
+  // 注册它换来的是「锁一定被释放」，代价是**退出码变成 0 而不是 143**：
+  // 处理器的回调还排在事件循环里，而主模块此时已经跑完，Node 不会再去派发它。
+  // 试过在 finally 里按标志重发——标志永远是 false，因为处理器压根没跑过。
+  //
+  // 这个偏差被记录而不是被掩盖。它的代价边界很清楚：临界区是毫秒级的，
+  // supervisor 看到的是「进程在 10ms 内退出，状态 0 而非 143」；
+  // 换来的是不会留下一把需要人工清理的锁——而那正是「不接管」这个设计的唯一代价，
+  // 不该再自己放大它。
   const onSignal = (signal: NodeJS.Signals) => {
     release();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
-    process.kill(process.pid, signal);
+    process.kill(process.pid, signal);      // 恢复默认行为并重新发给自己
   };
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
   try {
+    mine = acquire(lockPath, timeoutMs);
     return fn();
   } finally {
-    process.off("SIGINT", onSignal);
-    process.off("SIGTERM", onSignal);
+    // **不在这里移除监听器。** 同步临界区期间到达的信号，此刻处理器还没跑过
+    // （事件循环一直被堵着），它的回调还排在队列里。在这里 off 掉就等于把那个
+    // 回调丢弃——信号被吞，进程以 0 退出。实测过：这正是「注册但不重发」那一档。
+    //
+    // 留着它是安全的：release 通过 mine 的 nonce 判断，锁已释放时它是空操作；
+    // withLock 返回之后再来的信号会走处理器、release 空转、然后重发，
+    // 效果与「没有处理器」完全一致。这个 CLI 一条命令只取一次锁，不会堆积。
     release();
+    mine = null;                            // 之后再触发的 release 变成空操作
   }
 }
 
@@ -129,32 +180,34 @@ function tryCreate(lockPath: string): LockHolder | null {
  * 超时时的错误。它是用户能拿到的唯一线索，所以必须说清三件事：
  * 谁持有、那个进程还在不在、怎么清理。
  */
-function lockBusy(lockPath: string, timeoutMs: number): CliError {
+function lockBusy(lockPath: string, timeoutMs: number): LockBusyError {
   const holder = readHolder(lockPath);
   if (holder === null) {
-    return new CliError(
-      EXIT.conflict,
+    return new LockBusyError(
       `Could not acquire the ledger lock at ${lockPath} within ${timeoutMs}ms. ` +
         `The lock file exists but its contents are unreadable, so it cannot be attributed ` +
-        `to any process. If no other todopi command is running, delete it:\n  rm ${lockPath}`,
+        `to any process. If no other todopi command is running, delete it:\n  rm ${shellQuote(lockPath)}`,
+      lockPath, null, false,
     );
   }
-  const liveness = holderIsAlive(holder)
+  // 只探测一次存活。探两次的话，持有进程恰在两次之间退出会让诊断与补救文字互相矛盾。
+  const alive = holderIsAlive(holder);
+  const liveness = alive
     ? holder.host === hostname()
       ? `process ${holder.pid} is still running`
       : `it is on another machine, so this process cannot tell whether it is still running`
     : `process ${holder.pid} is no longer running, so this lock is stale`;
   // 补救措施必须是**今天就能执行**的。doctor --fix 要到 F13 才有，在那之前
   // 指向它等于什么也没说——一个自主运行的 agent 会每轮等 5 秒然后永久失败。
-  const remedy = holderIsAlive(holder)
+  const remedy = alive
     ? `Wait for it to finish, or re-run with a longer timeout.`
-    : `That process is gone, so this lock is safe to delete:\n  rm ${lockPath}`;
-  return new CliError(
-    EXIT.conflict,
+    : `That process is gone, so this lock is safe to delete:\n  rm ${shellQuote(lockPath)}`;
+  return new LockBusyError(
     `Could not acquire the ledger lock at ${lockPath} within ${timeoutMs}ms. ` +
       `Held by ${holder.host}:${holder.pid} since ${holder.at}; ${liveness}.\n${remedy}\n` +
       `This command never steals a lock: deciding one is stale and removing it cannot be ` +
       `done as a single atomic step, so an automatic takeover can always delete a live lock.`,
+    lockPath, holder, alive,
   );
 }
 

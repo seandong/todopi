@@ -176,11 +176,21 @@
       "id": "ARCH-018",
       "description": "format/ 只能从 domain/ 引用类型，不得引用函数",
       "applies_when": "test -d src/format",
-      "check": "grep -rn 'from \"\\\\.\\\\./domain/' src/format --include='*.ts' | grep -v 'domain/types.ts' || true",
+      "check": "grep -rnE \"from [\\\"']([.][.]/)+domain/\" src/format --include='*.ts' --include='*.tsx' | grep -vE \"domain/types[.]ts[\\\"']\" || true",
       "expect": "empty",
       "what": "src/format/ 引用了 domain/types.ts 之外的 domain 模块。",
-      "why": "ARCHITECTURE.md 允许 format/ 引用 domain/types.ts，因为它只有类型与正则常量、没有任何行为——一个两层都要说的名字总得有人跨线。但引用 domain 的**函数**是真正的方向倒置：format/ 懂磁盘格式，不懂「什么算合法」。校验、派生态、图算法一律由调用方注入（见 format/write.ts 的 Validate）。2026-09-21 的第三轮 review 抓到 write.ts 直接 import 了 domain/validate 与 domain/id。",
+      "why": "ARCHITECTURE.md 允许 format/ 引用 domain/types.ts，因为它只有类型与正则常量、没有任何行为——一个两层都要说的名字总得有人跨线。但引用 domain 的**函数**是真正的方向倒置：format/ 懂磁盘格式，不懂「什么算合法」。校验、派生态、图算法一律由调用方注入（见 format/write.ts 的 Validate）。2026-09-21 的第三轮 review 抓到 write.ts 直接 import 了 domain/validate 与 domain/id。 正则要同时覆盖单双引号与多级相对路径（format/sub/ 下是 ../../domain/）——2026-09-21 的第四轮 review 指出第一版只匹配双引号与直属 ../domain/。",
       "fix": "把该函数的调用改为由调用方注入的回调；若那个函数本就属于格式层（如 spec §4 的 id 生成），把它移进 src/format/。"
+    },
+    {
+      "id": "ARCH-019",
+      "description": "fs/ 只依赖 node: 内置模块",
+      "applies_when": "test -d src/fs",
+      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/fs --include='*.ts' | grep -vE \"from [\\\"']node:\" || true",
+      "expect": "empty",
+      "what": "src/fs/ import 了 node: 之外的任何模块。",
+      "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。",
+      "fix": "把上层的类型换成本层自己定义的中性错误或数据结构，由调用方翻译。若确实需要共享某个常量，考虑它是否本就属于 fs/。"
     }
   ]
 }

@@ -137,7 +137,7 @@
         {
           "label": "runtime",
           "cmd": "node --test",
-          "repair": "round-trip 失败→src/format/emit.ts 的引号与转义（\\\\ 与 \\\" 两种）；并发用例失败→src/fs/lock.ts 的 O_EXCL 获取、pid+host 判活或退出清理；id 碰撞→src/domain/id.ts 没有在写入前检查 tasks/ 下同名文件。"
+          "repair": "round-trip 失败→src/format/emit.ts 的引号与转义（\\\\ 与 \\\" 两种）；并发用例失败→src/fs/lock.ts 的 O_EXCL 获取、pid+host 判活或退出清理；id 碰撞→src/format/id.ts 没有在写入前检查 tasks/ 下同名文件。"
         },
         {
           "label": "system",

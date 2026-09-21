@@ -5,6 +5,7 @@ import { createTask } from "../format/write.ts";
 import { validateFile } from "../domain/validate.ts";
 import { validateGraph } from "../domain/graph.ts";
 import { EXIT, CliError } from "../exit.ts";
+import { LockBusyError } from "../fs/lock.ts";
 import type { AddReport } from "../output/dto/add.ts";
 
 export type AddOptions = {
@@ -48,7 +49,9 @@ export function runAdd(opts: AddOptions): AddReport {
   // 含 spec §5.4 的规范化）是 F05 claim 的内容。这里只接受调用方给的值——
   // 实现半套会在 F05 里变成需要拆掉的重复实现。
   const actor = opts.actor ?? "unknown";
-  const created = createTask(
+  // fs/ 抛的是中性的 LockBusyError——它不认识 CLI 的退出码协议（ARCHITECTURE.md）。
+  // 映射成 FR-Q2 的退出码 3（冲突：租约被占、并发写）是这一层的职责。
+  const created = withLockConflictMapped(() => createTask(
     ledger,
     (ctx) => ({
       id: ctx.newId(),
@@ -88,7 +91,7 @@ export function runAdd(opts: AddOptions): AddReport {
         ? null
         : findings.map((f) => `${f.rule}: ${f.message}`).join("; ");
     },
-  );
+  ));
 
   return {
     id: created.idFromFilename,
@@ -96,4 +99,14 @@ export function runAdd(opts: AddOptions): AddReport {
     path: created.path,
     rank: String(created.frontmatter["rank"] ?? ""),
   };
+}
+
+/** 把 fs/ 的中性 LockBusyError 映射为 FR-Q2 的退出码 3。 */
+function withLockConflictMapped<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (err) {
+    if (err instanceof LockBusyError) throw new CliError(EXIT.conflict, err.message);
+    throw err;
+  }
 }

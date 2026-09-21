@@ -5,8 +5,7 @@ import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
-import { withLock, type LockHolder } from "../../src/fs/lock.ts";
-import { EXIT, CliError } from "../../src/exit.ts";
+import { withLock, shellQuote, LockBusyError, type LockHolder } from "../../src/fs/lock.ts";
 
 /** 早于任何合理宽限期的时间戳。 */
 const longAgo = () => new Date(Date.now() - 120_000).toISOString();
@@ -96,8 +95,11 @@ test("超时错误说明持有者是谁、进程还在不在、怎么清理", ()
     assert.match(msg, /no longer running|stale/i, "要说明进程是否还在");
     // 补救措施必须今天就能执行。指向一个还不存在的 doctor --fix 等于什么也没说——
     // 自主运行的 agent 会每轮等 5 秒然后永久失败。
-    assert.match(msg, new RegExp(`rm ${p.replace(/[/\\]/g, "[/\\\\]")}`), "要给出可直接执行的清理命令");
-    assert.equal((e as CliError).code, EXIT.conflict, "FR-Q2：锁冲突退出 3");
+    assert.ok(msg.includes(`rm ${shellQuote(p)}`), `要给出可直接执行的清理命令：${msg}`);
+    // fs/ 抛的是中性错误——它只 import node:*，不认识 CLI 的退出码协议。
+    // 映射成退出码 3 是 commands/ 的事，那条由 add 的用例与 e2e 覆盖。
+    assert.ok(e instanceof LockBusyError, "fs/ 必须抛中性的 LockBusyError");
+    assert.equal((e as LockBusyError).holderAlive, false);
   }
 });
 
@@ -194,5 +196,60 @@ test("活着的持有者：补救措施是等待而不是删除", () => {
     assert.match(msg, /still running/, "要说明持有者还活着");
     assert.match(msg, /Wait for it to finish/, "活着的锁不该建议删除");
     assert.doesNotMatch(msg, /safe to delete/, "不得对活锁建议删除");
+    assert.doesNotMatch(msg, /\brm\b/, "活锁的消息里不得出现任何删除命令");
   }
+});
+
+test("路径含空格或引号时，恢复命令仍然安全", () => {
+  // 原样拼 `rm ${path}` 是危险的：空格会让 rm 收到多个参数，glob 会展开成别的文件。
+  for (const nasty of ["/tmp/a b/lock", "/tmp/it's/lock", "/tmp/*/lock", '/tmp/"q"/lock']) {
+    const quoted = shellQuote(nasty);
+    assert.ok(quoted.startsWith("'") && quoted.endsWith("'"), `${nasty} 必须被单引号包住`);
+    // 单引号内除了单引号本身没有元字符；' 必须被换成 '\'' 这个惯用写法
+    const inner = quoted.slice(1, -1);
+    assert.equal(inner.replace(/'\\''/g, "'"), nasty, `${nasty} 的转义必须可逆`);
+  }
+});
+
+test("unreadable 的锁同样带上结构化信息", () => {
+  const p = lockPath();
+  writeFileSync(p, "not json");
+  try {
+    withLock(p, () => undefined, { timeoutMs: 120 });
+    assert.fail("应当抛错");
+  } catch (e: unknown) {
+    assert.ok(e instanceof LockBusyError);
+    assert.equal((e as LockBusyError).holder, null, "读不出持有者时 holder 为 null");
+    assert.equal((e as LockBusyError).lockPath, p);
+    assert.ok((e as LockBusyError).message.includes(`rm ${shellQuote(p)}`));
+  }
+});
+
+test("收到 SIGTERM 时锁一定被释放", () => {
+  // 临界区是同步的，信号在它执行期间无法送达（事件循环被堵住）。实测：
+  // 不注册处理器 → 进程被立即杀死、锁留在原地；注册 → 信号被推迟到同步活干完，
+  // finally 释放锁。本用例断言的是**锁被释放**——那是真正重要的不变量。
+  // 退出码是 0 而不是 143，这个已知偏差记在 src/fs/lock.ts 的注释里。
+  const dir = mkdtempSync(join(tmpdir(), "todopi-lock-sig-"));
+  const lock = join(dir, "lock");
+  const worker = join(dir, "worker.mjs");
+  const mod = pathToFileURL(join(import.meta.dirname, "..", "..", "src", "fs", "lock.ts")).href;
+  writeFileSync(worker, `
+import { withLock } from ${JSON.stringify(mod)};
+withLock(${JSON.stringify(lock)}, () => {
+  process.stdout.write("holding\\n");
+  const until = Date.now() + 1200;
+  while (Date.now() < until) {}
+});
+`);
+  // 起子进程、等它拿到锁、发 SIGTERM、确认锁没了
+  const r = spawnSync("sh", ["-c",
+    `"${process.execPath}" "${worker}" & pid=$!; ` +
+    `for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do ` +
+    `  [ -e "${lock}" ] && break; sleep 0.1; done; ` +
+    `kill -TERM $pid; wait $pid; echo "status=$?"`,
+  ], { encoding: "utf8" });
+
+  assert.match(r.stdout, /^holding$/m, "子进程确实拿到了锁");
+  assert.ok(!existsSync(lock), "收到信号后锁必须已被释放 —— 这是真正重要的不变量");
 });
