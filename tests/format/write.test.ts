@@ -21,7 +21,8 @@ function ledger(opts: { git?: boolean } = {}) {
 
 test("有 git 时锁在 git 公共目录下（spec §8）", () => {
   const l = ledger({ git: true });
-  assert.match(lockPathFor(l), /\.git[/\\]todopi[/\\]lock$/);
+  // 路径必须与 spec §8 逐字一致——第三方按规格实现会去这里取锁。
+  assert.match(lockPathFor(l), /\.git[/\\]todopi[/\\]leases[/\\]lock$/);
 });
 
 test("无 git 时锁回退到 .todopi/.cache/（spec §8）", () => {
