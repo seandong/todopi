@@ -150,11 +150,11 @@
       "id": "F04",
       "behavior": "todopi ls 列出任务，--ready / --blocked / --mine 的结果符合规格 §7 的派生态定义",
       "verification": "ready 的三个条件（无子任务、无未关闭的 blocked_by、status 为 open 或 in_progress 且 stale）逐条有用例；排序符合 §7.4（有 rank 在前按字典序、其余按 created、并列按 id）；容器（有子任务者）永不进 ready 且显示 n/m 进度；--mine 用 FR-C6 的宽松匹配（本 actor 或以 @<本机 host> 结尾）；--json 输出经 DTO 映射而非直接序列化领域对象（ARCH-008）。",
-      "state": "active",
+      "state": "passing",
       "depends_on": [
         "F03"
       ],
-      "evidence": "",
+      "evidence": "commit beb5b87, verified 2026-09-21T16:49:05Z",
       "layers": [
         {
           "label": "static",
