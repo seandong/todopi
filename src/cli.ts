@@ -16,6 +16,7 @@ program
   .option("-C, --directory <dir>", "run against the ledger found from this directory")
   .option("--json", "emit structured data instead of human-readable text")
   .option("--quiet", "suppress progress and hints; keep results and errors")
+  .option("--as <actor>", "act as this actor, for both writes and queries")
   .exitOverride();
 
 program
@@ -45,6 +46,41 @@ program
     const report = runInit({
       directory: (opts["directory"] as string | undefined) ?? process.cwd(),
       prefix: cmdOpts.prefix,
+    });
+    process.stdout.write(
+      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),
+    );
+  });
+
+program
+  .command("add")
+  .argument("<title>", "what the task is")
+  .description("create a task in the ledger")
+  .option("-d, --description <text>", "longer description for the task body")
+  .option("--ac <text...>", "acceptance criteria; repeat or pass several")
+  .option("--label <label...>", "labels to attach")
+  .option("--verify <command>", "command that must pass before this task can be done")
+  .option("--parent <id>", "make this a child of another task")
+  .option("--blocked-by <id...>", "tasks that must close before this one is ready")
+  .option("--from <id>", "the task being worked on when this one was discovered")
+  .action(async (title: string, cmdOpts: {
+    description?: string; ac?: string[]; label?: string[];
+    verify?: string; parent?: string; blockedBy?: string[]; from?: string;
+  }) => {
+    const { runAdd } = await import("./commands/add.ts");
+    const { renderText, renderJson } = await import("./output/render/add.ts");
+    const opts = program.opts();
+    const report = runAdd({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      title,
+      description: cmdOpts.description,
+      acceptance: cmdOpts.ac,
+      labels: cmdOpts.label,
+      verify: cmdOpts.verify,
+      parent: cmdOpts.parent,
+      blockedBy: cmdOpts.blockedBy,
+      from: cmdOpts.from,
+      actor: opts["as"] as string | undefined,
     });
     process.stdout.write(
       opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),

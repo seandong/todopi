@@ -16,10 +16,10 @@
       "id": "ARCH-002",
       "description": "不得引入常驻进程或非 loopback 监听",
       "applies_when": "test -d src",
-      "check": "grep -rnE '\\b(setInterval|\\.listen\\(|createServer|child_process\\.spawn.*detached)\\b' src --include='*.ts' --include='*.tsx' | grep -v 'src/board/' || true",
+      "check": "grep -rnE '\\b(setInterval|\\.listen\\(|createServer|child_process\\.spawn.*detached)\\b' src --include='*.ts' --include='*.tsx' | grep -v 'src/board/' | grep -vE ':[[:space:]]*(//|\\\\*|/\\\\*)' || true",
       "expect": "empty",
       "what": "board 之外的代码里出现了常驻循环、端口监听或 detached 子进程。",
-      "why": "README 承诺 no resident process。CLI 必须是跑完就退出的短命进程，否则台账的并发模型（基于文件锁与租约）会被长期持有的状态破坏。",
+      "why": "README 承诺 no resident process。CLI 必须是跑完就退出的短命进程，否则台账的并发模型（基于文件锁与租约）会被长期持有的状态破坏。 本规则只看代码行：注释里提到 setInterval 这个词不算违规——解释「为什么不用它」的注释恰恰是我们希望存在的（2026-09-21 误伤过一次）。",
       "fix": "把逻辑改成一次性执行并退出。board 是唯一例外，它的监听必须绑定 127.0.0.1，且代码放在 src/board/ 下。"
     },
     {
@@ -161,6 +161,36 @@
       "what": "src/ 下存在未在 ARCHITECTURE.md 的分层表中登记的目录。",
       "why": "ARCHITECTURE.md 是后续每个 feature 的地图，尤其是 DECISIONS D011 允许委派的 M3 八个 feature——subagent 拿不到设计讨论的过程，只有这份文档。一个没登记的目录意味着它的职责与依赖方向没有被声明过，下一个人只能猜。2026-09-21 的 Codex review 就抓到 src/fs/ 是这样引入的。",
       "fix": "在 src/ARCHITECTURE.md 的分层表里加一行，写明该层的职责与它允许 import 什么；或者把代码并入已有的层。"
+    },
+    {
+      "id": "ARCH-017",
+      "description": "并发相关的模块必须有多进程测试",
+      "applies_when": "test -f src/fs/lock.ts",
+      "check": "grep -lE 'spawnSync|execFileSync' tests/fs/lock.test.ts >/dev/null 2>&1 && echo '' || echo 'tests/fs/lock.test.ts 里没有多进程测试'",
+      "expect": "empty",
+      "what": "文件锁没有多进程测试。",
+      "why": "单进程测试对互斥失效完全无感。2026-09-21 实测过两次：第一版锁有致命竞态（openSync 与 writeSync 之间锁文件为空，被「损坏的锁当成陈旧锁」规则删掉），10 个单进程用例全部通过；后来把 readTasks 移出锁（等于没锁），8 个用例仍然全绿。两次都只有多进程测试变红。D006 决策 5 把「并发压力测试进 CI 且不得 flaky」列为文件锁的真实成本，这条规则确保那个成本不会在某次重构里被悄悄删掉。",
+      "fix": "在 tests/fs/lock.test.ts 里保留至少一条真正启动多个进程的用例（spawnSync 起 N 个进程各在锁内做一次读-改-写，断言计数等于 N）。不要用 Promise 或 worker 代替——同一进程内的并发测不出文件锁。"
+    },
+    {
+      "id": "ARCH-018",
+      "description": "format/ 只能从 domain/ 引用类型，不得引用函数",
+      "applies_when": "test -d src/format",
+      "check": "grep -rnE \"from [\\\"']([.][.]/)+domain/\" src/format --include='*.ts' --include='*.tsx' | grep -vE \"domain/types[.]ts[\\\"']\" || true",
+      "expect": "empty",
+      "what": "src/format/ 引用了 domain/types.ts 之外的 domain 模块。",
+      "why": "ARCHITECTURE.md 允许 format/ 引用 domain/types.ts，因为它只有类型与正则常量、没有任何行为——一个两层都要说的名字总得有人跨线。但引用 domain 的**函数**是真正的方向倒置：format/ 懂磁盘格式，不懂「什么算合法」。校验、派生态、图算法一律由调用方注入（见 format/write.ts 的 Validate）。2026-09-21 的第三轮 review 抓到 write.ts 直接 import 了 domain/validate 与 domain/id。 正则要同时覆盖单双引号与多级相对路径（format/sub/ 下是 ../../domain/）——2026-09-21 的第四轮 review 指出第一版只匹配双引号与直属 ../domain/。",
+      "fix": "把该函数的调用改为由调用方注入的回调；若那个函数本就属于格式层（如 spec §4 的 id 生成），把它移进 src/format/。"
+    },
+    {
+      "id": "ARCH-019",
+      "description": "fs/ 只依赖 node: 内置模块",
+      "applies_when": "test -d src/fs",
+      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/fs --include='*.ts' | grep -vE \"from [\\\"']node:\" || true",
+      "expect": "empty",
+      "what": "src/fs/ import 了 node: 之外的任何模块。",
+      "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。",
+      "fix": "把上层的类型换成本层自己定义的中性错误或数据结构，由调用方翻译。若确实需要共享某个常量，考虑它是否本就属于 fs/。"
     }
   ]
 }

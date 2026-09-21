@@ -7,7 +7,7 @@
 | `commands/` | 编排一条命令：读取 → 计算 → 组装报告 | 全部 |
 | `output/` | DTO 与渲染。`dto/` 是对外契约的唯一定义处 | `domain/`（仅 `dto/`）、`format/` 的类型 |
 | `domain/` | 派生态、校验、图算法。**纯函数，不 import `node:fs`** | 仅 `domain/` 内部 |
-| `format/` | 磁盘 ↔ 内存。`.todopi/` 的解析、发射、发现 | `node:*`、`yaml`、`fs/` |
+| `format/` | 磁盘 ↔ 内存。`.todopi/` 的解析、发射、发现、id 生成 | `node:*`、`yaml`、`fs/`、`domain/types.ts`（仅类型与常量） |
 | `fs/` | 文件系统原语：原子替换、锁。**不认识 todopi 的格式** | 仅 `node:*` |
 
 顶层还有一个文件不属于任何层：`protocol.ts`。它是写进用户仓库的协议文本，
@@ -21,6 +21,13 @@
 这一层由 ARCH-016 保证登记——每个 `src/` 下的目录都必须在上表里出现。
 
 ## 两条不可越过的线
+
+**`domain/types.ts` 是共享词汇，不是依赖倒置。** `format/` 可以 import 它，
+因为它只有类型与正则常量（`TaskFile` 的形状、spec §4 的 id 正则、§5.4 的 actor
+正则），**没有任何行为**。一个两层都要说的名字放在哪都得有人跨线；让它待在
+`domain/` 并允许 `format/` 引用类型，比复制一份定义或新开一个目录都便宜。
+`format/` MUST NOT import `domain/` 的任何**函数**——校验、派生态、图算法一律
+由调用方注入（见 `format/write.ts` 的 `Validate`）。
 
 **`domain/` 不碰文件系统。** 不变量校验、派生态（ready/blocked/stale）、排序、图算法
 全是纯函数，用例直接构造对象即可——不需要临时目录、不需要 git 仓库、不需要管时序。
