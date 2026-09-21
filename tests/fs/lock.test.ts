@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { withLock, type LockHolder } from "../../src/fs/lock.ts";
+import { EXIT, CliError } from "../../src/exit.ts";
 
 /** 早于任何合理宽限期的时间戳。 */
 const longAgo = () => new Date(Date.now() - 120_000).toISOString();
@@ -64,9 +65,10 @@ test.describe("不接管任何已存在的锁 —— 判定陈旧与删除无法
       const p = lockPath();
       const before = make();
       writeFileSync(p, JSON.stringify(before));
+      const raw = readFileSync(p, "utf8");
       assert.throws(() => withLock(p, () => undefined, { timeoutMs: 120 }), /lock/i);
-      const after = JSON.parse(readFileSync(p, "utf8")) as LockHolder;
-      assert.equal(after.nonce, before.nonce, "已存在的锁必须原封不动");
+      // 逐字节比对，不只比 nonce——复审指出只比 nonce 的断言弱于它的声明。
+      assert.equal(readFileSync(p, "utf8"), raw, "已存在的锁必须一个字节都不动");
     });
   }
 
@@ -75,8 +77,8 @@ test.describe("不接管任何已存在的锁 —— 判定陈旧与删除无法
     writeFileSync(p, "not json at all");
     assert.throws(
       () => withLock(p, () => undefined, { timeoutMs: 120 }),
-      /doctor --fix|remove the file/i,
-      "错误信息必须告诉用户怎么清理",
+      /rm .*lock/,
+      "错误信息必须给出今天就能执行的补救命令",
     );
     assert.equal(readFileSync(p, "utf8"), "not json at all", "损坏的锁也不得被动");
   });
@@ -92,7 +94,10 @@ test("超时错误说明持有者是谁、进程还在不在、怎么清理", ()
     const msg = (e as Error).message;
     assert.match(msg, /999999/, "要报出持有者的 pid");
     assert.match(msg, /no longer running|stale/i, "要说明进程是否还在");
-    assert.match(msg, /doctor --fix/, "要给出清理办法");
+    // 补救措施必须今天就能执行。指向一个还不存在的 doctor --fix 等于什么也没说——
+    // 自主运行的 agent 会每轮等 5 秒然后永久失败。
+    assert.match(msg, new RegExp(`rm ${p.replace(/[/\\]/g, "[/\\\\]")}`), "要给出可直接执行的清理命令");
+    assert.equal((e as CliError).code, EXIT.conflict, "FR-Q2：锁冲突退出 3");
   }
 });
 
@@ -176,4 +181,18 @@ test("「文件不存在」不得走接管路径 —— 它和「内容损坏」
     [],
     "正常路径不得产生隔离文件或临时文件",
   );
+});
+
+test("活着的持有者：补救措施是等待而不是删除", () => {
+  const p = lockPath();
+  writeFileSync(p, JSON.stringify({ pid: process.pid, host: hostname(), at: new Date().toISOString(), nonce: "live" }));
+  try {
+    withLock(p, () => undefined, { timeoutMs: 120 });
+    assert.fail("应当抛错");
+  } catch (e: unknown) {
+    const msg = (e as Error).message;
+    assert.match(msg, /still running/, "要说明持有者还活着");
+    assert.match(msg, /Wait for it to finish/, "活着的锁不该建议删除");
+    assert.doesNotMatch(msg, /safe to delete/, "不得对活锁建议删除");
+  }
 });

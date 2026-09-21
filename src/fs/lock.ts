@@ -3,6 +3,7 @@ import { writeFileSync, linkSync, readFileSync, unlinkSync, mkdirSync } from "no
 import { dirname, join } from "node:path";
 import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
+import { EXIT, CliError } from "../exit.ts";
 
 export type LockHolder = {
   pid: number;
@@ -55,13 +56,25 @@ export function withLock<T>(lockPath: string, fn: () => T, opts: LockOptions = {
   // 否则一次 Ctrl-C 就会留下一把需要手工清理的锁。
   const release = () => {
     // 释放前确认锁还是自己的。本实现不接管，所以正常情况下它一定是自己的；
-    // 这条检查防的是用户或 doctor --fix 在我们持锁期间清理了它，
-    // 而此时又有别人取得了新锁——无条件 unlink 会删掉那把活锁。
+    // 这条检查防的是外部（用户手工 rm、将来的 doctor --fix）在我们持锁期间清掉了
+    // 它，而此时又有别人取得了新锁——无条件 unlink 会删掉那把活锁。
+    //
+    // 读与删之间仍有一个窗口：POSIX 给不出「仅当内容是 X 时删除」。它比无条件
+    // 删除严格更好，但不是零。触发它需要外部在一个毫秒级临界区内恰好清锁，
+    // 而那种外部干预本身已经破坏了互斥——这条检查只是不再雪上加霜。
     const current = readHolder(lockPath);
     if (current !== null && current.nonce !== mine.nonce) return;
     try { unlinkSync(lockPath); } catch { /* 已经被释放 */ }
   };
-  const onSignal = () => { release(); process.exit(130); };
+  // 收到信号时释放锁，然后**恢复默认行为并重新发给自己**——而不是 process.exit()。
+  // 直接 exit 会截断尚未 flush 的 stdout，而且 ARCHITECTURE.md 明文禁止在
+  // src/cli.ts 之外调用它。重新发信号让进程以正确的「被信号终止」状态退出。
+  const onSignal = (signal: NodeJS.Signals) => {
+    release();
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+    process.kill(process.pid, signal);
+  };
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
   try {
@@ -116,13 +129,14 @@ function tryCreate(lockPath: string): LockHolder | null {
  * 超时时的错误。它是用户能拿到的唯一线索，所以必须说清三件事：
  * 谁持有、那个进程还在不在、怎么清理。
  */
-function lockBusy(lockPath: string, timeoutMs: number): Error {
+function lockBusy(lockPath: string, timeoutMs: number): CliError {
   const holder = readHolder(lockPath);
   if (holder === null) {
-    return new Error(
+    return new CliError(
+      EXIT.conflict,
       `Could not acquire the ledger lock at ${lockPath} within ${timeoutMs}ms. ` +
-        `The lock file exists but its contents are unreadable. ` +
-        `Run "todopi doctor --fix" to clear stale leases, or remove the file yourself.`,
+        `The lock file exists but its contents are unreadable, so it cannot be attributed ` +
+        `to any process. If no other todopi command is running, delete it:\n  rm ${lockPath}`,
     );
   }
   const liveness = holderIsAlive(holder)
@@ -130,11 +144,17 @@ function lockBusy(lockPath: string, timeoutMs: number): Error {
       ? `process ${holder.pid} is still running`
       : `it is on another machine, so this process cannot tell whether it is still running`
     : `process ${holder.pid} is no longer running, so this lock is stale`;
-  return new Error(
+  // 补救措施必须是**今天就能执行**的。doctor --fix 要到 F13 才有，在那之前
+  // 指向它等于什么也没说——一个自主运行的 agent 会每轮等 5 秒然后永久失败。
+  const remedy = holderIsAlive(holder)
+    ? `Wait for it to finish, or re-run with a longer timeout.`
+    : `That process is gone, so this lock is safe to delete:\n  rm ${lockPath}`;
+  return new CliError(
+    EXIT.conflict,
     `Could not acquire the ledger lock at ${lockPath} within ${timeoutMs}ms. ` +
-      `Held by ${holder.host}:${holder.pid} since ${holder.at}; ${liveness}. ` +
-      `Stale locks are cleared by "todopi doctor --fix" — this command will not steal one, ` +
-      `because deciding a lock is stale and removing it cannot be done as a single atomic step.`,
+      `Held by ${holder.host}:${holder.pid} since ${holder.at}; ${liveness}.\n${remedy}\n` +
+      `This command never steals a lock: deciding one is stale and removing it cannot be ` +
+      `done as a single atomic step, so an automatic takeover can always delete a live lock.`,
   );
 }
 

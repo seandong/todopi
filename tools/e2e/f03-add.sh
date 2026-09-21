@@ -78,4 +78,18 @@ if cli -C "$TMP/race" doctor >/dev/null 2>&1; then ok "并发之后 doctor 仍�
 lock_leftovers=$(find "$TMP/race" -name 'lock' -o -name '.lock.*.tmp' 2>/dev/null | wc -l | tr -d ' ')
 [ "$lock_leftovers" -eq 0 ] && ok "无残留的锁文件" || fail "残留 $lock_leftovers 个锁文件"
 
+# 9. 锁被占用时退出 3（FR-Q2：冲突），且错误信息给出可执行的补救命令
+mkdir -p "$TMP/held"
+cli -C "$TMP/held" init >/dev/null 2>&1
+LOCK="$TMP/held/.todopi/.cache/lock"
+mkdir -p "$(dirname "$LOCK")"
+printf '{"pid":1,"host":"elsewhere","at":"2020-01-01T00:00:00Z","nonce":"x"}' > "$LOCK"
+out="$(cli -C "$TMP/held" add "blocked" 2>&1)"; code=$?
+[ "$code" -eq 3 ] && ok "锁被占用退出 3" || fail "应退出 3（FR-Q2），实际 $code"
+case "$out" in
+  *"Could not acquire the ledger lock"*) ok "错误信息点名了锁" ;;
+  *) fail "错误信息没说清是锁的问题：$out" ;;
+esac
+rm -f "$LOCK"
+
 [ "$FAILED" -eq 0 ] && { echo "f03-add: pass"; exit 0; } || { echo "f03-add: fail"; exit 1; }

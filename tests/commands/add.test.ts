@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAdd } from "../../src/commands/add.ts";
@@ -138,12 +138,33 @@ test("拒绝之后账本仍然干净，后续的合法 add 照常工作", () => 
   assert.ok(t.id);
 });
 
-test("图校验在 add 的校验器里 —— 自环这类问题写不进去", () => {
-  // 复审指出单文件校验不等于 doctor：doctor 还跑 validateGraph。add 传给
-  // createTask 的校验器现在两者都跑，所以「通过校验」与「通过 doctor」是同一件事。
+test("合法的父子关系照常建立", () => {
   const d = repo();
   const a = runAdd({ directory: d, title: "A" });
   const b = runAdd({ directory: d, title: "B", parent: a.id });
   assert.equal(runDoctor({ directory: d }).ok, true);
   assert.ok(b.id !== a.id);
+});
+
+test("账本原本就坏时，无关的 add 照常工作，doctor 仍报出既存问题", () => {
+  // 判据是「这次写入**新引入**了什么问题」，不是「写完之后账本有没有问题」。
+  // 按后者，一个与坏任务毫无关系的 add 也会被拒，用户除了手工修文件别无出路。
+  // 复审指出我原来的写法丢弃了 path !== candidate.path 的图错误——那同样不对，
+  // 因为一个环由多个文件共同构成，finding 可能挂在环上任何一个文件上。
+  const d = repo();
+  writeFileSync(join(d, ".todopi", "tasks", "tp-aaaaaa.md"), [
+    '---', 'id: "tp-aaaaaa"', 'title: "self cycle"', 'status: "open"',
+    'parent: "tp-aaaaaa"', 'rank: "i0"',
+    'created: "2026-09-14T09:00:00Z"', 'updated: "2026-09-14T09:00:00Z"', '---',
+    '', '## Log', '', '- 2026-09-14T09:00:00Z sean created', '',
+  ].join("\n"));
+  assert.equal(runDoctor({ directory: d }).ok, false, "前提：账本已经坏了");
+
+  const t = runAdd({ directory: d, title: "unrelated" });
+  assert.ok(t.id, "无关的 add 不该被既存问题拖累");
+
+  const after = runDoctor({ directory: d });
+  assert.equal(after.ok, false, "既存问题仍要被 doctor 报出来");
+  assert.ok(after.findings.some((f) => f.path.includes("tp-aaaaaa")), "报的是那个坏任务");
+  assert.ok(!after.findings.some((f) => f.path.includes(t.id)), "新任务本身是干净的");
 });

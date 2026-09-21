@@ -171,6 +171,16 @@
       "what": "文件锁没有多进程测试。",
       "why": "单进程测试对互斥失效完全无感。2026-09-21 实测过两次：第一版锁有致命竞态（openSync 与 writeSync 之间锁文件为空，被「损坏的锁当成陈旧锁」规则删掉），10 个单进程用例全部通过；后来把 readTasks 移出锁（等于没锁），8 个用例仍然全绿。两次都只有多进程测试变红。D006 决策 5 把「并发压力测试进 CI 且不得 flaky」列为文件锁的真实成本，这条规则确保那个成本不会在某次重构里被悄悄删掉。",
       "fix": "在 tests/fs/lock.test.ts 里保留至少一条真正启动多个进程的用例（spawnSync 起 N 个进程各在锁内做一次读-改-写，断言计数等于 N）。不要用 Promise 或 worker 代替——同一进程内的并发测不出文件锁。"
+    },
+    {
+      "id": "ARCH-018",
+      "description": "format/ 只能从 domain/ 引用类型，不得引用函数",
+      "applies_when": "test -d src/format",
+      "check": "grep -rn 'from \"\\\\.\\\\./domain/' src/format --include='*.ts' | grep -v 'domain/types.ts' || true",
+      "expect": "empty",
+      "what": "src/format/ 引用了 domain/types.ts 之外的 domain 模块。",
+      "why": "ARCHITECTURE.md 允许 format/ 引用 domain/types.ts，因为它只有类型与正则常量、没有任何行为——一个两层都要说的名字总得有人跨线。但引用 domain 的**函数**是真正的方向倒置：format/ 懂磁盘格式，不懂「什么算合法」。校验、派生态、图算法一律由调用方注入（见 format/write.ts 的 Validate）。2026-09-21 的第三轮 review 抓到 write.ts 直接 import 了 domain/validate 与 domain/id。",
+      "fix": "把该函数的调用改为由调用方注入的回调；若那个函数本就属于格式层（如 spec §4 的 id 生成），把它移进 src/format/。"
     }
   ]
 }

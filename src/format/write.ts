@@ -6,7 +6,7 @@ import { withLock } from "../fs/lock.ts";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { readTasks } from "./read.ts";
 import { emitTask, nextRank, type NewTask } from "./emit.ts";
-import { newIdBody, makeId } from "../domain/id.ts";
+import { newIdBody, makeId } from "./id.ts";
 import { splitEnvelope } from "./envelope.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 import type { Ledger } from "./discover.ts";

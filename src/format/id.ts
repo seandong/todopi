@@ -1,4 +1,4 @@
-// src/domain/id.ts
+// src/format/id.ts
 import { randomInt } from "node:crypto";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";

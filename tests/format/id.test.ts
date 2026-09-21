@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { newIdBody, makeId } from "../../src/domain/id.ts";
+import { newIdBody, makeId } from "../../src/format/id.ts";
 import { ID_RE } from "../../src/domain/types.ts";
 
 test("id body 是六位 base36（spec §4）", () => {
