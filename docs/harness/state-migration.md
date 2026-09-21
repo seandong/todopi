@@ -18,8 +18,10 @@ todopi 是一个任务台账工具，却用 `feature_list.json` 管理自己的�
 1. ~~`spec/todopi-format-v1.md` 状态从 Draft 变为 Stable~~ —— 2026-09-15 已满足；
 2. `init`、`add`、`claim`、`done`、`verify` 五个命令对应的 feature 全部
    `state: passing`；
-3. `todopi doctor` 能检出格式违规（孤儿引用、环、id 冲突）——否则迁移后
-   没有守门人。
+   **进度（2026-09-21）**：`init`（F02）✅、`add`（F03）✅；
+   还差 `claim`（F05）、`done`（F06 门禁 / F07 验证执行）。
+3. ~~`todopi doctor` 能检出格式违规（孤儿引用、环、id 冲突）~~ —— 2026-09-16
+   随 F01 满足：spec §6.2 的 8 条不变量全部有实现与语料覆盖。
 
 ## 字段映射
 

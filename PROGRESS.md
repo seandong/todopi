@@ -5,29 +5,33 @@
 
 ## Current State
 
-- Last commit: `5103284` —— F03 实现计划。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
+- Last commit: `aa21eb1` —— F03 完成，add 可用，三层全绿。本行记录写它时的 HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**16 条全部通过**）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **160 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬
-- `make e2e`: `pass` —— `e2e:f01-doctor` 11 项 + `e2e:f02-init` 19 项断言（新增语言、
-  `--quiet`、高版本零副作用三个维度）
+  **210 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
+- `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项。
+  其中 f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）是单元测试抓不到的那类
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省。
   其余 WARN 项同样是有意偏差，逐条见 `docs/harness/index.md` 的「有意缺省的部分」
-- VCR: `2/2` —— F01、F02 均 `passing`，evidence 由 harness 写入
-- 代码状态：**F01、F02 已完成**。`todopi doctor` 与 `todopi init` 可用。
-  `src/` 四层加 `protocol.ts`（协议文本，411 token）与 `fs/atomic.ts`（原子写）。
-  运行时依赖两个：`commander`、`yaml`。
+- VCR: `3/3` —— F01、F02、F03 均 `passing`，evidence 由 harness 写入
+- 代码状态：**F01、F02、F03 已完成**。`doctor` / `init` / `add` 可用。
+  写入端三块基座齐备：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
+  运行时依赖三个：`commander`、`yaml`、`fractional-indexing`。
 
 ## In Progress
 
-**F03 `add`** —— `state: active`，实现计划已写：
-[docs/plans/2026-09-21-f03-add.md](docs/plans/2026-09-21-f03-add.md)（5 个 task）。
-尚未开始写代码。
+无。F01–F03 均 `passing`。
 
-F01、F02 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
+F01、F02 已合回 `main`；**F03 在分支 `feat/f03-add` 上，尚未合回**。
+整个仓库尚未推送到 remote。
+
+自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
+doctor 能检出违规 ✅、五个命令 passing 进度 2/5（`init`、`add` 已完成，
+还差 `claim`、`done`、`verify`）。
 
 `feature_list.json` 于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
 拆分依据见 DECISIONS D011。
@@ -54,11 +58,10 @@ F01、F02 均 `passing` 且已合回 `main`，分支已删除。**整个仓库�
    导致 F01 与 F02 的 evidence 都指向不含被验证代码的 commit；
    现在工作区脏时会拒绝，并新增 `make reverify` 修复坏掉的记录。
 9. ~~把 `feat/f02-init` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-10. ~~activate F03 并写计划~~ 已完成。**下一步：执行 plan 的 Task 1**（文件锁）。
-    F03 是 M1 最重的一个，计划把它拆成五块：锁 → id → 发射器 → 写入入口 → 命令。
-    两处刻意不做，写进了 plan 的 Self-Review：**actor 解析链留给 F05**
-    （在这里实现半套，F05 里就要拆掉一套重复实现）、**嵌套值的发射留给 F10 `edit`**
-    （现在遇到就抛错，比悄悄写出半个结构好）。
+10. ~~执行 F03 的 plan~~ 已完成，5 个 task 逐个 TDD 通过。
+11. **请 Codex review `feat/f03-add`**，然后合回 `main`。并发正确性尤其值得
+    第二双眼睛——上一轮它在 F02 上查出 7 项，其中 3 项延伸到已合入 main 的 F01 代码。
+12. 然后 `make activate F=F04`（`ls`）。
    F03 是写入端基座：发射器（spec §5.1 的引号规则）、id 生成与碰撞检查、
    `fractional-indexing` 的 rank 分配、以及**文件锁**（`O_EXCL` + pid 判活 +
    退出清理）。锁建在 F02 的 `src/fs/atomic.ts` 之上，不替换它。
