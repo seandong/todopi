@@ -114,10 +114,29 @@ export function validateFile(t: TaskFile): Finding[] {
       }
     }
   }
+  // 引用字段：类型**和**语法都要查。只查类型的话，blocked_by: [123] 会一路通过，
+  // 而读取侧按 spec §5.2 只收字符串，于是那个 123 无声消失——没有任何一层会说。
   const parent = fm["parent"];
-  if (parent !== undefined && typeof parent !== "string") at("field", "parent must be a string");
+  if (parent !== undefined) {
+    if (typeof parent !== "string") at("field", "parent must be a string");
+    else if (!ID_RE.test(parent)) {
+      at("field", `parent ${JSON.stringify(parent)} does not match the spec §4 form <prefix>-<six base36 chars>`);
+    }
+  }
   const blockedBy = fm["blocked_by"];
-  if (blockedBy !== undefined && !Array.isArray(blockedBy)) at("field", "blocked_by must be a list");
+  if (blockedBy !== undefined) {
+    if (!Array.isArray(blockedBy)) at("field", "blocked_by must be a list");
+    else {
+      const seenRefs = new Set<string>();
+      for (const b of blockedBy) {
+        if (typeof b !== "string" || !ID_RE.test(b)) {
+          at("field", `blocked_by entry ${JSON.stringify(b)} does not match the spec §4 form <prefix>-<six base36 chars>`);
+        } else if (seenRefs.has(b)) {
+          at("field", `blocked_by entry ${JSON.stringify(b)} is duplicated`);
+        } else seenRefs.add(b);
+      }
+    }
+  }
 
   return out;
 }

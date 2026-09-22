@@ -8,16 +8,27 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const dir = "src/output/dto";
-for (const name of readdirSync(dir)) {
-  if (!name.endsWith(".ts")) continue;
-  const src = readFileSync(join(dir, name), "utf8");
+const root = "src/output/dto";
+
+/** 递归收集：子目录里的值导入同样是违规，只扫直属文件抓不到（实测漏检）。 */
+function tsFiles(dir) {
+  const out = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...tsFiles(p));
+    else if (e.name.endsWith(".ts")) out.push(p);
+  }
+  return out;
+}
+
+for (const file of tsFiles(root)) {
+  const src = readFileSync(file, "utf8");
   // 把注释挖空但保留换行：注释里出现 "import" 会让下面的匹配误判，
   // 而直接删掉注释会让行号对不上。
   const code = src
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
     .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
-  for (const m of code.matchAll(/^import\s+(type\s+)?([^;]*?)\bfrom\s*["']([^"']+)["']/gm)) {
+  for (const m of code.matchAll(/^[ \t]*(?:import|export)\s+(type\s+)?([^;]*?)\bfrom\s*["']([^"']+)["']/gm)) {
     const [, typeKw, clause, from] = m;
     if (!from.includes("domain/")) continue;
     if (typeKw !== undefined) continue;                    // import type { ... }
@@ -26,6 +37,11 @@ for (const name of readdirSync(dir)) {
     const values = names.filter((n) => !n.startsWith("type "));
     if (values.length === 0) continue;
     const line = code.slice(0, m.index).split("\n").length;
-    console.log(`${dir}/${name}:${line}: value import of ${values.join(", ")} from ${from}`);
+    console.log(`${file}:${line}: value import of ${values.join(", ")} from ${from}`);
+  }
+  // 动态 import() 无法静态判定只取类型，一律视为值导入
+  for (const m of code.matchAll(/\bimport\s*\(\s*["']([^"']*domain\/[^"']*)["']/g)) {
+    const line = code.slice(0, m.index).split("\n").length;
+    console.log(`${file}:${line}: dynamic import of ${m[1]}`);
   }
 }

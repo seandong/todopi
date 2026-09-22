@@ -21,8 +21,12 @@ export function renderJson(r: LsReport): string {
  */
 export function renderText(r: LsReport, opts: { quiet?: boolean } = {}): string {
   const lines: string[] = [];
-  if (r.tasks.length === 0) {
+  if (r.total === 0) {
+    // 判据是 total 而不是 tasks.length：--limit 0 截出空列表时，
+    // 说「没有匹配」是错的——匹配有两条，只是一条都没显示
     if (!opts.quiet) lines.push("No tasks match.");
+  } else if (r.tasks.length === 0) {
+    if (!opts.quiet) lines.push(`Showing 0 of ${r.total} tasks.`);
   } else {
     const width = idWidth(r.tasks);
     for (const t of r.tasks) lines.push(`${t.id.padEnd(width)}  ${marks(t)}${t.title}`);

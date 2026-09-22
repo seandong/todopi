@@ -47,17 +47,30 @@ export function parseLimit(raw: string): number {
 }
 
 /**
- * 这个任务文件是不是一份合法的 v1 任务文件。
+ * ls 能不能把这个文件当成一份正常任务来显示。
  *
  * 用的是 validateFile 已有的 rule 分类，不另起一个校验器——两个校验器一定会漂移。
- * 分界线：`envelope` / `invariant-1` / `field` 说的是「某个字段本身不合法」，
- * 这样的文件没法渲染也没法派生（缺 title 就是一行空标题，缺 status 就没有状态），
- * 必须单独报告；`invariant-2/3/7/8` 说的是「字段都合法但组合非法」（比如 open
- * 却带 assignee），那种任务照样能渲染，按 spec §7 派生出来的结果也是对的，
- * 报告它们是 doctor 的职责，不是 ls 的。
+ *
+ * **名单反着列**：只写出 ls 可以容忍的那几条，其余一律排除并报告。
+ * 正着列（「这几条要排除」）的话，将来新增的规则会默认从缝里漏过去，
+ * 而漏过去的方向正是「把一个有问题的文件当成正常任务显示」——第一版就是
+ * 这么让 `assignee: 123` 变成一条 ready 任务的（Codex 第二轮评审）。
+ *
+ * 容忍的三条都是「字段值本身合法、只是组合非法」：
+ *   invariant-2  resolution 与 closed 不配套
+ *   invariant-3  assignee 与 in_progress 不配套
+ *   invariant-6  updated 早于 created
+ * 这类任务照常渲染，按 spec §7 派生出的结果也是对的（§7.5 的 ready 只看状态
+ * 与图，不看不变量），报告它们是 doctor 的职责。
+ *
+ * 其余都说明**字段值本身不对**——坏信封、id 对不上、字段取值非法、actor 语法
+ * 非法、冲突标记。这样的文件没法渲染也没法派生：缺 title 就是一行空标题，
+ * blocked_by 里的非法项会被读取侧丢掉而无人知晓。必须挡下并单独报告。
  */
-function isWellFormed(findings: ReturnType<typeof validateFile>): boolean {
-  return !findings.some((f) => f.rule === "envelope" || f.rule === "invariant-1" || f.rule === "field");
+const TOLERATED: ReadonlySet<string> = new Set(["invariant-2", "invariant-3", "invariant-6"]);
+
+function isDisplayable(findings: ReturnType<typeof validateFile>): boolean {
+  return findings.every((f) => TOLERATED.has(f.rule));
 }
 
 export function runLs(opts: LsOptions): LsReport {
@@ -75,7 +88,7 @@ export function runLs(opts: LsOptions): LsReport {
   const read = readTasks(ledger);
   const invalid: string[] = [];
   const tasks = read.filter((t) => {
-    if (isWellFormed(validateFile(t))) return true;
+    if (isDisplayable(validateFile(t))) return true;
     invalid.push(t.idFromFilename);
     return false;
   });

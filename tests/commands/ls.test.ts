@@ -260,3 +260,34 @@ function appendLog(dir: string, id: string, line: string): void {
   const src = readFileSync(p, "utf8");
   writeFileSync(p, src.includes("## Log") ? `${src.trimEnd()}\n${line}\n` : `${src.trimEnd()}\n\n## Log\n\n${line}\n`);
 }
+
+test("--limit 0 说的是「一条都没显示」，不是「没有匹配」", () => {
+  const d = repo();
+  runAdd({ directory: d, title: "a" });
+  runAdd({ directory: d, title: "b" });
+  const r = runLs({ directory: d, limit: 0 });
+  assert.equal(r.total, 2);
+  assert.doesNotMatch(renderText(r), /No tasks match/, "有两条匹配，说没有匹配是错的");
+  assert.match(renderText(r), /0 of 2/);
+  assert.match(renderText(runLs({ directory: d, label: "nope" })), /No tasks match/, "真没匹配时照旧");
+});
+
+test("引用字段的元素级非法值被挡下并报告，不会无声消失", () => {
+  // blocked_by: [123] 原先一路通过校验，读取侧按 spec §5.2 只收字符串，
+  // 于是那个 123 被静默丢成 []——没有任何一层会说（Codex 第二轮评审）。
+  const d = repo();
+  const good = runAdd({ directory: d, title: "fine" });
+  const bad = runAdd({ directory: d, title: "bad refs" });
+  patch(d, bad.id, (l) => (l.startsWith("status:") ? 'status: "open"\nblocked_by: [123]' : l));
+  const r = runLs({ directory: d });
+  assert.deepEqual(r.invalid, [bad.id]);
+  assert.deepEqual(ids(r), [good.id]);
+});
+
+test("actor 语法非法的任务也被挡下 —— 那是字段问题，不是组合问题", () => {
+  const d = repo();
+  const bad = runAdd({ directory: d, title: "numeric assignee" });
+  patch(d, bad.id, (l) => (l.startsWith("status:") ? 'status: "in_progress"\nassignee: 123' : l));
+  const r = runLs({ directory: d });
+  assert.deepEqual(r.invalid, [bad.id], "invariant-8 查的是 actor 语法，属于字段层");
+});

@@ -26,17 +26,24 @@ export function gitCommonDir(root: string): string | null {
 }
 
 /**
- * `git config user.name` 的值；没配置或不在仓库里返回 null。
+ * `git config user.name` 的**原始值**；没配置或不在仓库里返回 null。
  *
- * 返回**原始值**，不做规范化——spec §5.4 的规范化是纯函数，属于 domain。
- * 这一层只负责把外部事实取回来。
+ * 用 `-z`：git 以 NUL 结尾输出，值里的空白原样保留。不能用 .trim()——
+ * 它会连值本身的首尾空白一起吃掉，而 spec §5.4 要求把空白串换成 `-`。
+ * 实测 user.name=" Sean Dong " 按规格应得到 `-sean-dong-`，trim 之后是
+ * `sean-dong`；纯空白应得到 `-`，trim 之后变成空值而回退到 unknown@host。
+ * 两者都会让我们和按规格实现的第三方对同一份配置得出不同的身份。
+ *
+ * 不做规范化：那是 spec §5.4 的纯函数，属于 domain。这一层只取回外部事实。
  */
 export function gitUserName(root: string): string | null {
   try {
-    const out = execFileSync("git", ["config", "user.name"], {
+    const out = execFileSync("git", ["config", "-z", "--get", "user.name"], {
       cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return out === "" ? null : out;
+    });
+    // -z 的输出是 `<值>\0`；只去掉那个分隔符，值本身一个字符都不动
+    const value = out.endsWith("\0") ? out.slice(0, -1) : out;
+    return value === "" ? null : value;
   } catch {
     return null;
   }
