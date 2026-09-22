@@ -2,8 +2,7 @@
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { createTask } from "../format/write.ts";
-import { validateFile } from "../domain/validate.ts";
-import { validateGraph } from "../domain/graph.ts";
+import { validateWrite } from "../domain/validate.ts";
 import { currentActor } from "./actor.ts";
 import { EXIT, CliError } from "../exit.ts";
 import { LockBusyError } from "../fs/lock.ts";
@@ -68,34 +67,15 @@ export function runAdd(opts: AddOptions): AddReport {
       acceptance: opts.acceptance,
       log: [`${ctx.now} ${actor} created${opts.from ? ` from=${opts.from}` : ""}`],
     }),
-    // 校验器与 doctor 用的是同一对函数，所以「通过校验」与「通过 doctor」
-    // 是同一件事——FR-T1 的验收要求的正是这个。图校验不可省：只做单文件校验时，
-    // parent 指向自身这类自环能写进去，随后 doctor 报错。
-    //
-    // 判据是「这次写入**新引入**了什么问题」，而不是「写完之后账本有没有问题」。
-    // 两者的差别在账本原本就坏的时候显出来：按后者，一个与那个坏任务毫无关系的
-    // add 也会被拒，用户除了手工修文件别无出路；按前者，无关的 add 照常工作，
-    // 而 doctor 仍然会报出那个既存问题。
-    //
-    // 也不能只看 candidate 自己那一条——一个环是由多个文件共同构成的，
-    // 报出来的 finding 可能挂在环上的任何一个文件上。按 finding 的完整内容
-    // 做差集，新出现的才算这次引入的。
-    (candidate, existing) => {
-      const single = validateFile(candidate);
-      const key = (f: { rule: string; path: string; message: string }) =>
-        `${f.path}\u0000${f.rule}\u0000${f.message}`;
-      const before = new Set(validateGraph(existing).map(key));
-      const introduced = validateGraph([...existing, candidate]).filter((f) => !before.has(key(f)));
-      const findings = [...single, ...introduced];
-      return findings.length === 0
-        ? null
-        : findings.map((f) => `${f.rule}: ${f.message}`).join("; ");
-    },
+    // 校验器与 doctor 用的是同一对函数，所以「通过校验」与「通过 doctor」是同一件事——
+    // FR-T1 的验收要求的正是这个。判据是「这次写入**新引入**了什么问题」而不是
+    // 「写完之后账本有没有问题」，理由见 validateWrite 的注释。
+    validateWrite,
   ));
 
   return {
     id: created.idFromFilename,
-      title,
+    title,
     path: created.path,
     rank: String(created.frontmatter["rank"] ?? ""),
   };

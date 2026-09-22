@@ -144,11 +144,16 @@ function parseCandidate(relPath: string, id: string, text: string): TaskFile | s
  *
  * 正文默认原样带回：只有 frontmatter 被重新发射。要追加 Log 行的调用方用
  * `appendLog` 返回值，由这一层按 §5.3.3 放到 `## Log` 小节末尾。
+ *
+ * `mutate` 返回 `null` 表示这次不改任务文件（原样返回读到的那份）。
+ * 它存在的理由是让「读-判断-可能写」整段落在**同一次持锁**内：调用方
+ * 在回调里拿到的是锁内新读的任务，据此做的判断不会基于过期快照，
+ * 而判断结果可能是「什么都不用改」。
  */
 export function updateTask(
   ledger: Ledger,
   id: string,
-  mutate: (t: TaskFile, now: string) => { frontmatter: Record<string, unknown>; appendLog?: string },
+  mutate: (t: TaskFile, now: string) => { frontmatter: Record<string, unknown>; appendLog?: string } | null,
   validate: Validate,
 ): TaskFile {
   return withLock(lockPathFor(ledger), () => {
@@ -165,7 +170,13 @@ export function updateTask(
     }
 
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-    const { frontmatter, appendLog } = mutate(target, now);
+    const change = mutate(target, now);
+    // mutate 返回 null 表示「这次不改任务文件」。调用方仍然拿到了锁，
+    // 可以在回调里安全地读到最新状态并做别的事——claim 的「刷新心跳」
+    // 就是这种情形：它不是 spec §6.1 的迁移，不该改 status 也不该写 Log，
+    // 但判断「它确实已经是我的」必须在锁内做，否则判断依据是个过期快照。
+    if (change === null) return target;
+    const { frontmatter, appendLog } = change;
     const body = appendLog === undefined ? target.body : appendLogLine(target.body, appendLog);
     const text = `---\n${emitFrontmatter({ ...frontmatter, updated: now })}---\n${body}`;
 
