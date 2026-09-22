@@ -1,10 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { leaseDirFor, leasePaths, readHeartbeats } from "../../src/format/lease.ts";
+import {
+  leaseDirFor, leasePaths, readHeartbeats,
+  createLease, writeLease, readLease, touchLease, deleteLease,
+} from "../../src/format/lease.ts";
 import { lockPathFor } from "../../src/format/write.ts";
 import { discoverLedger } from "../../src/format/discover.ts";
 import { initLedger } from "../../src/format/init.ts";
@@ -122,4 +125,101 @@ test("多个租约同时读出", () => {
   const hb = readHeartbeats(l);
   assert.equal(hb.size, 2);
   assert.equal(hb.get("tp-000002"), Date.parse("2026-09-14T11:00:00Z"));
+});
+
+// ---- 写入端（F05 Task 2）----
+
+const T0 = "2026-09-14T09:00:00Z";
+const T1 = "2026-09-14T10:00:00Z";
+const lease = (actor: string, at: string) => ({ actor, claimed_at: at, heartbeat_at: at });
+const rawLease = (l: ReturnType<typeof ledger>, id: string) =>
+  JSON.parse(readFileSync(join(leaseDirFor(l), `${id}.json`), "utf8")) as Record<string, unknown>;
+
+test("createLease 用 O_EXCL：第二次返回 false，且不覆盖第一次的内容", () => {
+  const l = ledger();
+  assert.equal(createLease(l, "tp-000001", lease("a@h", T0)), true);
+  assert.equal(createLease(l, "tp-000001", lease("b@h", T1)), false);
+  assert.equal(readLease(l, "tp-000001")?.actor, "a@h", "第二次不得覆盖");
+});
+
+test("三个字段都要写 —— 按规格实现的第三方读者会拒绝缺字段的租约", () => {
+  const l = ledger();
+  createLease(l, "tp-000001", lease("a@h", T0));
+  assert.deepEqual(Object.keys(rawLease(l, "tp-000001")).sort(), ["actor", "claimed_at", "heartbeat_at"]);
+});
+
+test("租约目录不存在时 createLease 会建出来", () => {
+  // 新克隆的仓库还没有 .git/todopi/，第一次 claim 不该因此失败。
+  const l = ledger();
+  assert.equal(existsSync(leaseDirFor(l)), false, "前提：目录本来不存在");
+  assert.equal(createLease(l, "tp-000001", lease("a@h", T0)), true);
+});
+
+test("writeLease 覆盖既有租约（--steal 与重新认领要用）", () => {
+  const l = ledger();
+  createLease(l, "tp-000001", lease("a@h", T0));
+  writeLease(l, "tp-000001", lease("b@h", T1));
+  assert.equal(readLease(l, "tp-000001")?.actor, "b@h");
+  assert.equal(readLease(l, "tp-000001")?.claimed_at, T1);
+});
+
+test("touchLease 只动 heartbeat_at，actor 与 claimed_at 不变（FR-C3）", () => {
+  const l = ledger();
+  createLease(l, "tp-000001", lease("a@h", T0));
+  touchLease(l, "tp-000001", T1);
+  const after = readLease(l, "tp-000001");
+  assert.equal(after?.heartbeat_at, T1);
+  assert.equal(after?.claimed_at, T0, "认领时刻不是心跳时刻");
+  assert.equal(after?.actor, "a@h");
+});
+
+test("touchLease 对不存在的租约是空操作，不抛错也不凭空造一个", () => {
+  // 持有者写入时刷心跳（FR-C3），但租约可能已被 doctor --fix 清掉。
+  // 那时凭空造一个租约，等于让一次普通写入重新获得了它并不持有的独占。
+  const l = ledger();
+  assert.doesNotThrow(() => touchLease(l, "tp-000001", T1));
+  assert.equal(readLease(l, "tp-000001"), null);
+});
+
+test("deleteLease 对不存在的租约不抛错", () => {
+  // SIGKILL 之后租约可能已经没了，而 release 仍要把任务文件改回 open。
+  // 这里抛错会让一个本该成功的 release 失败，把用户锁死在只能手改文件的状态。
+  const l = ledger();
+  assert.doesNotThrow(() => deleteLease(l, "tp-000001"));
+  createLease(l, "tp-000001", lease("a@h", T0));
+  deleteLease(l, "tp-000001");
+  assert.equal(readLease(l, "tp-000001"), null);
+});
+
+test("readLease 对坏掉的租约返回 null，不抛错", () => {
+  const l = ledger();
+  mkdirSync(leaseDirFor(l), { recursive: true });
+  writeFileSync(join(leaseDirFor(l), "tp-000001.json"), "not json");
+  assert.equal(readLease(l, "tp-000001"), null);
+});
+
+test("写进去的租约，readHeartbeats 读得出来 —— 写入端与读取端必须对得上", () => {
+  const l = ledger();
+  createLease(l, "tp-000001", lease("a@h", T0));
+  assert.equal(readHeartbeats(l).get("tp-000001"), Date.parse(T0));
+});
+
+test("createLease 只把 EEXIST 当成「已有人持有」，别的错误照抛", () => {
+  // 把 EACCES 也报成 false，claim 会说「别人占着这个任务」，而真相是磁盘只读。
+  // 对着屏幕的人能看出不对，agent 不能——它只会去认领下一个任务，
+  // 然后在同一块磁盘上再失败一次。
+  const l = ledger();
+  const dir = leaseDirFor(l);
+  mkdirSync(dir, { recursive: true });
+  chmodSync(dir, 0o500);
+  try {
+    let threw: unknown = null;
+    let result: boolean | null = null;
+    try { result = createLease(l, "tp-000001", lease("a@h", T0)); } catch (e) { threw = e; }
+    if (result === true) return;            // 以 root 运行时写得进去，这条用例不适用
+    assert.equal(result, null, "不得把权限错误报成「已有人持有」");
+    assert.equal((threw as NodeJS.ErrnoException).code, "EACCES");
+  } finally {
+    chmodSync(dir, 0o700);                  // 还原，否则临时目录删不掉
+  }
 });

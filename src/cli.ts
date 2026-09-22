@@ -139,6 +139,48 @@ lsOptions(program.command("ls").description("list tasks in the ledger"))
 lsOptions(program.command("ready").description("alias for `ls --ready`"))
   .action(async (cmdOpts: LsCmdOptions) => { await lsAction({ ...cmdOpts, ready: true }); });
 
+program
+  .command("claim")
+  .description("take ownership of a task and start working on it")
+  .argument("<id>", "the task to claim")
+  .option("--steal", "take over a task whose lease has not expired yet")
+  .action(async (id: string, cmdOpts: { steal?: boolean }) => {
+    const { runClaim } = await import("./commands/claim.ts");
+    const { renderClaim, renderClaimJson } = await import("./output/render/claim.ts");
+    const opts = program.opts();
+    const report = runClaim({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      id,
+      steal: cmdOpts.steal,
+      actor: opts["as"] as string | undefined,
+    });
+    process.stdout.write(
+      opts["json"] === true
+        ? renderClaimJson(report) + "\n"
+        : renderClaim(report, { quiet: opts["quiet"] === true }),
+    );
+  });
+
+program
+  .command("release")
+  .description("give a task back so anyone can claim it")
+  .argument("<id>", "the task to release")
+  .action(async (id: string) => {
+    const { runRelease } = await import("./commands/release.ts");
+    const { renderRelease, renderReleaseJson } = await import("./output/render/claim.ts");
+    const opts = program.opts();
+    const report = runRelease({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      id,
+      actor: opts["as"] as string | undefined,
+    });
+    process.stdout.write(
+      opts["json"] === true
+        ? renderReleaseJson(report) + "\n"
+        : renderRelease(report, { quiet: opts["quiet"] === true }),
+    );
+  });
+
 try {
   await program.parseAsync(process.argv);
   process.exitCode = EXIT.ok;

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { withLock } from "../fs/lock.ts";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { readTasks } from "./read.ts";
-import { emitTask, nextRank, type NewTask } from "./emit.ts";
+import { emitTask, emitFrontmatter, nextRank, type NewTask } from "./emit.ts";
 import { newIdBody, makeId } from "./id.ts";
 import { leasePaths } from "./lease.ts";
 import { splitEnvelope } from "./envelope.ts";
@@ -80,7 +80,7 @@ export function createTask(
       // generateKeyBetween 对同一个 lastRank 是确定性的（实测），所以这里不缓存：
       // 重复调用返回同一个值，加一层 ??= 只是省一次计算而看起来像在防什么。
       nextRank: () => nextRank(lastRank),
-      now: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      now: nowStamp(),
     };
 
     const task = make(ctx);
@@ -128,4 +128,130 @@ function parseCandidate(relPath: string, id: string, text: string): TaskFile | s
   const parsed = parseFrontmatter(env.head);
   if (!parsed.ok) return parsed.error;
   return { path: relPath, idFromFilename: id, frontmatter: parsed.data, body: env.body, raw: text };
+}
+
+/** 拿着账本的写锁跑一段。调用方需要「读 → 判断 → 可能写多个文件」落在一次持锁内时用它。 */
+export function withLedgerLock<T>(ledger: Ledger, fn: () => T): T {
+  return withLock(lockPathFor(ledger), fn);
+}
+
+/** 准备好的一次任务改写：candidate 已通过校验，commit() 才落盘。 */
+export type PreparedUpdate = { candidate: TaskFile; commit: () => void };
+
+/**
+ * 构造并**校验**一次任务改写，但不写任何东西。调用方拿到 `commit()` 自行决定何时落盘。
+ *
+ * 分成两步是 Codex 评审 F05 的结论：claim 要在写任务文件之前先写租约，
+ * 而「先写租约」不能发生在校验之前——spec §6.1 说被拒绝的迁移**什么都不改**，
+ * 而第一版里一个校验失败的 claim 已经把租约落盘了。
+ * 把「构造+校验」与「落盘」分开之后，顺序天然是：读 → 决策 → 构造并校验 → 写。
+ *
+ * **必须在持锁状态下调用**，且 `existing` 必须是锁内读到的那一份：
+ * 锁外读到的快照到拿到锁时可能已经变了。
+ */
+export function prepareUpdate(
+  ledger: Ledger,
+  existing: TaskFile[],
+  id: string,
+  next: { frontmatter: Record<string, unknown>; appendLog?: string },
+  validate: Validate,
+  now: string,
+): PreparedUpdate {
+  const target = existing.find((t) => t.idFromFilename === id);
+  if (target === undefined) {
+    throw new CliError(EXIT.usage, `No task ${id} in this ledger. Run "todopi ls" to see what is there.`);
+  }
+  if (target.parseError !== undefined) {
+    throw new CliError(EXIT.usage,
+      `Task ${id} cannot be read: ${target.parseError}. Run "todopi doctor" to see what is wrong with it.`);
+  }
+
+  const body = next.appendLog === undefined ? target.body : appendLogLine(target.body, next.appendLog);
+  const text = `---\n${emitFrontmatter({ ...next.frontmatter, updated: now })}---\n${body}`;
+
+  // **校验在写入之前**，与 createTask 同样的理由（F03 第二轮评审的结论）：
+  // 校验放在写之后，失败时磁盘上已经留下了损坏文件。
+  const relPath = join("tasks", `${id}.md`);
+  const candidate = parseCandidate(relPath, id, text);
+  if (typeof candidate === "string") {
+    throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${candidate}`);
+  }
+  const others = existing.filter((t) => t.idFromFilename !== id);
+  const rejected = validate(candidate, others);
+  if (rejected !== null) {
+    throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${rejected}`);
+  }
+
+  return {
+    candidate,
+    commit: () => writeFileAtomic(join(ledger.dir, "tasks", `${id}.md`), text),
+  };
+}
+
+/**
+ * 读-改-写一个既有任务。整段在锁内完成，理由与 createTask 相同：
+ * 两个并发的写者若各自读到同一份旧内容，后写的会无声覆盖先写的。
+ *
+ * `mutate` 返回**完整的新 frontmatter**，不是一个补丁。补丁语义需要定义
+ * 「怎么删一个键」，而 `undefined` 与「键不存在」在这里不是一回事；返回全量
+ * 则不需要这层约定。代价是调用方要把不改的键原样带回来——那正是 spec §5.2
+ * 字段 11 要求的「保留你不认识的条目」，所以这个代价是它该付的。
+ *
+ * `updated` 由这一层统一刷新（spec §6.3：每次写入都要刷新，只动正文也要）。
+ *
+ * 正文默认原样带回：只有 frontmatter 被重新发射。要追加 Log 行的调用方用
+ * `appendLog` 返回值，由这一层按 §5.3.3 放到 `## Log` 小节末尾。
+ *
+ * 需要在同一次持锁内做更多事（比如同时写租约）的命令用
+ * `withLedgerLock` + `prepareUpdate`，不要用这个便捷入口。
+ */
+export function updateTask(
+  ledger: Ledger,
+  id: string,
+  mutate: (t: TaskFile, now: string) => { frontmatter: Record<string, unknown>; appendLog?: string },
+  validate: Validate,
+): TaskFile {
+  return withLedgerLock(ledger, () => {
+    const existing = readTasks(ledger);
+    const target = existing.find((t) => t.idFromFilename === id);
+    if (target === undefined) {
+      throw new CliError(EXIT.usage, `No task ${id} in this ledger. Run "todopi ls" to see what is there.`);
+    }
+    const now = nowStamp();
+    const prepared = prepareUpdate(ledger, existing, id, mutate(target, now), validate, now);
+    prepared.commit();
+    return prepared.candidate;
+  });
+}
+
+/** RFC 3339 UTC 秒级，与 spec §5.2 字段 12 的形状一致。 */
+export function nowStamp(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/**
+ * 按 spec §5.3.3 把一行追加到 `## Log` 小节末尾（最新的在最后）。
+ *
+ * 调用方给的是 `<ts> <actor> <verb>...`，**不带 `- ` 前缀**——与 emitTask 的
+ * `log: string[]` 同一个约定，那边也是由发射器补前缀的。两处约定不一致的话，
+ * 写出来的行会缺前缀而不再是合法的列表项（第一版就是这么错的）。
+ * 没有该小节就建一个——`add` 总会写出它，但手写的文件不一定有。
+ *
+ * 续行（缩进两格）属于前一项，所以「末尾」是整个小节的末尾，
+ * 不是最后一个 `- ` 行的后面。
+ */
+function appendLogLine(body: string, line: string): string {
+  const lines = body.split("\n");
+  const start = lines.findIndex((l) => l.trim() === "## Log");
+  const item = `- ${line}`;
+  if (start < 0) {
+    return `${body.replace(/\s*$/, "")}\n\n## Log\n\n${item}\n`;
+  }
+  let end = start + 1;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (lines[i]!.startsWith("## ")) break;
+    if (lines[i]!.trim() !== "") end = i + 1;
+  }
+  lines.splice(end, 0, item);
+  return lines.join("\n");
 }

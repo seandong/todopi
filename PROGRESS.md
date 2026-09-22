@@ -5,21 +5,21 @@
 
 ## Current State
 
-- Last commit: `650d1be` —— F04 四轮评审通过并已合回 main。
+- Last commit: `73d17ef` —— F05 四轮评审通过（Go）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**20 条全部通过**，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **356 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **440 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
-  `f04-ls` 24 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
+  `f04-ls` 24 项 + `f05-claim` 47 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
   是单元测试抓不到的那类；Codex 第二轮评审另补了跨 worktree 锁测试
   （30 进程计数 30、无残留），确认 `leasePaths` 重构没有回归
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- VCR: `4/4` —— F01–F04 均 `passing`，evidence 由 harness 写入
+- VCR: `5/5` —— F01–F05 均 `passing`，evidence 由 harness 写入
 - 代码状态：**F01–F04 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
@@ -29,25 +29,33 @@
 
 ## In Progress
 
-无 feature 处于 `active`。**下一个是 F05 `claim`**（WIP=1，开工前先 activate）。
+无 feature 处于 `active`。**下一个是 F06**（WIP=1，开工前先 activate）。
 
-F01–F04 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
+F01–F05 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
 
-F04 经 **Codex 四轮评审**才拿到 Go，每一轮的详细理由见 DECISIONS D014–D017：
+F05 经 **Codex 四轮评审**才拿到 Go，阻塞项数 **6 → 2 → 1 → 0**，
+详细理由见 DECISIONS D018–D021。回头看，每一轮的阻塞项都能归到同一条线上：
 
-- 第一轮 8 个阻塞项、第二轮 2 个、第三轮 2 个、第四轮 Go。
-- **前三轮的阻塞项全部是上一轮整改自己制造或没修干净的**，与 F03 那四轮同一个
-  模式：整改时注意力集中在被指出的那条，改动的连带面没人看。
-- 两条留给产品负责人的事项：`--json` 按 FR-T2 字面输出数组、诊断走 stderr
-  （原先是信封；FR-Q3 有版本承诺，两个方向都是破坏性变更，若认为信封更重要
-  要改的是 PRD）；`--json` 因此没有 `total`，补它同样要改产品契约。
+1. **一条边界立起来之后，只用到了触发它的那个入口。** `claim` 修了 `release`
+   没修，前后三次。教训不是「下次记得」，而是：一条新边界立起来时要立刻问它
+   适用于哪几个入口。
+2. **一个判据只覆盖了一半。** 值查了键没查；字符形状查了 YAML 语义没查。
+3. **一条用例看起来在验证某件事，实际没有。** 串行的「并发」用例；只用自家
+   解析器的往返用例；屏障失效却报告通过。
+
+第 3 条最值得留下：**一条用例的价值全在「缺陷存在时它会不会红」，而这件事
+必须被证明，不能靠注释声称。** 本 feature 之后每条关键用例都跑了反向验证——
+把实现退回有缺陷的形状，确认它真的变红。
+
+另有一条被纠正的错误技术结论（D021）：我在 D020 里写「preload 包
+`fs.unlinkSync` 走不通」，漏了 `syncBuiltinESMExports()`。一条写进决策文档的
+错误技术结论，会让后来的人据此排除掉一整条可行的路。
 
 自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
-doctor 能检出违规 ✅、五个命令 passing 进度 2/5（`init`、`add` 已完成，
-还差 `claim`、`done`、`verify`）。`ls` 不在这五个里。
+doctor 能检出违规 ✅、五个命令 passing 进度 **3/5**（`init`、`add`、`claim`
+已完成，还差 `done`、`verify`）。
 
-`feature_list.json` 于 2026-09-16 填入 21 条（M1 七条 / M2 六条 / M3 八条），
-拆分依据见 DECISIONS D011。
+`feature_list.json` 于 2026-09-16 填入 21 条，拆分依据见 DECISIONS D011。
 
 ## Next Steps
 
@@ -87,7 +95,21 @@ doctor 能检出违规 ✅、五个命令 passing 进度 2/5（`init`、`add` �
     Node 自带的真解析器，并补了 16 条正反例——ARCH-001/002/011/013/020 都曾
     误伤或从来没生效过，而它们没有一条有测试。其余四条补正反例列为 harness 改进项。
 17. ~~把 `feat/f04-ls` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-18. **下一步：activate F05 `claim` 并写实现计划。**
+18. ~~activate F05、写计划并执行~~ 已完成，6 个 task 逐个 TDD 通过，三层全绿。
+    写计划时实测出两件事改变了 Task 划分：`emitFrontmatter` 遇到嵌套映射直接
+    抛错（`external` 就是），而那个「留给 F10」的推迟到 F05 不成立；
+    `createTask` 只能建新任务，所以要抽出通用的 `updateTask`。
+19. ~~Codex 评审 F05~~ 四轮才拿到 Go，阻塞项 6 → 2 → 1 → 0，见 D018–D021。
+    其中两条是真正的数据正确性问题（改写既有任务破坏扩展字段、跨 worktree
+    覆盖别人的活租约），一条是我写错的技术结论（D021 纠正）。
+20. ~~把 `feat/f05-claim` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
+21. **下一步：activate F06 并写实现计划。**
+    F06 的地基：写入走 `withLedgerLock` + `prepareUpdate`（构造校验与落盘分开，
+    这样「读 → 决策 → 构造并校验 → 写」的顺序是天然的）；身份用
+    `commands/actor.ts` 的 `currentActor`；门禁用 `domain/validate.ts` 的
+    `validateWrite`。**普通写入（note / check / edit）要刷心跳但不得隐式重新
+    认领，也不能只查本树 assignee**——共享租约归属要一起查，这是 F05 三轮
+    评审换来的边界。
     地基已在 F04 打好，**不要重写**：身份解析链在 `domain/actor.ts`（纯函数）
     + `commands/actor.ts`（取外部事实），租约目录与锁路径由 `format/lease.ts`
     的 `leasePaths` 一次派生，租约读取是 `readHeartbeats`。

@@ -1,11 +1,11 @@
 // src/domain/validate.ts
 // 单文件不变量。纯函数：不 import node:fs，用例直接构造对象即可（src/ARCHITECTURE.md）。
-
 import {
   ACTOR_RE, ID_RE, LABEL_RE, RANK_RE, RESOLUTIONS, STATUSES, TIMESTAMP_RE,
   type TaskFile,
 } from "./types.ts";
 import type { Finding } from "./findings.ts";
+import { validateGraph } from "./graph.ts";
 
 const CONFLICT_RE = /^(<<<<<<<|=======|>>>>>>>)/m;
 
@@ -207,4 +207,26 @@ export function parseLogLine(line: string): ParsedLogLine {
   return text === undefined
     ? { ok: true, timestamp, actor, verb, args }
     : { ok: true, timestamp, actor, verb, args, text };
+}
+
+/**
+ * 写入前的门禁：候选文件自身的校验，加上**这次写入引入的**图问题。
+ *
+ * 图问题要做差集，不能直接看 `validateGraph([...existing, candidate])`：
+ * 账本里可能本来就有悬空引用，那不该挡住一次与它无关的写入——而 doctor 仍然
+ * 会报那个既存问题。也不能只看候选自己那一条：一个环由多个文件共同构成，
+ * 报出来的 finding 可能挂在环上任何一个文件上。按 finding 的完整内容做差集，
+ * 新出现的才算这次引入的。
+ *
+ * 返回 null 表示放行，否则是拼好的拒绝理由。
+ *
+ * 抽出来是因为 add / claim / release 必须用**同一套**门禁：复制一份，两边迟早
+ * 会对同一个账本给出不同的结论，而那时谁对谁错没人说得清。
+ */
+export function validateWrite(candidate: TaskFile, existing: TaskFile[]): string | null {
+  const key = (f: Finding) => [f.path, f.rule, f.message].join(" | ");
+  const before = new Set(validateGraph(existing).map(key));
+  const introduced = validateGraph([...existing, candidate]).filter((f) => !before.has(key(f)));
+  const findings = [...validateFile(candidate), ...introduced];
+  return findings.length === 0 ? null : findings.map((f) => `${f.rule}: ${f.message}`).join("; ");
 }
