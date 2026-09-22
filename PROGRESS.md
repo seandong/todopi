@@ -5,12 +5,12 @@
 
 ## Current State
 
-- Last commit: `a44d4fa` —— F04 通过两轮 Codex 评审后的整改，evidence 已 reverify。本行记录写它时的
+- Last commit: `32c78ff` —— F04 通过三轮 Codex 评审后的整改。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**20 条全部通过**）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **324 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **340 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
   `f04-ls` 24 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
@@ -40,8 +40,12 @@ F01–F03 已合回且分支已删除。**整个仓库尚未推送到 remote。*
   数组↔信封在任一方向都是破坏性变更；若认为信封更重要，要改的是 PRD。
 - 第二轮（2 个阻塞项 + 5 条应改）：这轮 Codex 跑起了三层并补了跨 worktree 锁
   测试。两个阻塞项都属实且都是第一轮整改时**新引入或未修干净**的，见 D015。
+- 第三轮（2 个阻塞项 + 1 条应改）：同样都是上一轮整改自己制造或没修干净的，
+  见 D016。其中一条是我给 `blocked_by` 加了 spec 没有的「不许重复」约束，
+  连带把 `add --blocked-by A A` 从退出 0 改成了退出 1——**改坏了已发布命令的
+  行为**。规格没写的约束就是没有，抄邻近字段不是依据。
 
-**第三轮评审尚未进行。** F03 的四轮里第四轮的阻塞项全是第三轮修复时引入的，
+**第四轮评审尚未进行。** F03 的四轮里第四轮的阻塞项全是第三轮修复时引入的，
 本轮同样改了 6 个文件，合并前应当再审一次。
 
 自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
@@ -84,7 +88,8 @@ doctor 能检出违规 ✅、五个命令 passing 进度 2/5（`init`、`add` �
     也不会有时序 flake。
 13. ~~Codex 评审第一轮~~ No-go，8 个阻塞项，全部处理，见 DECISIONS D014。
 14. ~~Codex 评审第二轮~~ No-go，2 个阻塞项 + 5 条应改，全部处理，见 DECISIONS D015。
-15. **下一步：Codex 评审第三轮**，通过后合回 `main`，然后 activate F05 `claim`。
+15. ~~Codex 评审第三轮~~ No-go，2 个阻塞项 + 1 条应改，全部处理，见 DECISIONS D016。
+16. **下一步：Codex 评审第四轮**，通过后合回 `main`，然后 activate F05 `claim`。
     F05 的地基已经齐了，**不要重写**：解析链在 `domain/actor.ts`（纯函数）
     + `commands/actor.ts`（取外部事实），租约目录与锁路径由 `format/lease.ts`
     的 `leasePaths` 一次派生。F05 只需补租约的**写入**端（`O_EXCL` 创建、

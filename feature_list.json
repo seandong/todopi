@@ -154,7 +154,7 @@
       "depends_on": [
         "F03"
       ],
-      "evidence": "commit a44d4fa, verified 2026-09-22T06:10:29Z",
+      "evidence": "commit 32c78ff, verified 2026-09-22T06:41:07Z",
       "layers": [
         {
           "label": "static",
