@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `e29a6d6` —— F04 通过两轮 Codex 评审后的整改。本行记录写它时的
+- Last commit: `9ac1a53` —— F04 通过两轮 Codex 评审后的整改。本行记录写它时的
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**20 条全部通过**）/ typecheck（`pass`，tsc --noEmit）
