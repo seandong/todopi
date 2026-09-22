@@ -5,6 +5,7 @@ import { splitEnvelope } from "../../src/format/envelope.ts";
 import { parseFrontmatter } from "../../src/format/frontmatter.ts";
 import { scanCanonical } from "../../src/format/scan.ts";
 import { readdirSync, readFileSync } from "node:fs";
+import YAML from "yaml";
 import { join } from "node:path";
 
 const roundTrip = (fm: Record<string, unknown>) => {
@@ -148,5 +149,51 @@ test("全部 valid fixture 读进来再发射出去，语义不变", () => {
     assert.ok(second.ok, `${f} 重新发射后读不回来：${second.ok ? "" : second.error}`);
     const sorted = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).sort());
     assert.deepEqual(sorted(second.data), sorted(first.data), `${f} 往返后语义变了`);
+  }
+});
+
+// ---- 差分：自家解析器与标准 YAML 必须给出同一个结果（Codex 第三轮评审）----
+
+test("发射出去的文件，scan 快路径与标准 YAML 解析必须一致", () => {
+  // 第一版 plainKey 按**字符形状**判断，于是 `null:` / `True:` / 1100 字符键
+  // 都被手写拼出去了。它们在快路径下是字面字符串键，在 yaml 下却分别变成
+  // 空字符串、布尔 true、解析失败——**同一个文件在两条路径下含义不同**。
+  // §5.1 要求读者把手写文件当合法 YAML 读，所以写出去的东西对两条路径
+  // 必须是同一个意思。这条用例只测自家入口是抓不到的。
+  const keys = [
+    "null", "True", "False", "true", "yes", "on", "~", "#meta", "x-a: b",
+    "x-中文", "- dash", "", "a".repeat(1100), "a".repeat(200), "x-ok_1.2-3",
+  ];
+  const norm = (o: Record<string, unknown>) => JSON.stringify(Object.fromEntries(Object.entries(o).sort()));
+  for (const k of keys) {
+    // 带嵌套值时整份会回退到 yaml 解析，差异只在那时显形——两种都要测
+    for (const extra of [{}, { external: { linear: { id: "E-1" } } }]) {
+      const fm: Record<string, unknown> = { id: "tp-a1b2c3", [k]: "keep", ...extra };
+      const text = emitFrontmatter(fm);
+
+      const mine = parseFrontmatter(text);
+      assert.ok(mine.ok, `自家解析器读不回来（键 ${JSON.stringify(k)}）`);
+      assert.equal(norm(mine.data), norm(fm), `自家解析器往返不一致（键 ${JSON.stringify(k)}）`);
+
+      const std: unknown = YAML.parse(text);
+      assert.ok(typeof std === "object" && std !== null, `标准 YAML 读不回来（键 ${JSON.stringify(k)}）`);
+      assert.equal(norm(std as Record<string, unknown>), norm(fm),
+        `标准 YAML 往返不一致（键 ${JSON.stringify(k)}）：${JSON.stringify(text.slice(0, 80))}`);
+    }
+  }
+});
+
+test("全部 valid fixture 重新发射后，两条解析路径仍然一致", () => {
+  const dir = join(import.meta.dirname, "..", "..", "spec", "fixtures", "valid");
+  const norm = (o: Record<string, unknown>) => JSON.stringify(Object.fromEntries(Object.entries(o).sort()));
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".md"))) {
+    const env = splitEnvelope(readFileSync(join(dir, f), "utf8"));
+    assert.ok(env !== null, f);
+    const first = parseFrontmatter(env.head);
+    assert.ok(first.ok, f);
+    const text = emitFrontmatter(first.data);
+    const std: unknown = YAML.parse(text);
+    assert.ok(typeof std === "object" && std !== null, `${f} 标准 YAML 读不回来`);
+    assert.equal(norm(std as Record<string, unknown>), norm(first.data), `${f} 标准 YAML 往返不一致`);
   }
 });

@@ -66,16 +66,39 @@ function emitOne(lines: string[], key: string, value: unknown): void {
 /**
  * 键能不能直接拼在 `key: value` 左边。
  *
- * **值安全不等于整个键值对安全**——这是 Codex 第二轮评审抓到的：`"#meta"` 被
- * 拼成 `#meta: "keep"`，`#` 开启注释，于是那个字段**静默消失**而 doctor 照样
- * 通过；`"x-a: b"` 拼成 `x-a: b: "keep"`，文件直接读不回来。
+ * **判据是「用真 YAML 解析器读回来还是不是同一个键」**，不是字符形状。
+ * 字符形状安全不等于 YAML 语义安全：`null:` 读回来是空字符串键、`True:` 读回来
+ * 是布尔 true、1100 字符的隐式键让标准解析器直接报错（YAML 的 `:` 指示符最多
+ * 1024 字符）。这三种我在第一版都放行了。
  *
- * 判据故意保守：字母或下划线开头，其后只有字母、数字、下划线、点、连字符。
- * spec §5.2 的十二个字段与常见的扩展键（`x-custom`、`external`）都在里面，
- * 其余一律交给 YAML——它会按需要给键加引号。
+ * 更要命的是这些差异**只在整份回退到 yaml 解析时才显形**：scan.ts 的快路径把
+ * 键当字面字符串，于是同一个文件在两条解析路径下含义不同。§5.1 要求读者把
+ * 手写文件当合法 YAML 读，所以我们写出去的东西对两条路径必须是同一个意思。
+ *
+ * 不列保留字清单——那张清单我列不全，而且会随 yaml 版本漂。直接问解析器，
+ * 结果按键缓存（同一批任务里键是高度重复的）。
  */
+const plainKeyCache = new Map<string, boolean>();
+
 function plainKey(key: string): boolean {
-  return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(key);
+  const cached = plainKeyCache.get(key);
+  if (cached !== undefined) return cached;
+  const ok = computePlainKey(key);
+  plainKeyCache.set(key, ok);
+  return ok;
+}
+
+function computePlainKey(key: string): boolean {
+  // 便宜的预筛：形状不对的直接否掉，不必进解析器
+  if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(key)) return false;
+  try {
+    const parsed: unknown = YAML.parse(`${key}: 0`);
+    if (typeof parsed !== "object" || parsed === null) return false;
+    const keys = Object.keys(parsed as Record<string, unknown>);
+    return keys.length === 1 && keys[0] === key;
+  } catch {
+    return false;                      // 解析器都读不了，肯定不能手写
+  }
 }
 
 /**

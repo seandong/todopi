@@ -64,7 +64,9 @@ export function runRelease(opts: ReleaseOptions): ReleaseReport {
     const held = readLease(ledger, opts.id);
     if (held !== null && held.actor !== actor) {
       throw new CliError(EXIT.conflict,
-        `Task ${opts.id} has a live lease held by ${held.actor} (possibly in another worktree), ` +
+        // 不说 "live"：这里**没有判过期**，保守拒绝就该如实说是归属冲突。
+        // 为了让文案准确而放宽闸门是本末倒置（Codex 第三轮评审）。
+        `Task ${opts.id} has a lease held by ${held.actor} (possibly in another worktree), ` +
         `not by you (${actor}). Releasing it would drop their lease. ` +
         "Use `todopi claim --steal` if you mean to take it over.");
     }
