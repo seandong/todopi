@@ -177,11 +177,11 @@
       "id": "F05",
       "behavior": "todopi claim / release 改变任务归属，过期租约的任务可被直接重新认领并留痕",
       "verification": "claim 写入 status: in_progress 与 assignee，并在 <git-common-dir>/todopi/leases/ 原子创建租约；release 清空 assignee 并删除租约；ready 队列给出的过期任务可直接 claim 无需 --steal（FR-C1），未过期的租约拒绝并退出 3，--steal 覆盖；两种情况替换他人 assignee 都记 steal=true 并写明被替换者；actor 解析链按 FR-C4，取自 git config 的值经 §5.4 规范化（含空格的值必须被处理）。",
-      "state": "active",
+      "state": "passing",
       "depends_on": [
         "F04"
       ],
-      "evidence": "",
+      "evidence": "commit 3399091, verified 2026-09-22T08:01:26Z",
       "layers": [
         {
           "label": "static",

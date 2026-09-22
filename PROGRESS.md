@@ -5,21 +5,21 @@
 
 ## Current State
 
-- Last commit: `01d5f52` —— F04 已合回 main，F05 计划已写。
+- Last commit: `3399091` —— F05 claim / release 三层通过。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**20 条全部通过**，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **356 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **422 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
-  `f04-ls` 24 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
+  `f04-ls` 24 项 + `f05-claim` 30 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
   是单元测试抓不到的那类；Codex 第二轮评审另补了跨 worktree 锁测试
   （30 进程计数 30、无残留），确认 `leasePaths` 重构没有回归
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- VCR: `4/4` —— F01–F04 均 `passing`，evidence 由 harness 写入
+- VCR: `5/5` —— F01–F05 均 `passing`，evidence 由 harness 写入
 - 代码状态：**F01–F04 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
@@ -29,34 +29,20 @@
 
 ## In Progress
 
-**F05 `claim` / `release`** —— `state: active`，实现计划已写：
-[docs/plans/2026-09-22-f05-claim.md](docs/plans/2026-09-22-f05-claim.md)（6 个 task）。
-分支 `feat/f05-claim`，尚未开始写代码。
+**F05 `claim` / `release`** —— 三层通过、`passing`，在分支 `feat/f05-claim` 上，
+尚未合回 `main`。**合并前照例请 Codex 评审**：F05 动的是 F03/F04 评审成本最高的
+两样东西（文件锁、租约），Task 1 更是直接改了那段被评审过四轮的代码。
 
-写计划时实测出两件影响 Task 划分的事：
+本 feature 最值得记的一件事：**多进程用例当场抓到一个设计缺陷**。第一版把
+「读任务 → decideClaim → 写租约」放在锁外，只有任务文件的改写在锁内；两个
+`--steal` 交错时收场是租约记着 B 而任务文件记着 A。28 个单进程用例在这个缺陷下
+全部通过——这正是 ARCH-017 存在的理由，也是 F03 已经证明过两次的事。
 
-1. **`emitFrontmatter` 遇到嵌套映射直接抛错**（`external` 就是），注释里写着
-   「保留它们是 F10 edit 的事」——**那个推迟现在不成立**：`claim` 要改写既有
-   文件，而带 `external` 的任务今天 claim 会抛错。已验证 `yaml` 包（已是依赖）
-   发射的嵌套映射我们自己读得回来，修法确定，不需要新依赖。
-2. **`createTask` 只能建新任务**，所以 Task 1 要从它抽出通用的 `updateTask`。
-   那段代码是 F03 四轮评审换来的，这一步必须是纯重构，改完 F03 的多进程锁
-   用例与 20 进程并发压测要照样全绿。
-
-核心设计决定写在计划里：`claim` 要写任务文件与租约文件两处，没有跨文件原子性。
-**选先写租约、后写任务文件**——committed 的记录永远不领先于本机事实，而散落的
-租约是 spec §8 自己声明可随时删除的。顺带一个好处：租约的 `O_EXCL` 创建本身
-就是冲突检测，不需要先读再判再写。
-
-F01–F04 均 `passing` 且已合回 `main`。**整个仓库尚未推送到 remote。**
-
-F04 经 Codex 四轮评审才拿到 Go，理由见 DECISIONS D014–D017。两条留给产品负责人
-的事项：`--json` 按 FR-T2 字面输出数组、诊断走 stderr（FR-Q3 有版本承诺，
-改回信封要改 PRD）；`--json` 因此没有 `total`，补它同样要改产品契约。
+F01–F04 已合回 `main`。**整个仓库尚未推送到 remote。**
 
 自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
-doctor 能检出违规 ✅、五个命令 passing 进度 2/5 —— **F05 完成后是 3/5**，
-还差 `done`、`verify`。
+doctor 能检出违规 ✅、五个命令 passing 进度 **3/5**（`init`、`add`、`claim`
+已完成，还差 `done`、`verify`）。
 
 `feature_list.json` 于 2026-09-16 填入 21 条，拆分依据见 DECISIONS D011。
 
@@ -98,8 +84,14 @@ doctor 能检出违规 ✅、五个命令 passing 进度 2/5 —— **F05 完成
     Node 自带的真解析器，并补了 16 条正反例——ARCH-001/002/011/013/020 都曾
     误伤或从来没生效过，而它们没有一条有测试。其余四条补正反例列为 harness 改进项。
 17. ~~把 `feat/f04-ls` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-18. ~~activate F05 并写实现计划~~ 已完成。**下一步：执行 plan 的 Task 1**
-    （通用 `updateTask` + 发射器支持嵌套映射）。
+18. ~~activate F05、写计划并执行~~ 已完成，6 个 task 逐个 TDD 通过，三层全绿。
+    写计划时实测出两件事改变了 Task 划分：`emitFrontmatter` 遇到嵌套映射直接
+    抛错（`external` 就是），而那个「留给 F10」的推迟到 F05 不成立；
+    `createTask` 只能建新任务，所以要抽出通用的 `updateTask`。
+19. **下一步：请 Codex 评审 `feat/f05-claim` 并合回 `main`**，然后 activate
+    F06。F03 四轮、F04 四轮，两次的模式一致：前几轮的阻塞项都是上一轮整改
+    自己制造或没修干净的。F05 动的是锁与租约，值得从第一轮就把「整改的
+    连带面」当重点。
     地基已在 F04 打好，**不要重写**：身份解析链在 `domain/actor.ts`（纯函数）
     + `commands/actor.ts`（取外部事实），租约目录与锁路径由 `format/lease.ts`
     的 `leasePaths` 一次派生，租约读取是 `readHeartbeats`。
