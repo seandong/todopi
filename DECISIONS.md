@@ -874,3 +874,62 @@ Codex 指出 D015 声称「已补真实 git 入口验证」，但那是手工跑
 该文件在模块顶部隔离 `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_SYSTEM`——
 本机若配了全局 `user.name`，「未配置」那几个用例会读到它，
 测试结果取决于跑它的人（实测如此）。
+
+## D017 — F04 的 Codex 第四轮评审：Go。检查器改用真解析器，并有了自己的用例
+
+**日期**：2026-09-22。**结论：Go，无阻塞项。**四轮评审到此结束。
+
+Codex 实测确认的事实（这些是这一轮的主要价值，都不是我自己验过的）：
+
+- `add --blocked-by A A` 退出 0、文件通过 doctor、`blocked(t)` 语义正确；
+- 15 个 valid + 10 个 invalid fixture 相对 `32c78ff^` 的**完整 finding 数组**未变——
+  即 D016 对 `validate.ts` 的两处改动没有惊动语料库这份对外契约；
+- `resolution` 之外没有别的字段检查嵌在状态分支里；`assignee` 的**语法**检查
+  本来就独立，**存在性**检查依赖状态是对的（那正是不变量 3）；
+- `node --test` 默认每文件一进程，`actor.test.ts` 顶部改 env 不会外泄；
+  只有加 `--experimental-test-isolation=none` 才会。harness 用的是默认模式；
+- `/dev/null` 不构成 Windows 缺陷：Git for Windows 把它映射到 `nul`（源码核对）；
+- 13 个提交逐个 `make check` 通过。
+
+### 检查器从「手写词法」改成「真解析器 + 小扫描」
+
+四轮里有三轮在 `tools/check-dto-imports.mjs` 上有发现。回看每一次的修法，都是
+在近似的词法规则上再叠一层：处理跨行 import、处理内联 `type`、处理 re-export、
+处理注释、处理字符串里的 `/*`、处理正则字面量里的引号、处理 Unicode 索引。
+**这是在手写一个 JavaScript 词法分析器，而且每次都漏。**
+
+换成让 Node 自带的 `stripTypeScriptTypes`（一个真解析器）先剥离类型：
+`import type` 与内联 `{ type A }` 的区分交给它，剥离后**任何**指向 `domain/`
+的 import 都是运行时依赖。扫描器只剩「跳过注释、字符串、正则」这一件小事。
+
+TypeScript 7 是原生端口，不再暴露 `createSourceFile` 等 JS 解析 API，
+所以走不了 tsc 那条路——这是查过才知道的。
+
+顺带把规则守的不变量说得更准：**剥离类型之后，`dto/` 对 `domain/` 的运行时
+依赖必须为零**。因此内联的 `import { type A, type B }` 也要报——剥离后它变成
+`import { } from "..."`，类型没了而模块照样被加载；只为副作用的裸 import 同理。
+改法就一个词：写成 `import type`。
+
+### 规则本身也要有用例
+
+新增 `tests/harness/check-dto-imports.test.ts`，16 条正反例，把四轮评审里每一个
+被指出的漏检都钉成一条用例（字符串里的 `/*`、正则里的引号、emoji 后的 import、
+同行第二条、子目录、`.mts`/`.cts`/`.tsx`、re-export、动态 import）。
+检查器因此接受一个可选的根目录参数，用例指向临时目录。
+
+这是本轮真正的收获。到这里为止 **ARCH-001/002/011/013/020 都曾误伤真实代码或
+从来没生效过，而它们没有一条有测试**。检查器的价值全在「该响时响、不该响时
+不响」，那恰恰是可以用例钉死的东西。剩下四条规则补正反例，列为 harness 改进项。
+
+### 未在本轮解决的两项（结论不变）
+
+- `--json` 没有 `total`：补它要改 FR-T2 与 FR-Q3 这两条有版本承诺的产品契约，
+  属于产品负责人的决定。Codex 确认这个判断没有随后续改动失效。
+- FR-C4 的「agent 环境推断」一级未实现，记在 PRD §15。
+
+### 一条已写进代码的已知限制
+
+完全解析失败的任务恢复不出 `parent`，它原来的父任务会少掉一个子任务，
+可能因此从容器变回叶子。字段级损坏没有这个问题。使用者的发现路径是
+stderr 列出 id、doctor 给出原因，但「为什么这个父任务忽然可以 claim 了」
+不会自动说清楚。已写在 `src/commands/ls.ts` 的注释里。

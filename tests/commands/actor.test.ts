@@ -12,7 +12,11 @@ import { EXIT } from "../../src/exit.ts";
 
 // 把全局与系统级 git 配置隔离掉：本机若配了 user.name，「未配置」那几个
 // 用例会读到它而不是走回退，测试结果取决于跑它的人（实测如此）。
-// node --test 每个文件一个进程，改这里不会影响别的测试文件。
+//
+// 作用域的准确说法：`node --test` 默认每个文件一个进程，所以这几行不会影响
+// 别的测试文件；但加上 `--experimental-test-isolation=none` 之后会泄漏出去
+// （Codex 实测）。harness 用的是默认模式。若将来要同进程跑，这里得改成
+// 存旧值—跑—还原。`/dev/null` 在 Windows 上也成立：Git for Windows 把它映射到 nul。
 process.env["GIT_CONFIG_GLOBAL"] = "/dev/null";
 process.env["GIT_CONFIG_SYSTEM"] = "/dev/null";
 process.env["GIT_CONFIG_NOSYSTEM"] = "1";

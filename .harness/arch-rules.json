@@ -196,11 +196,11 @@
       "id": "ARCH-020",
       "description": "DTO 映射层只搬字段，不算派生态",
       "applies_when": "test -d src/output/dto && test -d src/domain",
-      "check": "node tools/check-dto-imports.mjs",
+      "check": "node --no-warnings tools/check-dto-imports.mjs",
       "expect": "empty",
-      "what": "src/output/dto/ 从 src/domain/ 做了**值导入**——也就是在调用领域函数。",
+      "what": "src/output/dto/ 对 src/domain/ 有**剥离类型之后仍然存在**的运行时依赖——也就是在调用领域函数，或至少在加载领域模块。",
       "why": "ARCHITECTURE.md 要求 dto 层「只做字段搬运与改名，不做计算」——一旦开始在映射里算派生态，这一层就白分了：--json 的形状会跟着领域逻辑一起漂移，而它是有版本承诺的公开 API（FR-Q3）。ARCH-008 只管 render/ 不碰 domain/，管不到 dto 内部在做什么，所以需要这一条。source: Codex 评审 F04 第 7 项。",
-      "fix": "把派生态算在 domain/ 里（一个纯函数返回派生结果），由 commands/ 组装成投影传给 dto；dto 只把投影的字段搬到对外形状上。从 domain/ 只做类型导入（`import type`，或内联的 `{ type X }`）是允许的——类型不含行为。"
+      "fix": "把派生态算在 domain/ 里（一个纯函数返回派生结果），由 commands/ 组装成投影传给 dto；dto 只把投影的字段搬到对外形状上。从 domain/ 只能用 `import type { X }`——它在类型剥离后整条消失。内联的 `import { type X }` 不行：类型没了，`import { } from \"...\"` 还在，模块照样被加载。只为副作用的裸 import 同理。"
     }
   ]
 }

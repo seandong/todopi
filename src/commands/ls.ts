@@ -99,6 +99,11 @@ export function runLs(opts: LsOptions): LsReport {
   // （Codex 第三轮评审指出，随后被用例复现）。
   // 连解析失败的也进图：它们没有 parent / blocked_by，只留下一个 byId 条目，
   // 状态为空即「未关闭」，与悬空引用取同样保守的解读。
+  //
+  // 已知限制：**完全解析失败的任务恢复不出 parent**，所以它原来的父任务会
+  // 少掉一个子任务，可能因此从容器变回叶子。字段级损坏没有这个问题
+  // （frontmatter 读得出来，图关系完整）。使用者的发现路径是 stderr 列出 id、
+  // doctor 给出原因；但「为什么这个父任务忽然可以 claim 了」不会自动说清楚。
   const index = indexTasks(read);
 
   const heartbeats = readHeartbeats(ledger);
