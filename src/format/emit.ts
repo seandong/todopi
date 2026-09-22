@@ -77,14 +77,20 @@ function emitOne(lines: string[], key: string, value: unknown): void {
  *
  * 不列保留字清单——那张清单我列不全，而且会随 yaml 版本漂。直接问解析器，
  * 结果按键缓存（同一批任务里键是高度重复的）。
+ *
+ * 缓存有上限：键来自任务文件，一个导入器可能连着写进几万个互不相同的键，
+ * 而缓存是模块级的（实测 2 万个 512 字符键会留下约 12 MB）。满了就不再新增，
+ * 已缓存的照常命中——常见字段在最前面进来，正是最该留住的那些。
+ * **满了绝不改变判断结果**，只是多跑一次解析器。
  */
+const PLAIN_KEY_CACHE_LIMIT = 512;
 const plainKeyCache = new Map<string, boolean>();
 
 function plainKey(key: string): boolean {
   const cached = plainKeyCache.get(key);
   if (cached !== undefined) return cached;
   const ok = computePlainKey(key);
-  plainKeyCache.set(key, ok);
+  if (plainKeyCache.size < PLAIN_KEY_CACHE_LIMIT) plainKeyCache.set(key, ok);
   return ok;
 }
 

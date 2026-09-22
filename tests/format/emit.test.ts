@@ -164,7 +164,9 @@ test("发射出去的文件，scan 快路径与标准 YAML 解析必须一致", 
     "null", "True", "False", "true", "yes", "on", "~", "#meta", "x-a: b",
     "x-中文", "- dash", "", "a".repeat(1100), "a".repeat(200), "x-ok_1.2-3",
   ];
-  const norm = (o: Record<string, unknown>) => JSON.stringify(Object.fromEntries(Object.entries(o).sort()));
+  // 用深度严格比较而不是 JSON.stringify：后者把 Infinity / NaN 都写成 null，
+  // 也分不出 -0 与 0——拿它当通用相等判据会留下盲区（Codex 第四轮评审）。
+  const sorted = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).sort());
   for (const k of keys) {
     // 带嵌套值时整份会回退到 yaml 解析，差异只在那时显形——两种都要测
     for (const extra of [{}, { external: { linear: { id: "E-1" } } }]) {
@@ -173,11 +175,11 @@ test("发射出去的文件，scan 快路径与标准 YAML 解析必须一致", 
 
       const mine = parseFrontmatter(text);
       assert.ok(mine.ok, `自家解析器读不回来（键 ${JSON.stringify(k)}）`);
-      assert.equal(norm(mine.data), norm(fm), `自家解析器往返不一致（键 ${JSON.stringify(k)}）`);
+      assert.deepStrictEqual(sorted(mine.data), sorted(fm), `自家解析器往返不一致（键 ${JSON.stringify(k)}）`);
 
       const std: unknown = YAML.parse(text);
       assert.ok(typeof std === "object" && std !== null, `标准 YAML 读不回来（键 ${JSON.stringify(k)}）`);
-      assert.equal(norm(std as Record<string, unknown>), norm(fm),
+      assert.deepStrictEqual(sorted(std as Record<string, unknown>), sorted(fm),
         `标准 YAML 往返不一致（键 ${JSON.stringify(k)}）：${JSON.stringify(text.slice(0, 80))}`);
     }
   }
@@ -185,7 +187,7 @@ test("发射出去的文件，scan 快路径与标准 YAML 解析必须一致", 
 
 test("全部 valid fixture 重新发射后，两条解析路径仍然一致", () => {
   const dir = join(import.meta.dirname, "..", "..", "spec", "fixtures", "valid");
-  const norm = (o: Record<string, unknown>) => JSON.stringify(Object.fromEntries(Object.entries(o).sort()));
+  const norm = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).sort());
   for (const f of readdirSync(dir).filter((x) => x.endsWith(".md"))) {
     const env = splitEnvelope(readFileSync(join(dir, f), "utf8"));
     assert.ok(env !== null, f);
@@ -194,6 +196,41 @@ test("全部 valid fixture 重新发射后，两条解析路径仍然一致", ()
     const text = emitFrontmatter(first.data);
     const std: unknown = YAML.parse(text);
     assert.ok(typeof std === "object" && std !== null, `${f} 标准 YAML 读不回来`);
-    assert.equal(norm(std as Record<string, unknown>), norm(first.data), `${f} 标准 YAML 往返不一致`);
+    assert.deepStrictEqual(norm(std as Record<string, unknown>), norm(first.data), `${f} 标准 YAML 往返不一致`);
   }
+});
+
+test("非有限数值与 -0 等怪值也要原样往返", () => {
+  // JSON.stringify 把 Infinity / NaN 都写成 null、分不出 -0 与 0，
+  // 所以这些值要用深度严格比较单独验一遍（Codex 第四轮评审指出的盲区）。
+  const cases: Array<Record<string, unknown>> = [
+    { id: "tp-a1b2c3", "x-inf": Number.POSITIVE_INFINITY },
+    { id: "tp-a1b2c3", "x-ninf": Number.NEGATIVE_INFINITY },
+    { id: "tp-a1b2c3", "x-nan": Number.NaN },
+    { id: "tp-a1b2c3", "x-negzero": -0 },
+    { id: "tp-a1b2c3", "x-zero": 0 },
+    { id: "tp-a1b2c3", "x-big": Number.MAX_SAFE_INTEGER },
+  ];
+  for (const fm of cases) {
+    const text = emitFrontmatter(fm);
+    const mine = parseFrontmatter(text);
+    assert.ok(mine.ok, `${JSON.stringify(Object.keys(fm)[1])} 自家解析器读不回来`);
+    assert.deepStrictEqual(mine.data, fm, `${JSON.stringify(Object.keys(fm)[1])} 自家往返不一致`);
+    const std: unknown = YAML.parse(text);
+    assert.deepStrictEqual(std, fm, `${JSON.stringify(Object.keys(fm)[1])} 标准 YAML 往返不一致`);
+  }
+});
+
+test("多个特殊键共存时互不干扰", () => {
+  const fm: Record<string, unknown> = {
+    id: "tp-a1b2c3", title: "T",
+    "null": "a", "True": "b", "#c": "c", "x-a: b": "d", "x-ok": "e",
+    external: { linear: { id: "E-1" } },
+  };
+  const text = emitFrontmatter(fm);
+  const sorted = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).sort());
+  assert.deepStrictEqual(sorted(YAML.parse(text) as Record<string, unknown>), sorted(fm));
+  const mine = parseFrontmatter(text);
+  assert.ok(mine.ok);
+  assert.deepStrictEqual(sorted(mine.data), sorted(fm));
 });
