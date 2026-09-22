@@ -41,28 +41,62 @@ export type NewTask = {
 export function emitFrontmatter(fm: Record<string, unknown>): string {
   const lines: string[] = [];
   const known = new Set<string>(FIELD_ORDER);
-  const emit = (key: string, value: unknown) => {
-    if (value === undefined) return;
-    if (Array.isArray(value)) {
-      lines.push(`${key}: [${value.map((v) => quote(String(v))).join(", ")}]`);
-      return;
-    }
-    if (value !== null && typeof value === "object") {
-      // 嵌套映射（spec §5.2 字段 11 external）超出规范形态的表达力：
-      // §5.1 的规范形态是「每个标量都加引号」的一层结构，scan.ts 的快路径
-      // 认的就是它。**只有这一个键**交给 yaml 发射，其余键照旧走规范形态——
-      // 整份都走 yaml 会让 2000 个任务的解析从 16ms 退回 120ms（D006 实测）。
-      //
-      // 原先这里直接抛错，注释写着「保留它们是 F10 edit 的事」。那个推迟到
-      // F05 不成立：claim 要改写既有文件，而任何带 external 的任务都会撞上它。
-      lines.push(YAML.stringify({ [key]: value }, { defaultStringType: "QUOTE_DOUBLE" }).trimEnd());
-      return;
-    }
-    lines.push(`${key}: ${quote(String(value))}`);
-  };
-  for (const key of FIELD_ORDER) if (key in fm) emit(key, fm[key]);
-  for (const key of Object.keys(fm)) if (!known.has(key)) emit(key, fm[key]);
+  for (const key of FIELD_ORDER) if (key in fm) emitOne(lines, key, fm[key]);
+  for (const key of Object.keys(fm)) if (!known.has(key)) emitOne(lines, key, fm[key]);
   return lines.join("\n") + "\n";
+}
+
+function emitOne(lines: string[], key: string, value: unknown): void {
+  if (value === undefined) return;
+  const c = canonical(value);
+  if (c !== null) {
+    lines.push(`${key}: ${c}`);
+    return;
+  }
+  // 规范形态表达不了这个值，交给 YAML。
+  //
+  // 判据不是「是不是嵌套」，而是**规范形态能不能一字不差地把它写出去再读回来**。
+  // §5.1 只定义了 \\ 与 \" 两种转义，所以含换行的字符串根本没法用它表达；
+  // 而给数字加引号会让 x-count: 5 读回来变成字符串 "5"，那不叫「保留写者不认识
+  // 的条目」（§5.2 字段 11）。第一版用 String(v) 强转，实测把 [{"k":"v"}] 写成
+  // ["[object Object]"]、把含换行的值写成读不回来的文件——是数据损坏。
+  lines.push(yamlEntry(key, value).trimEnd());
+}
+
+/**
+ * 能用 §5.1 规范形态表达就返回那串文本，否则返回 null。
+ *
+ * 规范形态覆盖的恰好是：不含控制字符的字符串，以及这种字符串的 flow 列表。
+ * 「每个值都是一个带引号的字符串或一列带引号的字符串」是 §5.1 的原话，
+ * 也正是 scan.ts 快路径认的那个子语言。
+ */
+function canonical(value: unknown): string | null {
+  if (typeof value === "string") return quotable(value) ? quote(value) : null;
+  if (Array.isArray(value)) {
+    if (!value.every((v) => typeof v === "string" && quotable(v))) return null;
+    return `[${value.map((v) => quote(v as string)).join(", ")}]`;
+  }
+  return null;
+}
+
+/** 控制字符没法只靠 §5.1 定义的那两种转义写出来。 */
+function quotable(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x20 || c === 0x7f) return false;
+  }
+  return true;
+}
+
+/**
+ * 用 YAML 发射一个键值对，形态尽量贴近 §5.1：键用 plain、标量双引号、
+ * **列表用 flow 风格**（§5.1 明文要求列表是 flow style）。数字与布尔保持原样——
+ * 给它们加引号会改变读回来的类型。
+ */
+function yamlEntry(key: string, value: unknown): string {
+  const doc = new YAML.Document({ [key]: value });
+  YAML.visit(doc, { Seq(_key, node) { node.flow = true; } });
+  return doc.toString({ defaultStringType: "QUOTE_DOUBLE", defaultKeyType: "PLAIN", lineWidth: 0 });
 }
 
 /**

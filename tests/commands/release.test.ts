@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
 import { runAdd } from "../../src/commands/add.ts";
 import { runClaim } from "../../src/commands/claim.ts";
+import { spawnSync } from "node:child_process";
 import { runRelease } from "../../src/commands/release.ts";
 import { runDoctor } from "../../src/commands/doctor.ts";
 import { renderRelease } from "../../src/output/render/claim.ts";
@@ -156,4 +157,50 @@ test("租约目录存在但空着时 release 不出意外", () => {
   const id = mine(d);
   mkdirSync(leaseDirFor(discoverLedger(d)), { recursive: true });
   assert.doesNotThrow(() => runRelease({ directory: d, id, actor: ME }));
+});
+
+
+// ---- Codex 评审抓到的 release 竞态（阻塞项 1）----
+
+test("release 与 claim --steal 并发：release 不得把别人刚拿到的任务放掉", () => {
+  // 第一版在锁外确认归属，之后才取锁改文件。A 确认「这是我的」之后暂停，
+  // B --steal 成功，A 恢复后照样退出 0，把 B 刚拿到的任务释放掉。
+  // 现在归属确认在锁内重做，所以 A 恢复后会看到 assignee 已经是 B 而拒绝。
+  const d = repo();
+  const id = mine(d);
+
+  // 直接模拟「A 的判断已过期」：在 A 调用 release 之前，任务已被 B 接管
+  runClaim({ directory: d, id, actor: OTHER, steal: true });
+
+  assert.throws(() => runRelease({ directory: d, id, actor: ME }),
+    (e: unknown) => (e as { code: number }).code === EXIT.conflict,
+    "归属必须在锁内重新确认");
+  assert.match(read(d, id), /^status: "in_progress"$/m, "B 的任务不得被放掉");
+  assert.equal(readLease(discoverLedger(d), id)?.actor, OTHER, "B 的租约不得被删");
+});
+
+test("release 删租约在锁内：不会误删别人随后建的租约", () => {
+  // 第一版写完任务文件就解锁，删租约在锁外。A 在这个间隙暂停，B 普通 claim
+  // 成功建了新租约，A 恢复后把 B 刚建的租约删了。
+  // 现在删除在同一次持锁内完成，这个间隙不存在。
+  const d = repo();
+  const id = mine(d);
+  runRelease({ directory: d, id, actor: ME });
+  const again = runClaim({ directory: d, id, actor: OTHER });
+  assert.equal(again.refreshed, false);
+  assert.equal(readLease(discoverLedger(d), id)?.actor, OTHER, "新租约必须还在");
+});
+
+test("多进程并发 release 同一个任务：恰好一个成功，其余是明确的拒绝", () => {
+  // 单进程用例对互斥失效是瞎的（ARCH-017）。
+  const d = repo();
+  const id = mine(d);
+  const cli = join(import.meta.dirname, "..", "..", "src", "cli.ts");
+  const codes = Array.from({ length: 8 }, () =>
+    spawnSync(process.execPath, [cli, "-C", d, "--as", ME, "release", id], {
+      stdio: "ignore", env: { ...process.env, TODOPI_ACTOR: "" },
+    }).status);
+  assert.equal(codes.filter((c) => c === 0).length, 1, `恰好一个成功：${codes.join(",")}`);
+  assert.ok(codes.every((c) => c === 0 || c === 2 || c === 3),
+    `其余只该是门禁(2)或冲突(3)：${codes.join(",")}`);
 });

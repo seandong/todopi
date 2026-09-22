@@ -74,3 +74,18 @@ export function decideClaim(input: ClaimInput): ClaimDecision {
       `Use --steal to take it over.`,
   };
 }
+
+/**
+ * spec §8：租约是否已过期。判据与 §7.3 的 stale 一致——`now − heartbeat_at > lease_hours`，
+ * 严格大于，恰好等于不算过期。
+ *
+ * 这是**独立于任务文件**的一条闸门。租约跨 worktree 共享而任务文件不共享，
+ * 所以本地文件说 open 不代表没人持有它（Codex 评审实测复现）。
+ */
+export function leaseExpired(
+  lease: { heartbeat_at: string }, nowMs: number, leaseHours: number,
+): boolean {
+  const at = Date.parse(lease.heartbeat_at);
+  if (Number.isNaN(at)) return true;         // 读不懂的心跳当作已过期，与读取端「坏的当没有」一致
+  return nowMs - at > leaseHours * 3_600_000;
+}

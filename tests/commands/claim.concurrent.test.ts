@@ -68,12 +68,13 @@ test("N 个进程同时 --steal 同一个任务，任务文件与租约仍然一
   const t = runAdd({ directory: d, title: "contested", actor: "seed@host" });
 
   const N = 12;
-  await new Promise<void>((resolve, reject) => {
+  const firstCode = await new Promise<number>((resolve, reject) => {
     const first = spawn(process.execPath, [CLI, "-C", d, "--as", "holder@host", "claim", t.id],
       { stdio: "ignore", env: { ...process.env, TODOPI_ACTOR: "" } });
     first.on("error", reject);
-    first.on("exit", () => resolve());
+    first.on("exit", (code) => resolve(code ?? -1));
   });
+  assert.equal(firstCode, 0, "前置的初次认领必须成功，否则后面测的不是接管");
 
   const codes = await Promise.all(Array.from({ length: N }, (_, i) =>
     new Promise<number>((resolve, reject) => {
@@ -84,8 +85,24 @@ test("N 个进程同时 --steal 同一个任务，任务文件与租约仍然一
     })));
 
   assert.ok(codes.every((c) => c === 0 || c === 3), `退出码只该是 0 或 3：${codes.join(",")}`);
+  // 「全都退出 3」会让这条用例空过——那种情况下根本没发生接管，
+  // 任务文件与租约自然一致（Codex 指出的弱断言）。
+  assert.ok(codes.some((c) => c === 0), `至少要有一次接管成功：${codes.join(",")}`);
+
   const ledger = discoverLedger(d);
   const raw = readFileSync(join(d, ".todopi", "tasks", `${t.id}.md`), "utf8");
   const assignee = raw.match(/^assignee: "(.*)"$/m)?.[1];
+  assert.ok(assignee !== undefined && assignee !== "holder@host", "最终归属该是某个 stealer");
   assert.equal(readLease(ledger, t.id)?.actor, assignee, "任务文件与租约必须是同一个人");
+
+  // 每一次成功的接管都要在 Log 里留痕
+  const steals = raw.split("\n").filter((l) => /steal=true/.test(l));
+  assert.equal(steals.length, codes.filter((c) => c === 0).length,
+    "成功的接管次数与 steal=true 的日志条数必须一致");
+  // 最后一条 steal 行的 **actor** 是最终归属；冒号后的 text 是它替换掉的那个人
+  // （spec §5.3.3：text = the replaced actor）。第一版把这两者写反了。
+  assert.match(steals.at(-1) ?? "", new RegExp(` ${assignee} claimed steal=true: `),
+    "最后一条 steal 的 actor 应当就是最终归属");
+  assert.doesNotMatch(steals.at(-1) ?? "", new RegExp(`steal=true: ${assignee}$`),
+    "被替换者不可能是自己");
 });

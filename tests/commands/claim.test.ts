@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
 import { runAdd } from "../../src/commands/add.ts";
 import { runClaim } from "../../src/commands/claim.ts";
 import { runDoctor } from "../../src/commands/doctor.ts";
+import { runLs } from "../../src/commands/ls.ts";
 import { renderClaim, renderClaimJson } from "../../src/output/render/claim.ts";
 import { discoverLedger } from "../../src/format/discover.ts";
 import { readLease, leaseDirFor } from "../../src/format/lease.ts";
@@ -202,4 +203,151 @@ test("带 external 的任务照常认领 —— 那个键原样保留", () => {
   runClaim({ directory: d, id: t.id, actor: ME });
   assert.match(read(d, t.id), /ENG-1/);
   assert.equal(runDoctor({ directory: d }).ok, true);
+});
+
+// ---- Codex 评审 F05 抓到的六个阻塞项，逐条钉住 ----
+
+test("[跨 worktree] 本地任务说 open，但共享租约是别人的活租约 → 拒绝，退出 3", () => {
+  // 租约跨 worktree 共享（.git/todopi/leases/），而每个 worktree 有自己的
+  // .todopi/tasks/。所以本地文件说 open 不代表没人持有它。
+  // 第一版以为「既有租约只有两种来源」——要接管的那个人，或崩溃留下的孤儿——
+  // 漏掉了这第三种，于是不带 --steal 就覆盖了别人的活租约。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "x", actor: OTHER });
+  runClaim({ directory: d, id: t.id, actor: OTHER });
+  const p = taskPath(d, t.id);
+  writeFileSync(p, readFileSync(p, "utf8")
+    .replace(/^status: "in_progress"$/m, 'status: "open"')
+    .replace(/^assignee: ".*"\n/m, ""));
+
+  assert.throws(() => runClaim({ directory: d, id: t.id, actor: ME }),
+    (e: unknown) => (e as { code: number }).code === EXIT.conflict);
+  assert.equal(lease(d, t.id)?.actor, OTHER, "别人的活租约不得被覆盖");
+});
+
+test("[跨 worktree] --steal 可以接管，且租约换人", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "x", actor: OTHER });
+  runClaim({ directory: d, id: t.id, actor: OTHER });
+  const p = taskPath(d, t.id);
+  writeFileSync(p, readFileSync(p, "utf8")
+    .replace(/^status: "in_progress"$/m, 'status: "open"')
+    .replace(/^assignee: ".*"\n/m, ""));
+
+  assert.doesNotThrow(() => runClaim({ directory: d, id: t.id, actor: ME, steal: true }));
+  assert.equal(lease(d, t.id)?.actor, ME);
+});
+
+test("[跨 worktree] 别人的租约已过期时无需 --steal", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "x", actor: OTHER });
+  runClaim({ directory: d, id: t.id, actor: OTHER });
+  const lp = join(leaseDirFor(discoverLedger(d)), `${t.id}.json`);
+  const held = JSON.parse(readFileSync(lp, "utf8")) as Record<string, string>;
+  writeFileSync(lp, JSON.stringify({ ...held, heartbeat_at: "2020-01-01T00:00:00Z" }));
+  const p = taskPath(d, t.id);
+  writeFileSync(p, readFileSync(p, "utf8")
+    .replace(/^status: "in_progress"$/m, 'status: "open"')
+    .replace(/^assignee: ".*"\n/m, ""));
+
+  assert.doesNotThrow(() => runClaim({ directory: d, id: t.id, actor: ME }));
+  assert.equal(lease(d, t.id)?.actor, ME);
+});
+
+test("[校验失败] 被拒绝的 claim 不得留下租约（spec §6.1）", () => {
+  // 第一版在校验之前就把租约写了：命令退出 1、任务文件不变，而新租约已落盘。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "x", actor: ME });
+  const p = taskPath(d, t.id);
+  writeFileSync(p, readFileSync(p, "utf8").replace(/^title: ".*"$/m, 'title: ""'));
+  const before = readFileSync(p, "utf8");
+
+  assert.throws(() => runClaim({ directory: d, id: t.id, actor: ME }));
+  assert.equal(existsSync(join(leaseDirFor(discoverLedger(d)), `${t.id}.json`)), false,
+    "校验失败的 claim 不得留下租约");
+  assert.equal(readFileSync(p, "utf8"), before, "任务文件也不得改动");
+});
+
+test("[无租约的刷新] 已是我的但本机没有租约 → 必须建出来，不能空报成功", () => {
+  // 新克隆、或运行时文件被清理后会出现这种状态。只报成功而什么都不做的话，
+  // 别人仍能立刻把它认领走，而我以为自己拿着它。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "x", actor: ME });
+  runClaim({ directory: d, id: t.id, actor: ME });
+  unlinkSync(join(leaseDirFor(discoverLedger(d)), `${t.id}.json`));
+
+  const r = runClaim({ directory: d, id: t.id, actor: ME });
+  assert.equal(r.refreshed, true);
+  assert.equal(lease(d, t.id)?.actor, ME, "租约必须被重建");
+});
+
+test("[心跳] 刷新确实推进了 heartbeat_at，不是原样不动", () => {
+  // 原来的断言用 >=，不刷新也能通过（Codex 指出）。这里改成严格推进：
+  // 先把心跳改到过去，再刷新，必须变新。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "x", actor: ME });
+  runClaim({ directory: d, id: t.id, actor: ME });
+  const lp = join(leaseDirFor(discoverLedger(d)), `${t.id}.json`);
+  const held = JSON.parse(readFileSync(lp, "utf8")) as Record<string, string>;
+  writeFileSync(lp, JSON.stringify({ ...held, heartbeat_at: "2020-01-01T00:00:00Z" }));
+
+  runClaim({ directory: d, id: t.id, actor: ME });
+  const after = lease(d, t.id);
+  assert.notEqual(after?.heartbeat_at, "2020-01-01T00:00:00Z", "心跳必须被推进");
+  assert.equal(after?.claimed_at, held["claimed_at"], "认领时刻不变");
+});
+
+test("[扩展字段] 对象数组、含换行的值、数字与布尔，认领后原样保留", () => {
+  // 第一版的发射器用 String(v) 强转：[{"k":"v"}] 变成 ["[object Object]"]，
+  // 含换行的值写成读不回来的文件。F05 开始改写既有任务后这是数据损坏。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "x", actor: ME });
+  const p = taskPath(d, t.id);
+  writeFileSync(p, readFileSync(p, "utf8").replace(/^status: "open"$/m,
+    'status: "open"\nx-custom: [{"k": "v"}]\nx-text: "line1\\nline2"\nx-count: 5\nx-flag: true'));
+
+  runClaim({ directory: d, id: t.id, actor: ME });
+  const after = readFileSync(p, "utf8");
+  assert.doesNotMatch(after, /object Object/, "对象不得被强转成字符串");
+  assert.match(after, /x-count: 5$/m, "数字不得变成字符串");
+  assert.match(after, /x-flag: true$/m, "布尔不得变成字符串");
+  assert.match(after, /line1\\nline2/, "换行要被正确转义");
+  assert.equal(runDoctor({ directory: d }).ok, true, "改写之后仍要通过 doctor");
+});
+
+test("[时钟] ls --ready 摆出来的任务，claim 一定认得 —— 含亚秒边界", () => {
+  // 第一版 claim 把 now 先截成秒再判断陈旧，ls 用毫秒。实测在 02:00:00.500
+  // 这种时刻两者给出相反结论：ready 队列摆出任务，claim 却退出 3。
+  // spec §6.1 写 reclaim 那一行的全部理由就是要避免这种自相矛盾。
+  //
+  // 构造方式：把 updated 设成「当前秒 − 整租期」。带 bug 时 claim 算出的差
+  // 恰好等于租期（不算过期），而 ls 多出当前毫秒数（算过期），必然分叉。
+  const d = repo();
+  const hours = discoverLedger(d).config.lease_hours;
+
+  // 等到毫秒数不为 0，否则这条用例测不到那个差别
+  let now = Date.now();
+  while (now % 1000 === 0) now = Date.now();
+
+  const t = runAdd({ directory: d, title: "boundary", actor: ME });
+  const updatedAt = new Date(Math.floor(now / 1000) * 1000 - hours * 3_600_000)
+    .toISOString().replace(/\.\d{3}Z$/, "Z");
+  const p = taskPath(d, t.id);
+  writeFileSync(p, readFileSync(p, "utf8")
+    .replace(/^status: "open"$/m, `status: "in_progress"\nassignee: "${OTHER}"`)
+    .replace(/^updated: ".*"$/m, `updated: ${JSON.stringify(updatedAt)}`));
+
+  const ready = runLs({ directory: d, ready: true }).tasks.some((x) => x.id === t.id);
+  if (!ready) return;                       // 不在 ready 队列里，这条用例不适用
+  assert.doesNotThrow(() => runClaim({ directory: d, id: t.id, actor: ME }),
+    "ready 队列摆出来的任务 claim 却拒绝 —— 两处的 stale 判断分叉了");
+});
+
+test("[时钟] 反过来也要成立：claim 认为不陈旧时，ready 也不该摆出来", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "fresh", actor: ME });
+  runClaim({ directory: d, id: t.id, actor: OTHER });      // 别人刚认领，租约新鲜
+  assert.equal(runLs({ directory: d, ready: true }).tasks.some((x) => x.id === t.id), false);
+  assert.throws(() => runClaim({ directory: d, id: t.id, actor: ME }),
+    (e: unknown) => (e as { code: number }).code === EXIT.conflict);
 });

@@ -80,7 +80,7 @@ export function createTask(
       // generateKeyBetween 对同一个 lastRank 是确定性的（实测），所以这里不缓存：
       // 重复调用返回同一个值，加一层 ??= 只是省一次计算而看起来像在防什么。
       nextRank: () => nextRank(lastRank),
-      now: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      now: nowStamp(),
     };
 
     const task = make(ctx);
@@ -130,6 +130,64 @@ function parseCandidate(relPath: string, id: string, text: string): TaskFile | s
   return { path: relPath, idFromFilename: id, frontmatter: parsed.data, body: env.body, raw: text };
 }
 
+/** 拿着账本的写锁跑一段。调用方需要「读 → 判断 → 可能写多个文件」落在一次持锁内时用它。 */
+export function withLedgerLock<T>(ledger: Ledger, fn: () => T): T {
+  return withLock(lockPathFor(ledger), fn);
+}
+
+/** 准备好的一次任务改写：candidate 已通过校验，commit() 才落盘。 */
+export type PreparedUpdate = { candidate: TaskFile; commit: () => void };
+
+/**
+ * 构造并**校验**一次任务改写，但不写任何东西。调用方拿到 `commit()` 自行决定何时落盘。
+ *
+ * 分成两步是 Codex 评审 F05 的结论：claim 要在写任务文件之前先写租约，
+ * 而「先写租约」不能发生在校验之前——spec §6.1 说被拒绝的迁移**什么都不改**，
+ * 而第一版里一个校验失败的 claim 已经把租约落盘了。
+ * 把「构造+校验」与「落盘」分开之后，顺序天然是：读 → 决策 → 构造并校验 → 写。
+ *
+ * **必须在持锁状态下调用**，且 `existing` 必须是锁内读到的那一份：
+ * 锁外读到的快照到拿到锁时可能已经变了。
+ */
+export function prepareUpdate(
+  ledger: Ledger,
+  existing: TaskFile[],
+  id: string,
+  next: { frontmatter: Record<string, unknown>; appendLog?: string },
+  validate: Validate,
+  now: string,
+): PreparedUpdate {
+  const target = existing.find((t) => t.idFromFilename === id);
+  if (target === undefined) {
+    throw new CliError(EXIT.usage, `No task ${id} in this ledger. Run "todopi ls" to see what is there.`);
+  }
+  if (target.parseError !== undefined) {
+    throw new CliError(EXIT.usage,
+      `Task ${id} cannot be read: ${target.parseError}. Run "todopi doctor" to see what is wrong with it.`);
+  }
+
+  const body = next.appendLog === undefined ? target.body : appendLogLine(target.body, next.appendLog);
+  const text = `---\n${emitFrontmatter({ ...next.frontmatter, updated: now })}---\n${body}`;
+
+  // **校验在写入之前**，与 createTask 同样的理由（F03 第二轮评审的结论）：
+  // 校验放在写之后，失败时磁盘上已经留下了损坏文件。
+  const relPath = join("tasks", `${id}.md`);
+  const candidate = parseCandidate(relPath, id, text);
+  if (typeof candidate === "string") {
+    throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${candidate}`);
+  }
+  const others = existing.filter((t) => t.idFromFilename !== id);
+  const rejected = validate(candidate, others);
+  if (rejected !== null) {
+    throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${rejected}`);
+  }
+
+  return {
+    candidate,
+    commit: () => writeFileAtomic(join(ledger.dir, "tasks", `${id}.md`), text),
+  };
+}
+
 /**
  * 读-改-写一个既有任务。整段在锁内完成，理由与 createTask 相同：
  * 两个并发的写者若各自读到同一份旧内容，后写的会无声覆盖先写的。
@@ -139,63 +197,36 @@ function parseCandidate(relPath: string, id: string, text: string): TaskFile | s
  * 则不需要这层约定。代价是调用方要把不改的键原样带回来——那正是 spec §5.2
  * 字段 11 要求的「保留你不认识的条目」，所以这个代价是它该付的。
  *
- * `updated` 由这一层统一刷新（spec §6.3：每次写入都要刷新，只动正文也要），
- * 调用方不必记得。
+ * `updated` 由这一层统一刷新（spec §6.3：每次写入都要刷新，只动正文也要）。
  *
  * 正文默认原样带回：只有 frontmatter 被重新发射。要追加 Log 行的调用方用
  * `appendLog` 返回值，由这一层按 §5.3.3 放到 `## Log` 小节末尾。
  *
- * `mutate` 返回 `null` 表示这次不改任务文件（原样返回读到的那份）。
- * 它存在的理由是让「读-判断-可能写」整段落在**同一次持锁**内：调用方
- * 在回调里拿到的是锁内新读的任务，据此做的判断不会基于过期快照，
- * 而判断结果可能是「什么都不用改」。
+ * 需要在同一次持锁内做更多事（比如同时写租约）的命令用
+ * `withLedgerLock` + `prepareUpdate`，不要用这个便捷入口。
  */
 export function updateTask(
   ledger: Ledger,
   id: string,
-  mutate: (t: TaskFile, now: string) => { frontmatter: Record<string, unknown>; appendLog?: string } | null,
+  mutate: (t: TaskFile, now: string) => { frontmatter: Record<string, unknown>; appendLog?: string },
   validate: Validate,
 ): TaskFile {
-  return withLock(lockPathFor(ledger), () => {
-    // 锁内重新读，**不接受调用方在锁外拿到的快照**：那份快照到我们拿到锁时
-    // 可能已经被别的进程改过了。
+  return withLedgerLock(ledger, () => {
     const existing = readTasks(ledger);
     const target = existing.find((t) => t.idFromFilename === id);
     if (target === undefined) {
       throw new CliError(EXIT.usage, `No task ${id} in this ledger. Run "todopi ls" to see what is there.`);
     }
-    if (target.parseError !== undefined) {
-      throw new CliError(EXIT.usage,
-        `Task ${id} cannot be read: ${target.parseError}. Run "todopi doctor" to see what is wrong with it.`);
-    }
-
-    const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-    const change = mutate(target, now);
-    // mutate 返回 null 表示「这次不改任务文件」。调用方仍然拿到了锁，
-    // 可以在回调里安全地读到最新状态并做别的事——claim 的「刷新心跳」
-    // 就是这种情形：它不是 spec §6.1 的迁移，不该改 status 也不该写 Log，
-    // 但判断「它确实已经是我的」必须在锁内做，否则判断依据是个过期快照。
-    if (change === null) return target;
-    const { frontmatter, appendLog } = change;
-    const body = appendLog === undefined ? target.body : appendLogLine(target.body, appendLog);
-    const text = `---\n${emitFrontmatter({ ...frontmatter, updated: now })}---\n${body}`;
-
-    // **校验在写入之前**，与 createTask 同样的理由（F03 第二轮评审的结论）：
-    // 校验放在写之后，失败时磁盘上已经留下了损坏文件。
-    const relPath = join("tasks", `${id}.md`);
-    const candidate = parseCandidate(relPath, id, text);
-    if (typeof candidate === "string") {
-      throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${candidate}`);
-    }
-    const others = existing.filter((t) => t.idFromFilename !== id);
-    const rejected = validate(candidate, others);
-    if (rejected !== null) {
-      throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${rejected}`);
-    }
-
-    writeFileAtomic(join(ledger.dir, "tasks", `${id}.md`), text);
-    return candidate;
+    const now = nowStamp();
+    const prepared = prepareUpdate(ledger, existing, id, mutate(target, now), validate, now);
+    prepared.commit();
+    return prepared.candidate;
   });
+}
+
+/** RFC 3339 UTC 秒级，与 spec §5.2 字段 12 的形状一致。 */
+export function nowStamp(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 /**

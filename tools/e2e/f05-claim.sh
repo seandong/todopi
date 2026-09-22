@@ -132,9 +132,56 @@ const fs=require("node:fs"),p=process.argv[1];
 fs.writeFileSync(p, fs.readFileSync(p,"utf8").replace(/^status: "open"$/m,
   "status: \"open\"\nexternal:\n  linear:\n    id: \"ENG-1\""));
 ' "$W/.todopi/tasks/$D.md"
-cli -C "$W" claim "$D" >/dev/null 2>&1
+if cli -C "$W" claim "$D" >/dev/null 2>&1; then
+  ok "带 external 的任务认领成功"
+else
+  fail "带 external 的任务认领失败（退出码非 0）"
+fi
+# 必须确认文件真的被重写过了（否则 grep 通过只是因为什么都没发生）
+grep -q '^status: "in_progress"$' "$W/.todopi/tasks/$D.md" && ok "文件确实被重写" || fail "文件没被重写，后面的断言没有意义"
 grep -q 'ENG-1' "$W/.todopi/tasks/$D.md" && ok "external 原样保留" || fail "external 丢了"
+grep -q 'object Object' "$W/.todopi/tasks/$D.md" && fail "扩展字段被强转成字符串" || ok "扩展字段没有被强转"
 cli -C "$W" doctor >/dev/null 2>&1 && ok "带 external 的任务认领后仍通过 doctor" || fail "doctor 不过"
+
+# 12b. 扩展字段的各种形状：对象数组、含换行的值、数字、布尔
+F=$(cli -C "$W" --json add "odd extensions" | jfield id)
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+fs.writeFileSync(p, fs.readFileSync(p,"utf8").replace(/^status: "open"$/m,
+  "status: \"open\"\nx-custom: [{\"k\": \"v\"}]\nx-text: \"line1\\nline2\"\nx-count: 5\nx-flag: true"));
+' "$W/.todopi/tasks/$F.md"
+if cli -C "$W" claim "$F" >/dev/null 2>&1; then ok "含怪值扩展字段的任务认领成功"; else fail "认领失败"; fi
+grep -q 'object Object' "$W/.todopi/tasks/$F.md" && fail "对象数组被强转" || ok "对象数组保留"
+grep -q '^x-count: 5$' "$W/.todopi/tasks/$F.md" && ok "数字仍是数字" || fail "数字被加了引号"
+grep -q '^x-flag: true$' "$W/.todopi/tasks/$F.md" && ok "布尔仍是布尔" || fail "布尔被加了引号"
+cli -C "$W" doctor >/dev/null 2>&1 && ok "怪值扩展字段认领后仍通过 doctor" || fail "doctor 不过"
+
+# 12c. 跨 worktree：本地任务说 open，但共享租约是别人的活租约
+G=$(cli -C "$W" --json add "worktree probe" | jfield id)
+cli -C "$W" --as holder@host claim "$G" >/dev/null 2>&1
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+fs.writeFileSync(p, fs.readFileSync(p,"utf8")
+  .replace(/^status: "in_progress"$/m, "status: \"open\"")
+  .replace(/^assignee: ".*"\n/m, ""));
+' "$W/.todopi/tasks/$G.md"
+cli -C "$W" --as newcomer@host claim "$G" >/dev/null 2>&1
+[ $? -eq 3 ] && ok "别的 worktree 的活租约挡住了认领（spec §8）" || fail "覆盖了别人的活租约"
+grep -q '"actor": "holder@host"' "$LEASES/$G.json" && ok "活租约没被覆盖" || fail "活租约被覆盖了"
+if cli -C "$W" --as newcomer@host claim "$G" --steal >/dev/null 2>&1; then
+  ok "--steal 可以接管跨 worktree 的活租约"
+else
+  fail "--steal 应当可以接管"
+fi
+
+# 12d. 校验失败的 claim 不得留下租约（spec §6.1）
+H=$(cli -C "$W" --json add "will fail validation" | jfield id)
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+fs.writeFileSync(p, fs.readFileSync(p,"utf8").replace(/^title: ".*"$/m, "title: \"\""));
+' "$W/.todopi/tasks/$H.md"
+cli -C "$W" claim "$H" >/dev/null 2>&1
+[ -f "$LEASES/$H.json" ] && fail "校验失败的 claim 留下了租约" || ok "校验失败的 claim 没留下租约"
 
 # 13. 并发：N 个进程同时认领，恰好一个成功
 E=$(cli -C "$W" --json add "contested" | jfield id)

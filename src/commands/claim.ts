@@ -1,13 +1,14 @@
 // src/commands/claim.ts
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
-import { updateTask } from "../format/write.ts";
+import { withLedgerLock, prepareUpdate, nowStamp } from "../format/write.ts";
 import {
-  createLease, writeLease, touchLease, readHeartbeats, type Lease,
+  createLease, writeLease, readLease, readHeartbeats, type Lease,
 } from "../format/lease.ts";
-import { decideClaim } from "../domain/claim.ts";
+import { decideClaim, leaseExpired } from "../domain/claim.ts";
 import { validateWrite } from "../domain/validate.ts";
 import type { StaleInput } from "../domain/derive.ts";
+import type { Ledger } from "../format/discover.ts";
 import { currentActor } from "./actor.ts";
 import { EXIT, CliError } from "../exit.ts";
 import { LockBusyError } from "../fs/lock.ts";
@@ -23,75 +24,97 @@ export type ClaimOptions = {
 export function runClaim(opts: ClaimOptions): ClaimReport {
   const ledger = discoverLedger(opts.directory);
   const actor = currentActor(ledger.root, opts.actor);
+  const steal = opts.steal === true;
 
-  // 存在性先在锁外查一次，只为把「打错 id」这种最常见的错误快速挡掉。
-  // 真正的判断在锁内重做——这一次读到的东西不作数。
-  if (!readTasks(ledger).some((t) => t.idFromFilename === opts.id)) {
-    throw new CliError(EXIT.usage, `No task ${opts.id} in this ledger. Run "todopi ls" to see what is there.`);
-  }
-
-  let report: ClaimReport | null = null;
-
-  // **整段「读 → 决策 → 写租约 → 写任务文件」落在同一次持锁内。**
+  // **整段「读 → 决策 → 构造并校验 → 写租约 → 写任务文件」落在同一次持锁内。**
   //
-  // 第一版把决策与租约写入放在锁外，只有任务文件的改写在锁内。多进程用例当场
-  // 抓到了后果：两个 --steal 交错时，先写租约的那个后写任务文件，收场是租约记
-  // 着 B 而任务文件记着 A——两个文件对「谁持有它」给出不同答案，而这正是租约
-  // 机制唯一要回答的问题。决策依据必须是锁内读到的那一份。
-  withLockConflictMapped(() => updateTask(ledger, opts.id, (task, now) => {
+  // 顺序里的两处讲究，都是评审换来的：
+  //   - 决策必须基于锁内读到的那一份。放在锁外时，两个 --steal 交错的结果是
+  //     租约记着 B 而任务文件记着 A——两个文件对「谁持有它」给出不同答案。
+  //   - 写租约必须在**校验之后**。放在校验前时，一个校验失败的 claim 已经把
+  //     租约落盘了，而 spec §6.1 说被拒绝的迁移什么都不改。
+  return withLockConflictMapped(() => withLedgerLock(ledger, () => {
+    const existing = readTasks(ledger);
+    const task = existing.find((t) => t.idFromFilename === opts.id);
+    if (task === undefined) {
+      throw new CliError(EXIT.usage, `No task ${opts.id} in this ledger. Run "todopi ls" to see what is there.`);
+    }
+
+    // 时钟用毫秒。把 now 先截成秒再判断，会让 claim 比 ls --ready 晚最多一秒
+    // 才认为一个任务陈旧——实测在 02:00:00.500 这种时刻两者给出相反结论，
+    // 于是 ready 队列摆出来的任务 claim 拒绝，恰恰是 spec §6.1 要避免的自相矛盾。
+    // 秒级截断只用于**序列化**（spec §5.2 字段 12 的时间戳形状）。
+    const nowMs = Date.now();
+    const now = nowStamp();
+
     const heartbeats = readHeartbeats(ledger);
     const stale: StaleInput = {
-      now: Date.parse(now),
+      now: nowMs,
       leaseHours: ledger.config.lease_hours,
       heartbeatAt: (id) => heartbeats.get(id) ?? null,
     };
-    const decision = decideClaim({ task, actor, steal: opts.steal === true, stale });
+
+    const decision = decideClaim({ task, actor, steal, stale });
     if (decision.kind === "refuse") throw new CliError(decision.code, decision.message);
 
     const title = String(task.frontmatter["title"] ?? "");
+    const held = readLease(ledger, opts.id);
 
-    // 刷新不是 spec §6.1 的迁移：不改 status/assignee，也不写 Log。
-    // 但心跳要刷——那正是 FR-C3 说的「持有者的每次写入」。
-    if (decision.kind === "refresh") {
-      touchLease(ledger, opts.id, now);
-      report = { id: opts.id, title, status: "in_progress", assignee: actor, stolen: false, refreshed: true };
-      return null;
+    // spec §8 的租约闸门，**独立于任务文件的状态**。
+    //
+    // 租约是跨 worktree 共享的（.git/todopi/leases/），而每个 worktree 有自己的
+    // .todopi/tasks/。所以本地任务文件说 open，不代表没人持有它：另一个 worktree
+    // 里那份文件可能已经是 in_progress 而对应的租约就在共享目录里（Codex 评审
+    // 实测复现）。第一版以为「既有租约只有两种来源」——我们要接管的那个人，
+    // 或崩溃留下的孤儿——漏掉了这第三种，结果是不带 --steal 就覆盖了别人的活租约。
+    //
+    // spec §8 本来就写了这条规则：租约存在且未过期时，除非 --steal，否则拒绝。
+    if (held !== null && held.actor !== actor && !steal
+        && !leaseExpired(held, nowMs, ledger.config.lease_hours)) {
+      throw new CliError(EXIT.conflict,
+        `Task ${opts.id} has a live lease held by ${held.actor} (possibly in another worktree). ` +
+        "Use --steal to take it over.");
     }
 
-    // **先租约、后任务文件。** 两者没有跨文件原子性，崩在中间总要留下点什么：
-    // 这个顺序留下的是「有租约但任务仍 open」，而挂在 open 任务上的租约没人读
-    // （isStale 只对 in_progress 查心跳），doctor --fix 会清掉它，重跑 claim 即可。
-    // 反过来的顺序留下的是「任务已 in_progress 但没租约」——提交进仓库的记录
-    // 跑到了本机事实前面，而 committed 的东西是要被别人当真的。
-    const lease: Lease = { actor, claimed_at: now, heartbeat_at: now };
-    // 先按 spec §8 用 O_EXCL 创建。失败说明已经有一份租约在：我们持着锁，
-    // 而 decideClaim 已经基于committed 的事实批准了这次认领，所以那份租约
-    // 要么属于我们决定接管的人，要么是上一次崩在两次写入之间留下的孤儿。
-    // 两种都该被覆盖——否则那个孤儿会让「重跑 claim 即可恢复」这句话不成立。
-    if (!createLease(ledger, opts.id, lease)) writeLease(ledger, opts.id, lease);
+    const lease: Lease = {
+      actor,
+      // 刷新自己已持有的租约时保留原来的认领时刻；接管则是一次新的认领。
+      claimed_at: decision.kind === "refresh" && held !== null ? held.claimed_at : now,
+      heartbeat_at: now,
+    };
+
+    // 刷新不是 spec §6.1 的迁移：不改 status/assignee，也不写 Log。
+    if (decision.kind === "refresh") {
+      // 但租约不在时必须**建**一个，不能空操作了事。claim 是请求认领的入口：
+      // 一个「已经是我的但本机没有租约」的任务（新克隆、或运行时文件被清过），
+      // 若只报成功而什么都不做，别人仍能立刻把它认领走，而我以为自己拿着它。
+      writeLease(ledger, opts.id, lease);
+      return { id: opts.id, title, status: "in_progress", assignee: actor, stolen: false, refreshed: true };
+    }
 
     const replaced = decision.kind === "reclaim" ? decision.replaced : undefined;
-    report = {
+    // 先构造并校验，此时还没有任何副作用（阻塞项 3）
+    const prepared = prepareUpdate(ledger, existing, opts.id, {
+      frontmatter: { ...task.frontmatter, status: "in_progress", assignee: actor },
+      appendLog: replaced === undefined
+        ? `${now} ${actor} claimed`
+        : `${now} ${actor} claimed steal=true: ${replaced}`,
+    }, validateWrite, now);
+
+    // 闸门全过了才动磁盘。**先租约、后任务文件**：崩在中间留下的是「有租约但
+    // 任务仍 open」，而那份孤儿租约会被下一次 claim 按 §8 的规则处理（过期则接管，
+    // 未过期则提示 --steal）。反过来的顺序留下的是 committed 的记录跑到本机事实
+    // 前面，而 committed 的东西是要被别人当真的。
+    if (!createLease(ledger, opts.id, lease)) writeLease(ledger, opts.id, lease);
+    prepared.commit();
+
+    return {
       id: opts.id, title, status: "in_progress", assignee: actor,
       ...(replaced === undefined ? {} : { replaced }),
       stolen: replaced !== undefined,
       refreshed: false,
     };
-    return {
-      frontmatter: { ...task.frontmatter, status: "in_progress", assignee: actor },
-      appendLog: replaced === undefined
-        ? `${now} ${actor} claimed`
-        : `${now} ${actor} claimed steal=true: ${replaced}`,
-    };
-  }, validateWrite));
-
-  if (report === null) throw new Error("claim finished without producing a report");
-  return report;
-}
-
-/** RFC 3339 UTC 秒级，与 spec §5.2 字段 12 的形状一致。 */
-export function nowStamp(): string {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  }));
 }
 
 /** 把 fs/ 的中性 LockBusyError 映射为 FR-Q2 的退出码 3。 */
@@ -103,3 +126,5 @@ export function withLockConflictMapped<T>(fn: () => T): T {
     throw err;
   }
 }
+
+export type { Ledger };
