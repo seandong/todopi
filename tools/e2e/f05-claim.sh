@@ -182,6 +182,32 @@ fs.writeFileSync(p, fs.readFileSync(p,"utf8").replace(/^title: ".*"$/m, "title: 
 ' "$W/.todopi/tasks/$H.md"
 cli -C "$W" claim "$H" >/dev/null 2>&1
 [ -f "$LEASES/$H.json" ] && fail "校验失败的 claim 留下了租约" || ok "校验失败的 claim 没留下租约"
+# 这个任务是故意造坏的，用完就得清掉——留在账本里会让后面每一次 doctor 都红
+rm -f "$W/.todopi/tasks/$H.md"
+
+# 12e. 键名不安全的扩展字段：# 开头会变成注释、含 ": " 会让文件读不回来
+I=$(cli -C "$W" --json add "odd keys" | jfield id)
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+fs.writeFileSync(p, fs.readFileSync(p,"utf8").replace(/^status: "open"$/m,
+  "status: \"open\"\n\"#meta\": \"keep\"\n\"x-a: b\": \"keep\""));
+' "$W/.todopi/tasks/$I.md"
+if cli -C "$W" claim "$I" >/dev/null 2>&1; then ok "键名不安全的任务认领成功"; else fail "认领失败"; fi
+n=$(grep -c 'keep' "$W/.todopi/tasks/$I.md")
+[ "$n" -eq 2 ] && ok "两个怪键都保留了" || fail "怪键丢了，只剩 $n 个"
+cli -C "$W" doctor >/dev/null 2>&1 && ok "怪键任务认领后仍通过 doctor" || fail "doctor 不过"
+
+# 12f. release 也要看共享租约：本树 assignee 还记着我，但租约已是别人的
+J=$(cli -C "$W" --json add "release gate" | jfield id)
+cli -C "$W" --as owner@host claim "$J" >/dev/null 2>&1
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+const now=new Date().toISOString().replace(/\.\d{3}Z$/,"Z");
+fs.writeFileSync(p, JSON.stringify({actor:"taker@host",claimed_at:now,heartbeat_at:now},null,2)+"\n");
+' "$LEASES/$J.json"
+cli -C "$W" --as owner@host release "$J" >/dev/null 2>&1
+[ $? -eq 3 ] && ok "共享租约已换人时 release 被拒（退出 3）" || fail "旧持有者删掉了别人的活租约"
+grep -q '"actor": "taker@host"' "$LEASES/$J.json" && ok "别人的活租约没被删" || fail "活租约被删了"
 
 # 13. 并发：N 个进程同时认领，恰好一个成功
 E=$(cli -C "$W" --json add "contested" | jfield id)

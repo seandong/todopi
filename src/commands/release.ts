@@ -2,7 +2,7 @@
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { withLedgerLock, prepareUpdate, nowStamp } from "../format/write.ts";
-import { deleteLease } from "../format/lease.ts";
+import { deleteLease, readLease } from "../format/lease.ts";
 import { statusOf } from "../domain/derive.ts";
 import { validateWrite } from "../domain/validate.ts";
 import { currentActor } from "./actor.ts";
@@ -50,6 +50,23 @@ export function runRelease(opts: ReleaseOptions): ReleaseReport {
       throw new CliError(EXIT.conflict,
         `Task ${opts.id} is held by ${assignee}, not by you (${actor}). ` +
         "Use `todopi claim --steal` to take it over instead.");
+    }
+
+    // **共享租约也要查，不能只看本树的 assignee。**
+    //
+    // 租约跨 worktree 共享而每个 worktree 有自己的 .todopi/tasks/。所以「本树
+    // 文件还记着我」完全可能是过期的视图：另一个 worktree 里 B 已经接管了它。
+    // 只查本树 assignee 的话，A 的 release 会退出 0 并**删掉 B 的活租约**，
+    // 而 B 那边的任务文件仍是 in_progress——§8 的跨 worktree 互斥就此破掉
+    // （Codex 第二轮评审用真实双 worktree 复现）。
+    //
+    // 这条边界在 claim 上已经立起来了，release 当时被漏掉了。
+    const held = readLease(ledger, opts.id);
+    if (held !== null && held.actor !== actor) {
+      throw new CliError(EXIT.conflict,
+        `Task ${opts.id} has a live lease held by ${held.actor} (possibly in another worktree), ` +
+        `not by you (${actor}). Releasing it would drop their lease. ` +
+        "Use `todopi claim --steal` if you mean to take it over.");
     }
 
     const title = String(task.frontmatter["title"] ?? "");

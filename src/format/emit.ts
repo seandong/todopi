@@ -48,7 +48,7 @@ export function emitFrontmatter(fm: Record<string, unknown>): string {
 
 function emitOne(lines: string[], key: string, value: unknown): void {
   if (value === undefined) return;
-  const c = canonical(value);
+  const c = plainKey(key) ? canonical(value) : null;
   if (c !== null) {
     lines.push(`${key}: ${c}`);
     return;
@@ -61,6 +61,21 @@ function emitOne(lines: string[], key: string, value: unknown): void {
   // 的条目」（§5.2 字段 11）。第一版用 String(v) 强转，实测把 [{"k":"v"}] 写成
   // ["[object Object]"]、把含换行的值写成读不回来的文件——是数据损坏。
   lines.push(yamlEntry(key, value).trimEnd());
+}
+
+/**
+ * 键能不能直接拼在 `key: value` 左边。
+ *
+ * **值安全不等于整个键值对安全**——这是 Codex 第二轮评审抓到的：`"#meta"` 被
+ * 拼成 `#meta: "keep"`，`#` 开启注释，于是那个字段**静默消失**而 doctor 照样
+ * 通过；`"x-a: b"` 拼成 `x-a: b: "keep"`，文件直接读不回来。
+ *
+ * 判据故意保守：字母或下划线开头，其后只有字母、数字、下划线、点、连字符。
+ * spec §5.2 的十二个字段与常见的扩展键（`x-custom`、`external`）都在里面，
+ * 其余一律交给 YAML——它会按需要给键加引号。
+ */
+function plainKey(key: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(key);
 }
 
 /**
@@ -96,6 +111,10 @@ function quotable(s: string): boolean {
 function yamlEntry(key: string, value: unknown): string {
   const doc = new YAML.Document({ [key]: value });
   YAML.visit(doc, { Seq(_key, node) { node.flow = true; } });
+  // defaultKeyType: "PLAIN" 是**偏好**不是强制：yaml 自己会判断一个键能不能 plain，
+  // 不能就加引号（实测 "#meta" / "x-a: b" / "- dash" / "" 都被正确引起来）。
+  // 所以安全的键保持 plain（与 spec 的 external fixture 一致），
+  // 不安全的键由它加引号，两头都对。
   return doc.toString({ defaultStringType: "QUOTE_DOUBLE", defaultKeyType: "PLAIN", lineWidth: 0 });
 }
 

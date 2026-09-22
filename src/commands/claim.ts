@@ -101,10 +101,19 @@ export function runClaim(opts: ClaimOptions): ClaimReport {
         : `${now} ${actor} claimed steal=true: ${replaced}`,
     }, validateWrite, now);
 
-    // 闸门全过了才动磁盘。**先租约、后任务文件**：崩在中间留下的是「有租约但
-    // 任务仍 open」，而那份孤儿租约会被下一次 claim 按 §8 的规则处理（过期则接管，
-    // 未过期则提示 --steal）。反过来的顺序留下的是 committed 的记录跑到本机事实
-    // 前面，而 committed 的东西是要被别人当真的。
+    // 闸门全过了才动磁盘。**先租约、后任务文件。**
+    //
+    // 崩在两次写入之间留下的残局分两种，不能一概而论（Codex 第二轮评审指出
+    // 我原来的注释把它们混成了一句「任务仍 open」）：
+    //   - **初次认领中断**：租约已建，任务仍 `open`。同一个 actor 重跑 claim
+    //     直接成功；换个 actor 会拿到「租约被 X 持有，用 --steal」的提示。
+    //   - **接管中断**：租约已记新人，任务仍记旧人。下一次 claim 按 §8 的租约
+    //     闸门处理——新人重跑是刷新，旧人重跑会被自己的旧 assignee 挡住并被
+    //     提示 --steal。
+    // 两种都能靠重跑或 `--steal` 脱困，不必等 `doctor --fix`（F13）。
+    //
+    // 反过来的顺序留下的是 committed 的记录跑到本机事实前面，
+    // 而 committed 的东西是要被别人当真的。
     if (!createLease(ledger, opts.id, lease)) writeLease(ledger, opts.id, lease);
     prepared.commit();
 
