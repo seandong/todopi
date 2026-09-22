@@ -92,7 +92,14 @@ export function runLs(opts: LsOptions): LsReport {
     invalid.push(t.idFromFilename);
     return false;
   });
-  const index = indexTasks(tasks);
+  // **图建在磁盘上全部的任务之上，不是建在「我们打算显示的」之上。**
+  // 一个字段坏掉的任务仍然是它父任务的子任务、仍然挡着依赖它的任务。
+  // 只用可显示的任务建图，会让「唯一的子任务被挡下」的父任务从容器退化成
+  // 叶子，进而错误地进入 ready 队列——排除一个任务是有派生后果的
+  // （Codex 第三轮评审指出，随后被用例复现）。
+  // 连解析失败的也进图：它们没有 parent / blocked_by，只留下一个 byId 条目，
+  // 状态为空即「未关闭」，与悬空引用取同样保守的解读。
+  const index = indexTasks(read);
 
   const heartbeats = readHeartbeats(ledger);
   const stale: StaleInput = {

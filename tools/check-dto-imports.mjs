@@ -9,39 +9,75 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = "src/output/dto";
+const EXT = [".ts", ".mts", ".cts"];
 
-/** 递归收集：子目录里的值导入同样是违规，只扫直属文件抓不到（实测漏检）。 */
-function tsFiles(dir) {
+/** 递归收集：子目录里的值导入同样是违规，只扫直属文件抓不到。 */
+function sourceFiles(dir) {
   const out = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
-    if (e.isDirectory()) out.push(...tsFiles(p));
-    else if (e.name.endsWith(".ts")) out.push(p);
+    if (e.isDirectory()) out.push(...sourceFiles(p));
+    else if (EXT.some((x) => e.name.endsWith(x))) out.push(p);
   }
   return out;
 }
 
-for (const file of tsFiles(root)) {
+/**
+ * 把注释挖空但保留每个字符的位置（行号因此不变）。
+ *
+ * 必须同时跟踪字符串状态：先前的实现直接正则删注释，于是字符串里的 `/*`
+ * 会让它一路吞到下一个 `*​/`，把中间真正的 import 一起吃掉——那是**漏检**，
+ * 比误报危险。这个扫描器同时认单双引号与模板串（含 ${} 嵌套的粗略处理）。
+ */
+function blankComments(src) {
+  const out = Array.from(src);
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const c = src[i], d = src[i + 1];
+    if (c === "/" && d === "/") {
+      while (i < n && src[i] !== "\n") { out[i] = " "; i++; }
+    } else if (c === "/" && d === "*") {
+      while (i < n && !(src[i] === "*" && src[i + 1] === "/")) {
+        if (src[i] !== "\n") out[i] = " ";
+        i++;
+      }
+      if (i < n) { out[i] = " "; out[i + 1] = " "; i += 2; }
+    } else if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      i++;
+      while (i < n && src[i] !== quote) {
+        if (src[i] === "\\") i++;
+        i++;
+      }
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return out.join("");
+}
+
+const Q = "[\"'`]";
+for (const file of sourceFiles(root)) {
   const src = readFileSync(file, "utf8");
-  // 把注释挖空但保留换行：注释里出现 "import" 会让下面的匹配误判，
-  // 而直接删掉注释会让行号对不上。
-  const code = src
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
-  for (const m of code.matchAll(/^[ \t]*(?:import|export)\s+(type\s+)?([^;]*?)\bfrom\s*["']([^"']+)["']/gm)) {
-    const [, typeKw, clause, from] = m;
+  const code = blankComments(src);
+  const lineOf = (idx) => code.slice(0, idx).split("\n").length;
+
+  // 不锚定行首：同一行上的第二条 import 也要抓到。
+  // 覆盖 `import ... from`、`export ... from`（re-export）。
+  for (const m of code.matchAll(new RegExp(`\\b(import|export)\\s+(type\\s+)?([^;]*?)\\bfrom\\s*${Q}([^"'\`]+)${Q}`, "g"))) {
+    const [, , typeKw, clause, from] = m;
     if (!from.includes("domain/")) continue;
     if (typeKw !== undefined) continue;                    // import type { ... }
-    // 内联形式 import { type A, type B } 同样是纯类型导入
-    const names = clause.replace(/[{}]/g, "").split(",").map((s) => s.trim()).filter(Boolean);
-    const values = names.filter((n) => !n.startsWith("type "));
-    if (values.length === 0) continue;
-    const line = code.slice(0, m.index).split("\n").length;
-    console.log(`${file}:${line}: value import of ${values.join(", ")} from ${from}`);
+    const names = clause.replace(/[{}]/g, "").split(",").map((x) => x.trim()).filter(Boolean);
+    const values = names.filter((x) => !x.startsWith("type "));
+    if (values.length === 0) continue;                     // 内联的 { type A, type B }
+    console.log(`${file}:${lineOf(m.index)}: value import of ${values.join(", ")} from ${from}`);
   }
-  // 动态 import() 无法静态判定只取类型，一律视为值导入
-  for (const m of code.matchAll(/\bimport\s*\(\s*["']([^"']*domain\/[^"']*)["']/g)) {
-    const line = code.slice(0, m.index).split("\n").length;
-    console.log(`${file}:${line}: dynamic import of ${m[1]}`);
+
+  // 动态 import() 无法静态判定只取类型，一律视为值导入。模板串说明符同样算。
+  for (const m of code.matchAll(new RegExp(`\\bimport\\s*\\(\\s*${Q}([^"'\`]*domain\\/[^"'\`]*)${Q}`, "g"))) {
+    console.log(`${file}:${lineOf(m.index)}: dynamic import of ${m[1]}`);
   }
 }

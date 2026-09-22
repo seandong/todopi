@@ -48,11 +48,16 @@ export function validateFile(t: TaskFile): Finding[] {
 
   // 不变量 2 —— resolution present iff closed
   const resolution = fm["resolution"];
+  // 字段本身的类型与取值先查，**与 status 无关**。嵌在 closed 分支里的话，
+  // `open` + `resolution: 123` 只会报出组合问题（invariant-2），而那条是
+  // ls 容忍的，于是这个非法值一路通过、在读取侧被静默丢掉（Codex 第三轮评审）。
+  if (resolution !== undefined
+      && (typeof resolution !== "string" || !(RESOLUTIONS as readonly string[]).includes(resolution))) {
+    at("field", `resolution must be one of ${RESOLUTIONS.join(" / ")}; found ${JSON.stringify(resolution)}`);
+  }
+  // 再查它与 status 的搭配（不变量 2）
   if (status === "closed") {
     if (resolution === undefined) at("invariant-2", "status is closed but resolution is missing");
-    else if (typeof resolution !== "string" || !(RESOLUTIONS as readonly string[]).includes(resolution)) {
-      at("field", `resolution must be one of ${RESOLUTIONS.join(" / ")}; found ${JSON.stringify(resolution)}`);
-    }
   } else if (resolution !== undefined) {
     at("invariant-2", `resolution may only appear when status is closed; status is ${JSON.stringify(status)}`);
   }
@@ -127,13 +132,15 @@ export function validateFile(t: TaskFile): Finding[] {
   if (blockedBy !== undefined) {
     if (!Array.isArray(blockedBy)) at("field", "blocked_by must be a list");
     else {
-      const seenRefs = new Set<string>();
+      // 不查重复：spec §5.2 字段 7 只要求「引用存在的任务、不含自身、无环」，
+      // 明文写「no duplicates」的是 labels（字段 10），不是 blocked_by。
+      // 重复项语义上也无害——blocked(t) 只看有没有未关闭的。照着 labels
+      // 加一条规格没有的约束，会让完全合规的文件被我们判非法（实测
+      // `add --blocked-by A A` 因此从退出 0 变成退出 1）。
       for (const b of blockedBy) {
         if (typeof b !== "string" || !ID_RE.test(b)) {
           at("field", `blocked_by entry ${JSON.stringify(b)} does not match the spec §4 form <prefix>-<six base36 chars>`);
-        } else if (seenRefs.has(b)) {
-          at("field", `blocked_by entry ${JSON.stringify(b)} is duplicated`);
-        } else seenRefs.add(b);
+        }
       }
     }
   }

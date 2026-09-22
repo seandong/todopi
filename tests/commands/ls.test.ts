@@ -291,3 +291,58 @@ test("actor 语法非法的任务也被挡下 —— 那是字段问题，不是
   const r = runLs({ directory: d });
   assert.deepEqual(r.invalid, [bad.id], "invariant-8 查的是 actor 语法，属于字段层");
 });
+
+test("重复的 blocked_by 是**合法**的 —— spec 只对 labels 明文禁止重复", () => {
+  // spec §5.2 字段 7 只要求「引用存在的任务、不含自身、无环」；写「no duplicates」
+  // 的是字段 10 labels。照着 labels 抄一条规格没有的约束，会让完全合规的文件
+  // 被我们判非法，并且（因为名单反着列）直接从 ls 消失（Codex 第三轮评审）。
+  const d = repo();
+  const blocker = runAdd({ directory: d, title: "blocker" });
+  const dup = runAdd({ directory: d, title: "dup", blockedBy: [blocker.id, blocker.id] });
+  const r = runLs({ directory: d });
+  assert.deepEqual(r.invalid, [], "重复引用不该被判非法");
+  assert.ok(ids(r).includes(dup.id), "也不该从列表里消失");
+});
+
+test("add --blocked-by 同一个 id 两次仍然成功 —— 这是已发布的行为", () => {
+  const d = repo();
+  const a = runAdd({ directory: d, title: "a" });
+  assert.doesNotThrow(() => runAdd({ directory: d, title: "dup", blockedBy: [a.id, a.id] }));
+});
+
+test("容器不会因为子任务被挡下而退化成 ready", () => {
+  // 排除一个任务会改变图：父任务若只有这一个子任务，就从容器变成叶子，
+  // 而叶子是可以 ready 的。所以「挡下并报告」这个动作本身有派生后果，
+  // 挡错了不只是少显示一条（Codex 第三轮评审指出的连带影响）。
+  const d = repo();
+  const parent = runAdd({ directory: d, title: "container" });
+  const child = runAdd({ directory: d, title: "child", parent: parent.id });
+  patch(d, child.id, (l) => (l.startsWith("status:") ? 'status: "open"\nblocked_by: [123]' : l));
+  const r = runLs({ directory: d });
+  assert.deepEqual(r.invalid, [child.id]);
+  const p = r.tasks.find((t) => t.id === parent.id);
+  assert.equal(p?.ready, false, "唯一的子任务被挡下了，父任务仍不该进 ready 队列");
+});
+
+test("字段值非法的 resolution 被挡下，与 status 无关", () => {
+  // resolution 的类型检查原先嵌在 closed 分支里，于是 open + resolution: 123
+  // 只报出组合问题（invariant-2，ls 容忍），非法值一路通过后被静默丢掉。
+  const d = repo();
+  for (const [name, line] of [
+    ["open 带非法 resolution", 'status: "open"\nresolution: 123'],
+    ["closed 带非法 resolution", 'status: "closed"\nresolution: 123'],
+  ] as const) {
+    const t = runAdd({ directory: d, title: name });
+    patch(d, t.id, (l) => (l.startsWith("status:") ? line : l));
+    assert.ok(runLs({ directory: d, all: true }).invalid.includes(t.id), name);
+  }
+});
+
+test("open 带**合法**的 resolution 仍被容忍 —— 那是组合问题，归 doctor", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "open with done" });
+  patch(d, t.id, (l) => (l.startsWith("status:") ? 'status: "open"\nresolution: "done"' : l));
+  const r = runLs({ directory: d });
+  assert.deepEqual(r.invalid, [], "字段值合法、只是组合非法");
+  assert.ok(ids(r).includes(t.id));
+});
