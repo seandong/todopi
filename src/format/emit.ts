@@ -1,4 +1,5 @@
 // src/format/emit.ts
+import YAML from "yaml";
 import { generateKeyBetween } from "fractional-indexing";
 
 /** base36，与 spec §5.2 的 rank 正则 ^[0-9a-z]{1,32}$ 对齐。 */
@@ -47,10 +48,15 @@ export function emitFrontmatter(fm: Record<string, unknown>): string {
       return;
     }
     if (value !== null && typeof value === "object") {
-      // external 这类嵌套映射超出规范形态，本发射器不产生它们。
-      // 保留它们是 F10 edit 的事（读到什么写回什么），那时走完整的 YAML 发射。
-      // 现在抛错比悄悄写出半个结构好。
-      throw new Error(`emitFrontmatter cannot emit a nested value for "${key}"`);
+      // 嵌套映射（spec §5.2 字段 11 external）超出规范形态的表达力：
+      // §5.1 的规范形态是「每个标量都加引号」的一层结构，scan.ts 的快路径
+      // 认的就是它。**只有这一个键**交给 yaml 发射，其余键照旧走规范形态——
+      // 整份都走 yaml 会让 2000 个任务的解析从 16ms 退回 120ms（D006 实测）。
+      //
+      // 原先这里直接抛错，注释写着「保留它们是 F10 edit 的事」。那个推迟到
+      // F05 不成立：claim 要改写既有文件，而任何带 external 的任务都会撞上它。
+      lines.push(YAML.stringify({ [key]: value }, { defaultStringType: "QUOTE_DOUBLE" }).trimEnd());
+      return;
     }
     lines.push(`${key}: ${quote(String(value))}`);
   };

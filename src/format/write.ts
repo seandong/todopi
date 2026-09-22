@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { withLock } from "../fs/lock.ts";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { readTasks } from "./read.ts";
-import { emitTask, nextRank, type NewTask } from "./emit.ts";
+import { emitTask, emitFrontmatter, nextRank, type NewTask } from "./emit.ts";
 import { newIdBody, makeId } from "./id.ts";
 import { leasePaths } from "./lease.ts";
 import { splitEnvelope } from "./envelope.ts";
@@ -128,4 +128,88 @@ function parseCandidate(relPath: string, id: string, text: string): TaskFile | s
   const parsed = parseFrontmatter(env.head);
   if (!parsed.ok) return parsed.error;
   return { path: relPath, idFromFilename: id, frontmatter: parsed.data, body: env.body, raw: text };
+}
+
+/**
+ * 读-改-写一个既有任务。整段在锁内完成，理由与 createTask 相同：
+ * 两个并发的写者若各自读到同一份旧内容，后写的会无声覆盖先写的。
+ *
+ * `mutate` 返回**完整的新 frontmatter**，不是一个补丁。补丁语义需要定义
+ * 「怎么删一个键」，而 `undefined` 与「键不存在」在这里不是一回事；返回全量
+ * 则不需要这层约定。代价是调用方要把不改的键原样带回来——那正是 spec §5.2
+ * 字段 11 要求的「保留你不认识的条目」，所以这个代价是它该付的。
+ *
+ * `updated` 由这一层统一刷新（spec §6.3：每次写入都要刷新，只动正文也要），
+ * 调用方不必记得。
+ *
+ * 正文默认原样带回：只有 frontmatter 被重新发射。要追加 Log 行的调用方用
+ * `appendLog` 返回值，由这一层按 §5.3.3 放到 `## Log` 小节末尾。
+ */
+export function updateTask(
+  ledger: Ledger,
+  id: string,
+  mutate: (t: TaskFile, now: string) => { frontmatter: Record<string, unknown>; appendLog?: string },
+  validate: Validate,
+): TaskFile {
+  return withLock(lockPathFor(ledger), () => {
+    // 锁内重新读，**不接受调用方在锁外拿到的快照**：那份快照到我们拿到锁时
+    // 可能已经被别的进程改过了。
+    const existing = readTasks(ledger);
+    const target = existing.find((t) => t.idFromFilename === id);
+    if (target === undefined) {
+      throw new CliError(EXIT.usage, `No task ${id} in this ledger. Run "todopi ls" to see what is there.`);
+    }
+    if (target.parseError !== undefined) {
+      throw new CliError(EXIT.usage,
+        `Task ${id} cannot be read: ${target.parseError}. Run "todopi doctor" to see what is wrong with it.`);
+    }
+
+    const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+    const { frontmatter, appendLog } = mutate(target, now);
+    const body = appendLog === undefined ? target.body : appendLogLine(target.body, appendLog);
+    const text = `---\n${emitFrontmatter({ ...frontmatter, updated: now })}---\n${body}`;
+
+    // **校验在写入之前**，与 createTask 同样的理由（F03 第二轮评审的结论）：
+    // 校验放在写之后，失败时磁盘上已经留下了损坏文件。
+    const relPath = join("tasks", `${id}.md`);
+    const candidate = parseCandidate(relPath, id, text);
+    if (typeof candidate === "string") {
+      throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${candidate}`);
+    }
+    const others = existing.filter((t) => t.idFromFilename !== id);
+    const rejected = validate(candidate, others);
+    if (rejected !== null) {
+      throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${rejected}`);
+    }
+
+    writeFileAtomic(join(ledger.dir, "tasks", `${id}.md`), text);
+    return candidate;
+  });
+}
+
+/**
+ * 按 spec §5.3.3 把一行追加到 `## Log` 小节末尾（最新的在最后）。
+ *
+ * 调用方给的是 `<ts> <actor> <verb>...`，**不带 `- ` 前缀**——与 emitTask 的
+ * `log: string[]` 同一个约定，那边也是由发射器补前缀的。两处约定不一致的话，
+ * 写出来的行会缺前缀而不再是合法的列表项（第一版就是这么错的）。
+ * 没有该小节就建一个——`add` 总会写出它，但手写的文件不一定有。
+ *
+ * 续行（缩进两格）属于前一项，所以「末尾」是整个小节的末尾，
+ * 不是最后一个 `- ` 行的后面。
+ */
+function appendLogLine(body: string, line: string): string {
+  const lines = body.split("\n");
+  const start = lines.findIndex((l) => l.trim() === "## Log");
+  const item = `- ${line}`;
+  if (start < 0) {
+    return `${body.replace(/\s*$/, "")}\n\n## Log\n\n${item}\n`;
+  }
+  let end = start + 1;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (lines[i]!.startsWith("## ")) break;
+    if (lines[i]!.trim() !== "") end = i + 1;
+  }
+  lines.splice(end, 0, item);
+  return lines.join("\n");
 }

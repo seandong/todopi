@@ -4,6 +4,8 @@ import { emitFrontmatter, emitTask, nextRank } from "../../src/format/emit.ts";
 import { splitEnvelope } from "../../src/format/envelope.ts";
 import { parseFrontmatter } from "../../src/format/frontmatter.ts";
 import { scanCanonical } from "../../src/format/scan.ts";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const roundTrip = (fm: Record<string, unknown>) => {
   const text = emitFrontmatter(fm);
@@ -98,9 +100,53 @@ test("nextRank 追加到末尾且字典序单调", () => {
   for (const k of keys) assert.match(k, /^[0-9a-z]{1,32}$/, "rank 必须匹配 spec §5.2");
 });
 
-test("嵌套值被拒绝而不是悄悄写出半个结构（F10 edit 才需要完整 YAML 发射器）", () => {
-  assert.throws(
-    () => emitFrontmatter({ id: "tp-a1b2c3", external: { linear: { id: "E-1" } } }),
-    /nested/i,
-  );
+test("嵌套值被完整写出，不是半个结构 —— 原先这里断言的是抛错", () => {
+  // 这条用例原本钉的是「嵌套值必须被拒绝」，理由是「保留它们是 F10 edit 的事」。
+  // 那个决定到 F05 作废了：claim 要改写既有文件，而带 external 的任务
+  // 一改就抛错。现在钉的是相反的行为——写出去且读得回来。
+  const fm = { id: "tp-a1b2c3", external: { linear: { id: "E-1" } } };
+  const text = emitFrontmatter(fm);
+  assert.doesNotMatch(text, /\[object Object\]/, "不得写出半个结构");
+  const back = parseFrontmatter(text);
+  assert.ok(back.ok, back.ok ? "" : back.error);
+  assert.deepEqual(back.data["external"], fm.external);
+});
+
+// ---- 嵌套映射与整份语料的往返（F05 Task 1）----
+
+test("嵌套映射能发射，并且读得回来（spec §5.2 字段 11 external）", () => {
+  const fm = {
+    id: "tp-a1b2c3",
+    external: { linear: { id: "ENG-123", url: "https://linear.app/x/ENG-123" }, beads: { id: "b-7" } },
+  };
+  const back = parseFrontmatter(emitFrontmatter(fm));
+  assert.ok(back.ok, back.ok ? "" : back.error);
+  assert.deepEqual(back.data["external"], fm.external);
+});
+
+test("带嵌套映射时，其余键仍是规范形态 —— 快路径对它们继续有效", () => {
+  // 整份都交给 yaml 会让 2000 个任务的解析从 16ms 退回 120ms（D006 实测）。
+  // 只有那一个嵌套键走 yaml，别的标量照旧「每个都加引号」。
+  const text = emitFrontmatter({ id: "tp-a1b2c3", title: "T", external: { a: { b: "c" } } });
+  assert.match(text, /^id: "tp-a1b2c3"$/m);
+  assert.match(text, /^title: "T"$/m);
+});
+
+test("全部 valid fixture 读进来再发射出去，语义不变", () => {
+  // 按**键集合与取值**比较，不按 JSON 字符串——字段顺序会被规范化，
+  // 那是 §5.1 要求的行为，不是缺陷。（第一次写这条用例时我按 JSON 比，
+  // 得到一片「语义变了」的假警报。）
+  const dir = join(import.meta.dirname, "..", "..", "spec", "fixtures", "valid");
+  const files = readdirSync(dir).filter((x) => x.endsWith(".md"));
+  assert.ok(files.length > 0, "语料库不该是空的");
+  for (const f of files) {
+    const env = splitEnvelope(readFileSync(join(dir, f), "utf8"));
+    assert.ok(env !== null, `${f} 的信封切不开`);
+    const first = parseFrontmatter(env.head);
+    assert.ok(first.ok, `${f} 读不进来`);
+    const second = parseFrontmatter(emitFrontmatter(first.data));
+    assert.ok(second.ok, `${f} 重新发射后读不回来：${second.ok ? "" : second.error}`);
+    const sorted = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).sort());
+    assert.deepEqual(sorted(second.data), sorted(first.data), `${f} 往返后语义变了`);
+  }
 });
