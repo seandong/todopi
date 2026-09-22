@@ -105,7 +105,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-D3** `--force --reason <text>` 绕过任何门禁，记录 `forced=true` 与理由；此类任务在列表与看板中标记为「未验证」。
 - **FR-D4** 在某仓库首次执行 `verify` 前要求确认，信任按仓库路径记入 `~/.config/todopi/trust`；`--yes` 或 `CI=true` 跳过提示。信任记录**永不**存在 `.todopi/` 内：随仓库一起传播的信任记录等于让仓库为自己背书。由于 `verify` 是任何写入者都能改的普通任务字段——agent、手工编辑、被合并的 PR——按路径信任并不约束授信之后**执行的是什么**。有两件事收窄这个面：每次执行前原样打印命令，使它永远不会和上次悄悄不同；`handoff` 列出自本 actor 上次 `prime` 以来 `verify` 发生过变更的任务（FR-H1）。按命令内容信任排在 v0.2——届时用户开始接受外部贡献，重复确认的摩擦才换得来对等的收益。
 - **FR-D4a** 验证输出的去向由两件事决定：Log 要提交进 git，而 `prime` 有预算。**通过**时不记录输出：命令在 frontmatter 里、commit 在 Log 里，复现所需的一切都已具备。**强制关闭**时记录最后 512 字节，因为被跳过的验证正是人必须复查的那一种，证据必须留在 diff 里看得见。**完整输出**一律写入 `.todopi/.cache/verify/`，不提交，可随时删除。
-- **FR-D5** `close <id> --as wontfix|duplicate|obsolete [--reason]` 与 `reopen <id>` 按状态机执行。`reopen` 在移除 `resolution` 的同时清除 `assignee`，否则会产出违反格式自身不变量的文件。软删除的 resolution 用 `obsolete` 而不是 `stale`，因为 `stale` 已经用于一个派生状态——租约过期的 in_progress 任务——两者会在同一份列表里并排出现却表示毫不相干的事。
+- **FR-D5** `close <id> --resolution wontfix|duplicate|obsolete [--reason]`（短写 `-r`）与 `reopen <id>` 按状态机执行。标志名是 `--resolution` 而不是 `--as`：全局 `--as` 已经表示 actor（FR-C4），两者撞名时 commander 让全局优先，实测 `todopi close tp-1 --as wontfix` 会把 **actor 设成 "wontfix"** 而 resolution 为空——静默写坏。试过用 `enablePositionalOptions()` 保住原形，但它会让 `todopi ls --json` 报 unknown option，而那是命令参考与协议文本给 agent 的写法。`reopen` 在移除 `resolution` 的同时清除 `assignee`，否则会产出违反格式自身不变量的文件。软删除的 resolution 用 `obsolete` 而不是 `stale`，因为 `stale` 已经用于一个派生状态——租约过期的 in_progress 任务——两者会在同一份列表里并排出现却表示毫不相干的事。
 
 ### 7.5 日志
 
@@ -208,7 +208,7 @@ todopi ls [--open|--closed|--all] [--ready] [--blocked] [--mine] [--label l] [--
 todopi show <id> [--full] [--tree] [--json]
 todopi edit <id> [--title t] [-d text] [--verify cmd] [--label +l|-l] [--parent id|none] [--edit]
 todopi done <id> [--force --reason text] [--yes]
-todopi close <id> --as <wontfix|duplicate|obsolete> [--reason text] [--force]
+todopi close <id> --resolution <wontfix|duplicate|obsolete> [--reason text] [--force]
 todopi reopen <id>
 todopi move <id> --top|--before <id>|--after <id>
 todopi dep add <id> --on <id> | dep rm <id> --on <id>

@@ -239,7 +239,7 @@ Log line (§5.3.3), and MUST match `^[^\s:]{1,64}$`.
 | `in_progress` | `open` | `release` | clear `assignee`; delete lease; log `released` |
 | `in_progress` | `in_progress` | `claim` (reclaim) | replace `assignee`; replace lease; log `claimed steal=true` naming the replaced actor |
 | `open`, `in_progress` | `closed` (`done`) | `done` | run `verify` if present; require Acceptance Criteria satisfied; require every child `closed`; set `resolution: done`; delete lease; log `done` |
-| `open`, `in_progress` | `closed` (other) | `close --as` | require every child `closed`; set `resolution`; delete lease; log `closed` |
+| `open`, `in_progress` | `closed` (other) | `close --resolution` | require every child `closed`; set `resolution`; delete lease; log `closed` |
 | `closed` | `open` | `reopen` | remove `resolution` and `assignee`; log `reopened` |
 
 Reclaim exists because §7.5 places a stale `in_progress` task in the ready queue: a
