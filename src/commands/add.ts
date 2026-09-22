@@ -4,6 +4,7 @@ import { readTasks } from "../format/read.ts";
 import { createTask } from "../format/write.ts";
 import { validateFile } from "../domain/validate.ts";
 import { validateGraph } from "../domain/graph.ts";
+import { currentActor } from "./actor.ts";
 import { EXIT, CliError } from "../exit.ts";
 import { LockBusyError } from "../fs/lock.ts";
 import type { AddReport } from "../output/dto/add.ts";
@@ -45,10 +46,9 @@ export function runAdd(opts: AddOptions): AddReport {
     }
   }
 
-  // actor 的完整解析链（--as > TODOPI_ACTOR > agent 环境推断 > git config user.name，
-  // 含 spec §5.4 的规范化）是 F05 claim 的内容。这里只接受调用方给的值——
-  // 实现半套会在 F05 里变成需要拆掉的重复实现。
-  const actor = opts.actor ?? "unknown";
+  // FR-C4 的解析链，与 ls --mine 共用同一个入口——两处各写一遍，
+  // 迟早会对同一个人得出两个身份，于是 Log 里记的和 --mine 匹配的对不上。
+  const actor = currentActor(ledger.root, opts.actor);
   // fs/ 抛的是中性的 LockBusyError——它不认识 CLI 的退出码协议（ARCHITECTURE.md）。
   // 映射成 FR-Q2 的退出码 3（冲突：租约被占、并发写）是这一层的职责。
   const created = withLockConflictMapped(() => createTask(

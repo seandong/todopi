@@ -6,10 +6,10 @@
       "id": "ARCH-001",
       "description": "v0.1 源码中不得出现出站网络调用",
       "applies_when": "test -d src",
-      "check": "grep -rnE '\\b(fetch|XMLHttpRequest|axios|undici|node-fetch|got|superagent)\\b|https?\\.request\\(' src --include='*.ts' --include='*.tsx' | grep -v '^src/board/' || true",
+      "check": "{ grep -rnE '\\b(fetch|XMLHttpRequest)\\b|https?\\.request\\(' src --include='*.ts' --include='*.tsx'; grep -rnE '(from|import|require)\\s*\\(?\\s*[\"'\"'\"']((node:)?(http|https|net|dgram|tls)|axios|undici|node-fetch|got|superagent)(/[^\"'\"'\"']*)?[\"'\"'\"']' src --include='*.ts' --include='*.tsx'; } | grep -v '^src/board/' || true",
       "expect": "empty",
       "what": "src/ 中出现了出站网络调用或 HTTP 客户端引用。",
-      "why": "README 承诺 v0.1 无网络、无遥测、无 API key。任何出站请求都会直接破坏这个产品承诺，也会让 verify 命令的沙箱假设失效。",
+      "why": "README 承诺 v0.1 无网络、无遥测、无 API key。任何出站请求都会直接破坏这个产品承诺，也会让 verify 命令的沙箱假设失效。 包名（axios / got / undici 等）只在 import 说明符里匹配：它们是库名，而 got、fetch 这类词在普通英文文案里也会出现，全文匹配裸词会误伤 CLI 的错误提示（实际发生过）。",
       "fix": "删除该调用。src/board/ 被排除在本规则外——board 只对 loopback 提供本地 UI，导入 node:http 并 createServer 是设计内的，由 ARCH-002 约束它必须绑定 127.0.0.1。若某个功能确实需要出站网络，先在 DECISIONS.md 记录决策并修改 README 的承诺，再修改本规则——顺序不能反。"
     },
     {
@@ -106,11 +106,11 @@
       "id": "ARCH-011",
       "description": "不得引入提交或缓存的任务索引",
       "applies_when": "test -d src",
-      "check": "grep -rniE 'index\\\\.json|buildIndex|taskIndex|cacheIndex' src --include='*.ts' --include='*.tsx' || true",
+      "check": "{ grep -rniE '\\.todopi/[^\"'\"'\"']*(index\\.json|tasks\\.db|\\.cache/[a-z_-]*index)' src --include='*.ts'; grep -rnE '\\b(read|write|load|save|cache|persist|build|rebuild)Index\\b' src --include='*.ts'; } || true",
       "expect": "empty",
-      "what": "src/ 中出现了任务索引的构建或读取。",
-      "why": "读路径只有一条：每次全量扫描，读到的就是磁盘真相（DECISIONS D006 决策 3）。派生缓存要安全，需要「垄断写入」或「监听文件系统」二者之一，而这两扇门都被已定的产品决策关死了——格式规格明文允许人工编辑与第三方写入，AGENTS.md 明文禁止 daemon。缓存过期时 CLI 不会报错，而是自信地给出过期的 ready 队列，agent 领走别人正在做的任务——正是 MVP 验收第 1 条要排除的「重复工作」。规模顶上来时的解法是归档已关闭任务，不是缓存。",
-      "fix": "删除索引逻辑。若全量扫描确实慢，先上手写快路径解析（实测 120ms → 16ms，零一致性风险），再考虑归档 closed 任务；触发条件写在 D006：单仓库 open 任务 > 5000，或全量扫描在目标平台上 > 500 ms。"
+      "what": "src/ 中出现了**持久化**任务索引的读写（磁盘上的 index 文件）。",
+      "why": "读路径只有一条：每次全量扫描，读到的就是磁盘真相（DECISIONS D006 决策 3）。派生缓存要安全，需要「垄断写入」或「监听文件系统」二者之一，而这两扇门都被已定的产品决策关死了——格式规格明文允许人工编辑与第三方写入，AGENTS.md 明文禁止 daemon。缓存过期时 CLI 不会报错，而是自信地给出过期的 ready 队列，agent 领走别人正在做的任务——正是 MVP 验收第 1 条要排除的「重复工作」。规模顶上来时的解法是归档已关闭任务，不是缓存。 本规则禁的是**磁盘上的持久化索引**，不是内存里的现场结构：一次命令内由全量扫描构建、随进程消失的 Map（如 domain/derive.ts 的 TaskIndex）没有一致性问题——它就是那次扫描的结果本身。规则的全部论证都是关于缓存过期的，那只适用于跨进程存活的东西。2026-09-21 误伤过 TaskIndex 一次。 路径与函数名必须分成两组匹配：写成 (路径|动词)Index 的话，路径分支会被要求也带 Index 后缀，于是 .todopi/.cache/tasks.db 从来不会命中（实测漏检）。也不能用整行排除 TaskIndex——buildIndex(tasks: TaskIndex) 会因此被整行放行。",
+      "fix": "删除索引逻辑。若全量扫描确实慢，先上手写快路径解析（实测 120ms → 16ms，零一致性风险），再考虑归档 closed 任务；触发条件写在 D006：单仓库 open 任务 > 5000，或全量扫描在目标平台上 > 500 ms。 若被误报的是内存结构（构建于本次调用、不写磁盘、随进程消失），那不在本规则范围内——但也不要把它命名成 cacheIndex / persistIndex 这类暗示持久化的名字。"
     },
     {
       "id": "ARCH-012",
@@ -191,6 +191,16 @@
       "what": "src/fs/ import 了 node: 之外的任何模块。",
       "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。",
       "fix": "把上层的类型换成本层自己定义的中性错误或数据结构，由调用方翻译。若确实需要共享某个常量，考虑它是否本就属于 fs/。"
+    },
+    {
+      "id": "ARCH-020",
+      "description": "DTO 映射层只搬字段，不算派生态",
+      "applies_when": "test -d src/output/dto && test -d src/domain",
+      "check": "node --no-warnings tools/check-dto-imports.mjs",
+      "expect": "empty",
+      "what": "src/output/dto/ 对 src/domain/ 有**剥离类型之后仍然存在**的运行时依赖——也就是在调用领域函数，或至少在加载领域模块。",
+      "why": "ARCHITECTURE.md 要求 dto 层「只做字段搬运与改名，不做计算」——一旦开始在映射里算派生态，这一层就白分了：--json 的形状会跟着领域逻辑一起漂移，而它是有版本承诺的公开 API（FR-Q3）。ARCH-008 只管 render/ 不碰 domain/，管不到 dto 内部在做什么，所以需要这一条。source: Codex 评审 F04 第 7 项。",
+      "fix": "把派生态算在 domain/ 里（一个纯函数返回派生结果），由 commands/ 组装成投影传给 dto；dto 只把投影的字段搬到对外形状上。从 domain/ 只能用 `import type { X }`——它在类型剥离后整条消失。内联的 `import { type X }` 不行：类型没了，`import { } from \"...\"` 还在，模块照样被加载。只为副作用的裸 import 同理。"
     }
   ]
 }

@@ -114,16 +114,18 @@ test("输出是英文且 --quiet 去掉提示", () => {
 test.describe("写不出通过 doctor 的文件时拒绝，且零残留", () => {
   // FR-T1 的验收是「文件存在、**通过 doctor**」。一条写出了 doctor 不通过的文件
   // 却退出 0 的命令，是在把问题推给下一个人。校验必须在写入之前。
-  const cases: Array<[string, Parameters<typeof runAdd>[0]]> = [
-    ["不合法的 label", { directory: "", title: "T", labels: ["BAD!"] }],
-    ["重复的 label", { directory: "", title: "T", labels: ["auth", "auth"] }],
-    ["多行标题（spec §5.2 要求单行）", { directory: "", title: "line one\nline two" }],
-    ["含空格的 actor（会让 Log 行解析错位）", { directory: "", title: "T", actor: "bad actor" }],
+  const cases: Array<[string, Parameters<typeof runAdd>[0], RegExp]> = [
+    ["不合法的 label", { directory: "", title: "T", labels: ["BAD!"] }, /doctor|title/i],
+    ["重复的 label", { directory: "", title: "T", labels: ["auth", "auth"] }, /doctor|title/i],
+    ["多行标题（spec §5.2 要求单行）", { directory: "", title: "line one\nline two" }, /doctor|title/i],
+    // actor 被拦在 FR-C4 的解析阶段——比写入前校验更早，连账本都没碰。
+    // 报错信息因此指向 actor 与 spec §5.4，而不是 doctor。
+    ["含空格的 actor（会让 Log 行解析错位）", { directory: "", title: "T", actor: "bad actor" }, /actor/i],
   ];
-  for (const [name, opts] of cases) {
+  for (const [name, opts, message] of cases) {
     test(name, () => {
       const d = repo();
-      assert.throws(() => runAdd({ ...opts, directory: d }), /doctor|title/i, name);
+      assert.throws(() => runAdd({ ...opts, directory: d }), message, name);
       assert.equal(runDoctor({ directory: d }).scanned, 0, "被拒绝的 add 不得留下文件");
     });
   }
