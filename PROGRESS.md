@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `a7588f7` —— F07 第二轮评审 Go，增量待第三轮。
+- Last commit: `bd73b85` —— F07 第二轮评审 Go，增量待第三轮。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 的 check 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
