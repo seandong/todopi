@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `687e750` —— F07 第四轮评审 Go，两条应该改已修。
+- Last commit: `c673fa8` —— F07 第五轮评审的两条阻塞项已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -30,7 +30,12 @@
 ## In Progress
 
 **F07 `verify`** —— 三层通过、`passing`，在分支 `feat/f07-verify` 上，
-尚未合回 `main`。**第四轮评审 Go（零阻塞项）**，两条应该改已修，待第五轮确认后合并。
+尚未合回 `main`。**第四轮 Go；第五轮（只审 guard 改动）No-go，两条阻塞项已修，待第六轮。**
+
+第五轮值得记：`.skip` 的无参检测我用 grep 写了三版，每版都被找出绕法。三版都在
+**用字符形状近似一个需要真解析的判断**——和 F04 的 `plainKey` 同一个跟头。改成问
+权威：`node --test` 自己报的 `# skipped N`。`make test` 因此多一维
+`no-skipped-tests`。
 
 1. **日志不是完整输出，而那个「上限」也没有限制内存。** runner 把每个 chunk 攒进
    数组、退出时才 concat 再截尾——截尾只让返回值变小，concat 之前那份内存一直在
