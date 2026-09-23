@@ -641,7 +641,7 @@ cmd_clean_check() {
   local dbg="" d
   for d in src tests; do
     [ -d "$d" ] || continue
-    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|\.skip\(' "$d" \
+    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\( *\)' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
@@ -649,7 +649,7 @@ cmd_clean_check() {
   done
   for d in tools scripts; do
     [ -d "$d" ] || continue
-    if grep -rnE 'debugger;|\.only\(|\.skip\(' "$d" \
+    if grep -rnE 'debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\( *\)' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
@@ -661,7 +661,7 @@ cmd_clean_check() {
   if [ -n "$dbg" ]; then
     emit no-debug-artifacts fail "发现 debug 残留：$dbg"
   else
-    emit no-debug-artifacts pass "未发现 console.log / debugger / .only / .skip / 临时文件残留"
+    emit no-debug-artifacts pass "未发现 console.log / debugger / .only / 被停掉的测试 / 临时文件残留"
   fi
 
   # 3. 状态文件已更新

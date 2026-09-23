@@ -5,10 +5,10 @@
 
 ## Current State
 
-- Last commit: `bd73b85` —— F07 第二轮评审 Go，增量待第三轮。
+- Last commit: `0fa27c9` —— F07 第二轮评审 Go，增量待第三轮。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
-  arch-rules（**22 条全部通过**，ARCH-019/021 的 check 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
+  arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
   **607 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
