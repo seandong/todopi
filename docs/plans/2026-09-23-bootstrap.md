@@ -28,7 +28,7 @@ ARCH-006 已经把这条钉成机器规则（`applies_when: test -f feature_list
 
 ## 损失 / 替代物
 
-契约只预告了一条损失。损失表 **三条 → 五条 → 八条 → 十条 → 十二条**（最后两条是
+契约只预告了一条损失。损失表 **三条 → 五条 → 八条 → 十条 → 十三条**（最后三条是
 执行**之后**的评审才找出来的——这本身就是这份清单的结论：纸面上穷尽不了），每一轮评审
 都实测出新的。第三轮我问它「还有没有第九条」，它的回答是**「至少还有，但我无法证明
 已经穷尽」**——那比一句「没了」有用得多，也是这份清单该有的态度。彩排（Task 5）
@@ -48,6 +48,7 @@ ARCH-006 已经把这条钉成机器规则（`applies_when: test -f feature_list
 | 失败时**立即打印对应层的 `repair`** | **无** | 旧 harness 在失败层当场打印 `layers[].repair`；现在它只存在任务正文里，`done` 的拒绝报告不会自动带出来。失败后自己去读：`cat .todopi/tasks/<id>.md` 的 Repair 段（`todopi show` 要等 F08）。记进 PRD §15：拒绝报告该不该带上任务正文里的 Repair |
 | **VCR 与「session 末未完成」提醒** | **无** | 评审在执行后才指出——前十条没有它。`make vcr` 的计数源是 `feature_list.json` 的 `state`，随文件一起消失。对应信号现在分散在 `make status`（就绪队列 + 在做）与 ARCH-023（第二个 in_progress 报警），但「这个 session 认领的活干完了没有」这个提醒没有了 |
 | `make status` 的**最近 check overall + generated_at**、**PROGRESS 的 Current State 全文**、**closed/open 计数** | **已恢复** | 我改写 status 面板时把这三样一起弄丢了，只剩结果文件名和一行 Last commit。评审在执行后指出。**这一条不是迁移的必然代价，是我改写时的疏漏**——已全部补回，如实留在表里，因为它说明「重写一个入口时，丢掉的东西不会自己喊」 |
+| `make status` 展示**全部** in_progress（不只是自己的） | **已恢复** | 我改写时用了 `ls --mine`，会把别人认领的任务藏起来；计数还用 grep 数 `status: "closed"`，漏掉规格允许的无引号写法、也没数 `in_progress`。**这个 session 里同一个错误犯了第三次**（先是 `.skip` 的三版正则，再是账本策略检查器，然后是这里），而我刚写完 `check-ledger-policy.mjs` 就是为了避免它。改成 `tools/ledger-summary.mjs` 走真解析器 |
 
 ### ARCH-023 是**降级**，说清楚
 

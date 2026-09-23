@@ -102,8 +102,10 @@ ARCH-023 在第二个任务变成 `in_progress` 时报警。但「这个 session
 
 ## 当前状态：21 条，三个里程碑
 
-`features` 于 2026-09-16 填入 21 条，拆分依据见 [DECISIONS D011](../../DECISIONS.md)。
-顶层的 `milestones` 键给出分组与各自的完成信号：
+这 21 条于 2026-09-16 填入当时的 `feature_list.json`，拆分依据见
+[DECISIONS D011](../../DECISIONS.md)。**2026-09-23 自举后它们在 `.todopi/tasks/`**，
+旧 id 留在每条的 `external.harness.legacy_id`，里程碑分组落成 `m1`/`m2`/`m3` 标签，
+各自的完成信号在 [PROGRESS.md](../../PROGRESS.md) 的「里程碑」一节：
 
 | 里程碑 | feature | 完成信号 |
 |---|---|---|

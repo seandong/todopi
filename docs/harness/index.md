@@ -50,7 +50,8 @@
 
 迁移的字段映射与触发条件见[状态迁移契约](state-migration.md)（已转为历史记录）；
 **这次迁移丢掉了什么、拿什么替代、哪些没有替代物**，见
-[迁移计划](../plans/2026-09-23-bootstrap.md)的损失表——十条，其中三条没有替代物。
+[迁移计划](../plans/2026-09-23-bootstrap.md)的损失表——**十三条**，其中四条没有
+替代物。最后三条是**执行之后**的评审才找出来的。
 
 ## 有意缺省的部分
 
@@ -65,7 +66,7 @@
 | `templates/sprint-contract.md`、`templates/evaluator-rubric.md`、`scripts/session-trace.sh`（课程 L11 观测层） | 单人 + 少量 agent，观测层的成本高于收益。 | 出现并行 agent 或返工率变高时 |
 | `.harness/traces/` 与 session 事件流 | 同上，属于 L11 观测层。 | 同上 |
 | triprec 式 Gate / modernization state 模型 | 那是遗留工程的恢复模型，todopi 是 greenfield。 | 不计划引入 |
-| 独立的 `scripts/verify-feature.sh`、`scripts/check-arch.sh`、`scripts/clean-state-check.sh` | 这三件事都实现为 `tools/harness.sh` 的子命令。单一入口让状态词汇、结果落盘和退出码只有一套实现；拆成三个脚本会立刻产生三份漂移的副本。 | 不计划引入 |
+| 独立的 `scripts/check-arch.sh`、`scripts/clean-state-check.sh` | 这两件事都实现为 `tools/harness.sh` 的子命令。单一入口让状态词汇、结果落盘和退出码只有一套实现；拆成多个脚本会立刻产生多份漂移的副本。（feature 级验证原先也在这里，2026-09-23 自举后由 `todopi done` 承担。） | 不计划引入 |
 
 课程自带的 `tools/audit-harness.sh` 会把上表中的项报成 WARN，把 lockfile 报成
 CRITICAL FAIL。这些是已知且有意的偏差，不要为了让校验器变绿而制造空壳文件——

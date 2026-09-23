@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `f26ecac` —— 自举评审第二轮已修。
+- Last commit: `8de830c` —— 自举评审第三轮已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -37,7 +37,7 @@
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
 
-- 迁移计划与**损失表**（十二条，其中四条没有替代物；最后两条是**执行之后**
+- 迁移计划与**损失表**（十三条，其中四条没有替代物；最后三条是**执行之后**
   的评审才找出来的）：
   [docs/plans/2026-09-23-bootstrap.md](docs/plans/2026-09-23-bootstrap.md)
 - 对账脚本 `tools/bootstrap-verify.mjs` 保留，随时可重跑——它从 git 读原始 JSON，
@@ -122,7 +122,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     全缓存」；第五至八轮全在「怎么判断一条测试被停掉」上，最后拔根而不是加第四版
     guard。见 DECISIONS D026、D027。
 26. ~~开始自举~~ 已完成（2026-09-23）。21 条迁进 `.todopi/`，`feature_list.json`
-    已删除。计划先经四轮评审才执行，损失表 三 → 五 → 八 → 十 → 十二条。
+    已删除。计划先经四轮评审才执行，损失表 三 → 五 → 八 → 十 → 十三条。
 27. **下一步：F08 `show`。** `todopi ls --ready` 看队列，`todopi claim` 认领。
     这是第一个用 todopi 自己管出来的 feature。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；

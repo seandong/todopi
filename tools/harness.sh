@@ -300,7 +300,7 @@ cmd_status() {
     # 码，它几乎总是 0——CLI 崩了会显示成一个空的就绪队列，而 status 退出 0
     # （评审用 NODE_OPTIONS=--definitely-invalid 实测）。这和 make test 里那个被
     # tee 吞掉退出码的 bug 是同一个形状，同一个 session 里第二次。
-    local ready rc mine mrc
+    local ready rc summary src
     ready="$(node src/cli.ts ls --ready 2>&1)"; rc=$?
     printf '\n  就绪队列（todopi ls --ready）：\n'
     if [ "$rc" -ne 0 ]; then
@@ -308,21 +308,17 @@ cmd_status() {
       status_rc=1
     else
       printf '%s\n' "$ready" | sed 's/^/    /'
-      closed="$(grep -c '^status: "closed"$' .todopi/tasks/*.md 2>/dev/null | awk -F: '{n+=$2} END {print n+0}')"
-      open_n="$(grep -c '^status: "open"$' .todopi/tasks/*.md 2>/dev/null | awk -F: '{n+=$2} END {print n+0}')"
-      printf '\n  计数            %s closed / %s open\n' "$closed" "$open_n"
     fi
 
-    mine="$(node src/cli.ts ls --mine 2>&1)"; mrc=$?
-    if [ "$mrc" -ne 0 ]; then
-      printf '\n  %s在做：跑不动（退出码 %s）：%s%s\n' "$C_YEL" "$mrc" "$(printf '%s' "$mine" | head -1)" "$C_RST"
+    # 计数与「在做」交给解析器，不用 grep——规格允许手写无引号的
+    # status: in_progress，按字符形状去数漏得掉；而 `ls --mine` 会把别人认领的
+    # 任务藏起来，旧 status 是列出全部 active 的（评审实测，迁移损失表第十三条）。
+    summary="$(node tools/ledger-summary.mjs 2>&1)"; src=$?
+    if [ "$src" -ne 0 ]; then
+      printf '\n  %s账本摘要跑不动（退出码 %s）：%s%s\n' "$C_YEL" "$src" "$(printf '%s' "$summary" | head -1)" "$C_RST"
       status_rc=1
     else
-      mine="$(printf '%s\n' "$mine" | grep -v '^No tasks match')"
-      if [ -n "$mine" ]; then
-        printf '\n  在做（todopi ls --mine）：\n'
-        printf '%s\n' "$mine" | sed 's/^/    /'
-      fi
+      printf '\n%s\n' "$summary"
     fi
   fi
 
