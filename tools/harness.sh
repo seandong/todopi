@@ -644,15 +644,19 @@ cmd_clean_check() {
   # 比让用例因为环境而红要好（F07：量常驻内存要用 ps，ps 在受限沙箱里 EPERM）。
   # 只认前者，外加不给理由的 `.skip()`。
   #
-  # grep 是逐行的，所以 `.skip(` 后面直接换行也当成无参——评审指出，否则把理由
-  # 挪到下一行就绕过去了。代价是跳过的理由必须和调用写在同一行：那是个一秒能满足
-  # 的约束，而漏掉一条被停掉的测试要很久以后才会被发现。宁可严。
+  # 「没给理由」的判据是**左括号后面紧跟的不是字符串字面量**。先前写成「括号里只有
+  # 空格」，评审指出 `t.skip(\t)` 和 `t.skip(/* c */)` 都能绕过去——凡是枚举「允许
+  # 出现什么」的判据，总有没枚举到的东西。反过来要求「必须紧跟一个引号」就没有这
+  # 个缺口。grep 逐行，所以 `(` 后直接换行也算。
+  #
+  # 代价：理由必须紧跟左括号，`t.skip( "why" )` 会被判为残留。那是一秒能满足的
+  # 约束，而漏掉一条被停掉的测试要很久以后才会被发现。宁可严。
   #
   # 2026-09-23 收窄；这是同类误伤的第七次，形状照旧：措辞对，check 比措辞宽。
   local dbg="" d
   for d in src tests; do
     [ -d "$d" ] || continue
-    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\( *\)|\.skip\( *$' "$d" \
+    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\([^"`]|\.skip\($' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
@@ -660,7 +664,7 @@ cmd_clean_check() {
   done
   for d in tools scripts; do
     [ -d "$d" ] || continue
-    if grep -rnE 'debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\( *\)|\.skip\( *$' "$d" \
+    if grep -rnE 'debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\([^"`]|\.skip\($' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
