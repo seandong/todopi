@@ -267,3 +267,50 @@ test("reopen 的归属说明明说「没有可用的命令」", () => {
   assert.match(a?.detail ?? "", /No command available/i,
     "简单地从文本里抓命令的调用方也得看得出这里没有命令");
 });
+
+// ---- verify 的报告（F07）----
+
+const verifyFail: Refusal = {
+  gate: "verify", code: 2, command: "pnpm test", exitCode: 1, signal: null,
+  timedOut: false, tail: "FAIL src/auth.test.ts\n  3 failing", logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log",
+};
+const verifyTimeout: Refusal = {
+  gate: "verify", code: 2, command: "pnpm test", exitCode: null, signal: "SIGKILL",
+  timedOut: true, tail: "", logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log",
+};
+
+test("verify 的报告带原样的命令、退出码与输出尾部", () => {
+  const out = renderGateReport(report([verifyFail]));
+  assert.match(out, /pnpm test/, "命令要原样出现（FR-D4）");
+  assert.match(out, /exited 1/);
+  assert.match(out, /FAIL src\/auth\.test\.ts/, "输出尾部要能直接看到");
+  assert.match(out, /3 failing/);
+});
+
+test("超时说的是超时，不是「退出 null」", () => {
+  const out = renderGateReport(report([verifyTimeout]));
+  assert.match(out, /timed out/i);
+  assert.doesNotMatch(out, /exited null/);
+});
+
+test("完整日志的路径作为动作交出去 —— agent 自己去读全文", () => {
+  const r = report([verifyFail]);
+  const read = r.actions.find((a) => a.for === "verify" && a.command?.startsWith("cat "));
+  assert.ok(read, "--json 里要有读日志的动作");
+  assert.ok(read.command?.includes(".cache/verify/"));
+  assert.match(renderGateReport(r), /\.cache\/verify\//, "文本里也要有");
+});
+
+test("超时时给的建议是提高超时值，不是「修好它报的错」", () => {
+  const detail = report([verifyTimeout]).actions
+    .filter((a) => a.for === "verify").map((a) => a.detail).join(" ");
+  assert.match(detail, /verify_timeout_seconds/);
+});
+
+test("verify 的动作里 command 不含占位符", () => {
+  for (const r of [report([verifyFail]), report([verifyTimeout])]) {
+    for (const a of r.actions) {
+      if (a.command !== undefined) assert.doesNotMatch(a.command, /[<>]/, a.command);
+    }
+  }
+});

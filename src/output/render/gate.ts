@@ -84,6 +84,16 @@ export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
             detail: `Child ${c.id} is ${c.status}; a parent closes when its children do.` });
         }
         break;
+      case "verify":
+        // 完整输出在磁盘上，报告只给尾部。把路径作为动作交出去，
+        // agent 才能自己去读全文——那正是 FR-D2a 说的「据以行动」。
+        out.push({ for: "verify", command: `cat ${refusal.logPath}`,
+          detail: "Read the full output of the verify run." });
+        out.push({ for: "verify",
+          detail: refusal.timedOut
+            ? "It timed out. Either make it faster, or raise verify_timeout_seconds in .todopi/config.yml."
+            : "Fix what the command reports, then run done again." });
+        break;
       case "state":
         out.push({ for: "state",
           ...(refusal.transition === "reopen" ? {} : { command: `todopi reopen ${r.id}` }),
@@ -123,6 +133,21 @@ function headline(refusal: GateReport["refused"][number]): string[] {
     case "state":
       return [`State: this task is ${refusal.status || "in an unknown state"}, ` +
         `which cannot ${refusal.transition}.`];
+    case "verify": {
+      const how = refusal.timedOut
+        ? "timed out"
+        : refusal.signal !== null
+          ? `was killed by ${refusal.signal}`
+          : `exited ${refusal.exitCode}`;
+      const lines = [`Verify: the command ${how}.`, `  ${refusal.command}`];
+      // 原样的命令单独占一行（FR-D4：每次执行前都打印它，使它永远不会和上次
+      // 悄悄不同）。尾部缩进两格，和报告里其它的证据一致。
+      if (refusal.tail.trim() !== "") {
+        lines.push("  Last lines of its output:");
+        for (const l of refusal.tail.trimEnd().split("\n")) lines.push(`    ${l}`);
+      }
+      return lines;
+    }
   }
 }
 

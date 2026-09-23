@@ -28,6 +28,22 @@ export type GateInput = {
    */
   now: number;
   leaseHours: number;
+  /**
+   * `verify` 的**执行结果**，由 commands/ 跑完注入。
+   *
+   * 判定留在纯函数里，执行留在外面：`domain/` 不该知道 `child_process` 的存在
+   * （ARCHITECTURE.md 的第一条线）。没有 `verify` 字段、或这次不需要跑时为 undefined。
+   */
+  verify?: VerifyOutcome;
+};
+
+export type VerifyOutcome = {
+  command: string;
+  exitCode: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  tail: string;
+  logPath: string;
 };
 
 /**
@@ -41,7 +57,19 @@ export type Refusal =
   | { gate: "ownership"; code: 3; holder: string; heldSince: string }
   | { gate: "acceptance"; code: 2; unchecked: Criterion[] }
   | { gate: "children"; code: 2; open: Array<{ id: string; title: string; status: string }> }
-  | { gate: "state"; code: 2; status: string; transition: Transition };
+  | { gate: "state"; code: 2; status: string; transition: Transition }
+  | {
+    gate: "verify"; code: 2;
+    /** 原样的命令——每次执行前都打印它，使它永远不会和上次悄悄不同（FR-D4） */
+    command: string;
+    exitCode: number | null;
+    signal: string | null;
+    timedOut: boolean;
+    /** 输出尾部，报告里直接给人看 */
+    tail: string;
+    /** 完整输出的落点，agent 自己去读（FR-D4a） */
+    logPath: string;
+  };
 
 /**
  * 逐道门禁判定，**返回全部未通过的**，不是第一条就停。
@@ -100,6 +128,25 @@ export function evaluateGates(input: GateInput): Refusal[] {
       status: statusOf(c),
     }));
   if (open.length > 0) out.push({ gate: "children", code: 2, open });
+
+  // **verify 最后查，且只对 done。**
+  //
+  // spec §6.1 的 done 行把 `run verify if present` 写在最前，但那是**效果的顺序
+  // 不是求值的顺序**：为一个注定要被未勾复选框挡下的任务跑十分钟测试，
+  // 既浪费又出人意料。调用方也据此决定「前面都过了才真的执行」。
+  //
+  // close 不跑 verify：§6.1 表格里 close 那一行没有它——close 是「不做了」的出口。
+  if (transition === "done" && input.verify !== undefined) {
+    const v = input.verify;
+    const failed = v.timedOut || v.exitCode !== 0;
+    if (failed) {
+      out.push({
+        gate: "verify", code: 2,
+        command: v.command, exitCode: v.exitCode, signal: v.signal,
+        timedOut: v.timedOut, tail: v.tail, logPath: v.logPath,
+      });
+    }
+  }
 
   return out;
 }
