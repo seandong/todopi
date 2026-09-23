@@ -38,15 +38,19 @@ function canonical(repoRoot: string): string {
   }
 }
 
-/** 读出清单。读不懂就当没有——这是用户可以手改的文件。 */
-function readList(): string[] {
+/**
+ * 读出文件里的行。读不懂就当没有——这是用户可以手改的文件，把一个可丢弃的清单
+ * 当成权威，只会让 verify 在一个无关的原因上失败。
+ *
+ * **不在这里过滤注释或空行。** 它们本来就匹配不上任何真实路径（`canonical`
+ * 对它们只会原样返回），过滤一遍是冗余；而 `recordTrust` 若基于过滤后的清单重写
+ * 整份文件，用户写的注释就会被悄悄删掉。所以读的时候原样读，写的时候只追加。
+ */
+function readLines(): string[] {
   const p = trustFilePath();
   if (!existsSync(p)) return [];
   try {
-    return readFileSync(p, "utf8")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l !== "" && !l.startsWith("#"));
+    return readFileSync(p, "utf8").split("\n").map((l) => l.trim());
   } catch {
     return [];
   }
@@ -54,15 +58,16 @@ function readList(): string[] {
 
 export function isTrusted(repoRoot: string): boolean {
   const want = canonical(repoRoot);
-  return readList().some((line) => canonical(line) === want);
+  if (want === "") return false;
+  return readLines().some((line) => line !== "" && canonical(line) === want);
 }
 
-/** 记下信任。已经在里面就什么都不做，不产生重复行。 */
+/** 记下信任。已经在里面就什么都不做；**追加而不是重写**，用户写的注释原样保留。 */
 export function recordTrust(repoRoot: string): void {
-  const want = canonical(repoRoot);
-  const current = readList();
-  if (current.some((line) => canonical(line) === want)) return;
+  if (isTrusted(repoRoot)) return;
   const p = trustFilePath();
   mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, [...current, want].join("\n") + "\n");
+  const existing = existsSync(p) ? readFileSync(p, "utf8") : "";
+  const prefix = existing === "" || existing.endsWith("\n") ? existing : `${existing}\n`;
+  writeFileSync(p, `${prefix}${canonical(repoRoot)}\n`);
 }
