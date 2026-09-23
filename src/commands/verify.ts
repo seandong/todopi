@@ -4,7 +4,7 @@
 // 这一层是 exec/ 与 domain/ 之间的接线：exec/ 只认字符串与路径，domain/ 只认
 // 已经算好的结果。信任、打印、落盘这些「和 todopi 有关但和进程无关」的事在这里。
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runCommand } from "../exec/run.ts";
 import { isTrusted, recordTrust, trustFilePath } from "../exec/trust.ts";
@@ -71,28 +71,27 @@ export function runVerify(
 
   process.stderr.write(`Running verify for ${id}:\n  ${command}\n`);
 
-  const timeoutMs = opts.timeoutMsOverride ?? ledger.config.verify_timeout_seconds * 1000;
-  const result = runCommand(command, { cwd: ledger.root, timeoutMs });
-
+  // 路径先定下来再执行：日志是**边跑边写**的，不是跑完再写。于是 todopi 自己
+  // 被杀、或者命令跑到一半炸掉时，已经产生的输出仍然留在盘上。
   const dir = join(ledger.dir, ".cache", "verify");
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const logPath = join(dir, `${id}-${stamp}.log`);
-  writeFileSync(logPath, [
-    `$ ${command}`,
-    `exit: ${result.timedOut ? `timed out after ${timeoutMs}ms` : String(result.code)}`,
-    result.truncated ? "(output was truncated; only the tail is kept)" : "",
-    "",
-    "--- stdout ---", result.stdout,
-    "--- stderr ---", result.stderr,
-  ].join("\n"));
+
+  const timeoutMs = opts.timeoutMsOverride ?? ledger.config.verify_timeout_seconds * 1000;
+  const result = runCommand(command, { cwd: ledger.root, timeoutMs, logPath });
+
+  // 日志没写成不该让 verify 失败——命令确实跑了，结果是真的。说一声就好。
+  if (result.logProblem !== null) {
+    process.stderr.write(`  warning: ${result.logProblem}\n`);
+  }
 
   return {
     command,
     exitCode: result.code,
     signal: result.signal,
     timedOut: result.timedOut,
-    tail: tailOf(`${result.stdout}${result.stderr}`, TAIL_BYTES),
+    tail: tailOf(result.output, TAIL_BYTES),
     logPath,
   };
 }

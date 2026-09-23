@@ -1,11 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, statSync, rmSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCommand } from "../../src/exec/run.ts";
 
 const dir = () => mkdtempSync(join(tmpdir(), "todopi-run-"));
+
+/** 数某个字符出现了几次。用 Z 是因为它不出现在生成它的那条命令里。 */
+function countChar(text: string, ch: string): number {
+  let n = 0;
+  for (let i = 0; i < text.length; i += 1) if (text[i] === ch) n += 1;
+  return n;
+}
 
 /** 进程还在不在。信号 0 只做权限/存在性检查，不真的发信号。 */
 function alive(pid: number): boolean {
@@ -82,30 +90,42 @@ test("命令原样交给 sh -c —— 管道、引号、&& 都能用", () => {
   // verify 是用户写的一行 shell。自己切分等于重新实现一个 shell，
   // 而且和用户在终端里敲的不是同一个东西。
   const d = dir();
-  assert.equal(runCommand(`echo "a b" | tr ' ' '-'`, { cwd: d }).stdout.trim(), "a-b");
-  assert.equal(runCommand(`true && echo yes`, { cwd: d }).stdout.trim(), "yes");
-  assert.equal(runCommand(`echo 'single $NOTEXPANDED'`, { cwd: d }).stdout.trim(), "single $NOTEXPANDED");
+  assert.equal(runCommand(`echo "a b" | tr ' ' '-'`, { cwd: d }).output.trim(), "a-b");
+  assert.equal(runCommand(`true && echo yes`, { cwd: d }).output.trim(), "yes");
+  assert.equal(runCommand(`echo 'single $NOTEXPANDED'`, { cwd: d }).output.trim(), "single $NOTEXPANDED");
 });
 
-test("stdout 与 stderr 分开捕获", () => {
+test("stdout 与 stderr 都被捕获，各自保序 —— 但两路之间的先后不保证", () => {
+  // 合成一路而不是分成两段：分段要把其中一路整个留在内存里。
+  //
+  // **不断言 one/two/three 这个顺序。** 两路是各自独立的管道，谁先被读到取决于
+  // 事件循环，实测就会出现 one/three/two。如实只断言能保证的部分：都到齐了，
+  // 且同一路内部保持顺序。
   const d = dir();
-  const r = runCommand(`echo out; echo err >&2`, { cwd: d });
-  assert.equal(r.stdout.trim(), "out");
-  assert.equal(r.stderr.trim(), "err");
+  const r = runCommand(`echo one; echo two >&2; echo three`, { cwd: d });
+  const lines = r.output.trim().split("\n");
+  assert.deepEqual([...lines].sort(), ["one", "three", "two"]);
+  assert.ok(lines.indexOf("one") < lines.indexOf("three"), "同一路内部乱序了");
 });
 
 test("cwd 是给定的目录", () => {
   const d = dir();
   writeFileSync(join(d, "marker"), "x");
-  assert.match(runCommand("ls", { cwd: d }).stdout, /marker/);
+  assert.match(runCommand("ls", { cwd: d }).output, /marker/);
 });
 
-test("输出超过上限时截断并置 truncated", () => {
-  // pnpm test 能吐几十 MB，全缓存在内存里不合适。
+test("返回的尾部有上限并置 truncated —— 但完整输出没有丢", () => {
   const d = dir();
-  const r = runCommand(`head -c 3000000 /dev/zero | tr '\\0' 'x'`, { cwd: d, maxOutputBytes: 1024 });
+  const logPath = join(d, "full.log");
+  const r = runCommand(`head -c 3000000 /dev/zero | tr '\\0' 'Z'`,
+    { cwd: d, maxOutputBytes: 1024, logPath });
   assert.equal(r.truncated, true);
-  assert.ok(r.stdout.length <= 1024 + 200, `截断没生效，长度 ${r.stdout.length}`);
+  assert.ok(r.output.length <= 1024 + 200, `尾部没有上限，长度 ${r.output.length}`);
+  // truncated 说的是**返回值**只是尾部，不是输出丢了：日志里仍然是完整的 3 MB。
+  // 只数正文段：日志头是原样的命令，而命令里自己就有一个 Z。
+  const log = readFileSync(logPath, "utf8");
+  const bodyAt = log.indexOf("\n\n") + 2;
+  assert.equal(countChar(log.slice(bodyAt), "Z"), 3_000_000);
 });
 
 test("没超过上限时不置 truncated", () => {
@@ -151,4 +171,105 @@ test("主动脱离进程组的后代杀不到 —— 这是固有边界，如实
   assert.equal(stillAlive, true,
     "主动脱离进程组的后代本就杀不到；若这条红了，说明实现变了——" +
     "读 src/exec/run.ts 顶部关于这条边界的说明再决定是不是该改这个断言");
+});
+
+test("捕获的内存有界 —— 200 MB 输出不该变成 200 MB 内存", async () => {
+  // 这条不能走 runCommand：它是 spawnSync，中途量不到。直接起 runner，
+  // 每 50ms 采一次 RSS 取峰值。
+  //
+  // 早先的实现把每个 chunk 攒进数组、退出时才 concat 再截尾——返回值确实很短，
+  // 所以**只断言返回值长度的测试照样绿**。要判别它，必须量运行期间的内存。
+  const d = dir();
+  const logPath = join(d, "big.log");
+  const runner = join(import.meta.dirname, "../../src/exec/runner.ts");
+  const arg = JSON.stringify({
+    command: `head -c 200000000 /dev/zero | tr '\\0' 'Z'`,
+    cwd: d, timeoutMs: null, graceMs: 1_000, maxOutputBytes: 1024, logPath,
+  });
+  const child = spawn(process.execPath, [runner, arg], { stdio: ["ignore", "pipe", "pipe"] });
+
+  let peakKb = 0;
+  const sampler = setInterval(() => {
+    const ps = spawnSync("ps", ["-o", "rss=", "-p", String(child.pid)], { encoding: "utf8" });
+    const kb = Number.parseInt((ps.stdout ?? "").trim(), 10);
+    if (Number.isFinite(kb)) peakKb = Math.max(peakKb, kb);
+  }, 50);
+
+  let out = "";
+  child.stdout.on("data", (c: Buffer) => { out += c.toString("utf8"); });
+  await new Promise((resolve) => child.on("close", resolve));
+  clearInterval(sampler);
+
+  const size = statSync(logPath).size;
+  rmSync(d, { recursive: true, force: true });
+
+  assert.ok(peakKb > 0, "没采到 RSS，这条用例什么都没验证");
+  // Node 自己的基线在 50 MB 上下；攒在内存里的话峰值会在 400 MB 量级。
+  assert.ok(peakKb < 150_000, `runner 峰值内存 ${peakKb} KB —— 输出被攒在内存里了`);
+  assert.ok(size >= 200_000_000, `日志只有 ${size} 字节，完整输出没落全`);
+  assert.equal((JSON.parse(out) as { truncated: boolean }).truncated, true);
+});
+
+test("Log 里的尾部，就是日志文件输出段的最后那几个字节", () => {
+  // 有了这条不变量，「尾部大概对」就变成了「尾部**是**日志的末尾」——
+  // 人照着 Log 里那截去 .cache/ 里找上下文时，找到的是同一个地方。
+  const d = dir();
+  const logPath = join(d, "t.log");
+  const command = `for i in $(seq 1 2000); do echo "line $i"; done`;
+  const r = runCommand(command, { cwd: d, maxOutputBytes: 200, logPath });
+
+  const file = readFileSync(logPath, "utf8");
+  const header = `$ ${command}\n\n`;
+  assert.ok(file.startsWith(header), "日志头不是原样的命令");
+  const footerAt = file.lastIndexOf("\n--- exit:");
+  assert.ok(footerAt > 0, "日志没有退出状态脚注");
+  // 输出全是 ASCII，所以这里的字符数就是字节数。
+  assert.equal(r.output, file.slice(header.length, footerAt).slice(-200));
+});
+
+test("日志写不进去时不崩 —— 命令照跑，问题随结果报告", () => {
+  // 原来这里会让 runner 崩掉，于是上层把「日志写不了」误当成「命令没跑起来」。
+  const d = dir();
+  const logPath = join(d, "occupied");
+  mkdirSync(logPath);
+  const r = runCommand("echo hi", { cwd: d, logPath });
+  assert.equal(r.code, 0);
+  assert.match(r.output, /hi/);
+  assert.notEqual(r.logProblem, null);
+});
+
+test("日志目标慢下来时有背压 —— 子进程跟着停，输出不堆进缓冲", async () => {
+  // **流式写文件 ≠ 内存有界。** 若只是 `log.write(c)` 不看返回值，磁盘跟不上时
+  // chunk 就从「攒在数组里」变成「攒在 WriteStream 里」——换个地方堆积不算有界。
+  // `pipe` 在目标写不动时暂停源，子进程随之被堵住。
+  //
+  // 判据故意**不用 RSS**：那把尺子的基线就有 100 MB 上下，差距只有 1.5 倍，
+  // 换台机器就可能翻车。这里问一个二值的问题——日志被挂住的那几秒里，子进程把
+  // 200 MB 写完了没有？背压生效就写不完。
+  const d = dir();
+  const fifo = join(d, "slow.log");
+  const marker = join(d, "produced-everything");
+  spawnSync("mkfifo", [fifo]);
+  // 先开读端（否则写端 open 会一直阻塞），但 3 秒内不抽
+  const reader = spawn("sh", ["-c", `exec 3< "${fifo}"; sleep 3; cat <&3 > /dev/null`], { stdio: "ignore" });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  const runner = join(import.meta.dirname, "../../src/exec/runner.ts");
+  const arg = JSON.stringify({
+    // 不经过 tr：tr 只有 20 MB/s，瓶颈会变成它自己，两边都「写不完」。
+    command: `head -c 200000000 /dev/zero; touch "${marker}"`,
+    cwd: d, timeoutMs: null, graceMs: 1_000, maxOutputBytes: 1024, logPath: fifo,
+  });
+  const child = spawn(process.execPath, [runner, arg], { stdio: ["ignore", "pipe", "pipe"] });
+  child.stdout.resume();
+
+  await new Promise((resolve) => setTimeout(resolve, 2_000));   // 仍在挂住的窗口里
+  const finishedWhileStalled = existsSync(marker);
+
+  await new Promise((resolve) => child.on("close", resolve));
+  reader.kill();
+  rmSync(d, { recursive: true, force: true });
+
+  assert.equal(finishedWhileStalled, false,
+    "日志写不动时子进程照样跑完了 —— 说明输出被整个吞进了缓冲，没有背压");
 });
