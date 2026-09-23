@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# tools/e2e/f06-gates.sh —— F06 的 Layer 3。
+# 门禁判定本身由 domain/ 的纯函数覆盖；这里验证端到端真的接通了：
+# 退出码、报告内容、Log 的形状、别名、输出语言。
+
+set -u
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$ROOT" || exit 2
+
+FAILED=0
+ok()   { printf '  pass  %s\n' "$1"; }
+fail() { printf '  FAIL  %s\n' "$1"; FAILED=1; }
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+cli() { node "$ROOT/src/cli.ts" "$@"; }
+jfield() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s)[process.argv[1]])))' "$1"; }
+
+W="$TMP/w"
+mkdir -p "$W"
+git -C "$W" init -q
+git -C "$W" config user.name tester
+git -C "$W" config user.email t@e
+git -C "$W" commit -q --allow-empty -m init
+cli -C "$W" init >/dev/null 2>&1
+
+# 1. 未勾的验收标准 → 退出 2，报告带序号与原文
+A=$(cli -C "$W" --json add "has criteria" --ac "first thing" --ac "second thing" | jfield id)
+out="$(cli -C "$W" done "$A" 2>&1)"; code=$?
+[ "$code" -eq 2 ] && ok "未勾的验收标准退出 2" || fail "应退出 2，实际 $code"
+case "$out" in *"1. first thing"*) ok "报告带序号与原文" ;; *) fail "报告里没有带序号的标准：$out" ;; esac
+case "$out" in *"2. second thing"*) ok "每一条都列出来了" ;; *) fail "只列了一条" ;; esac
+case "$out" in *"--force --reason"*) ok "报告给出强制的出路" ;; *) fail "没给出路" ;; esac
+case "$out" in *"todopi done $A"*) ok "报告给出重跑的出路" ;; *) fail "没给重跑的出路" ;; esac
+
+# 2. 被拒绝之后什么都没改（spec §6.1）
+before="$(cat "$W/.todopi/tasks/$A.md")"
+logs_before=$(grep -c '^- 2' "$W/.todopi/tasks/$A.md")
+cli -C "$W" done "$A" >/dev/null 2>&1
+[ "$(cat "$W/.todopi/tasks/$A.md")" = "$before" ] && ok "被拒绝的迁移不改任务文件" || fail "文件被改了"
+[ "$(grep -c '^- 2' "$W/.todopi/tasks/$A.md")" -eq "$logs_before" ] && ok "Log 一行都没追加" || fail "Log 变长了"
+
+# 3. 未关闭的子任务 → 退出 2，报告带 id / title / status
+P=$(cli -C "$W" --json add "parent" | jfield id)
+K=$(cli -C "$W" --json add "the child task" --parent "$P" | jfield id)
+out="$(cli -C "$W" done "$P" 2>&1)"; code=$?
+[ "$code" -eq 2 ] && ok "未关闭的子任务退出 2" || fail "应退出 2，实际 $code"
+for want in "$K" "the child task" "open"; do
+  case "$out" in *"$want"*) : ;; *) fail "报告里缺少 $want" ;; esac
+done
+ok "报告带子任务的 id / title / status"
+
+# 4. 别人持有 → 退出 3
+cli -C "$W" --as other@host claim "$K" >/dev/null 2>&1
+out="$(cli -C "$W" done "$K" 2>&1)"; code=$?
+[ "$code" -eq 3 ] && ok "归属冲突退出 3（不是 2）" || fail "应退出 3，实际 $code"
+case "$out" in *other@host*) ok "报告点名持有者" ;; *) fail "报告没说是谁持有" ;; esac
+
+# 5. 多道门一起不过 → 全部列出，退出码取最严重
+cli -C "$W" --as other@host claim "$A" >/dev/null 2>&1
+out="$(cli -C "$W" done "$A" 2>&1)"; code=$?
+[ "$code" -eq 3 ] && ok "多道门时退出码取最严重" || fail "应退出 3，实际 $code"
+case "$out" in *"first thing"*) : ;; *) fail "多道门时漏了验收标准那一道" ;; esac
+case "$out" in *other@host*) ok "多道门一起列出，不是只列第一条" ;; *) fail "漏了归属那一道" ;; esac
+
+# 6. --force --reason 越过门禁
+cli -C "$W" done "$A" --force --reason "shipping anyway" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "--force --reason 越过门禁" || fail "强制应当成功"
+grep -q 'forced=true' "$W/.todopi/tasks/$A.md" && ok "Log 记 forced=true" || fail "没记 forced=true"
+grep -q ': shipping anyway$' "$W/.todopi/tasks/$A.md" && ok "Log 记了理由" || fail "没记理由"
+
+# 7. --force 不带 --reason → 退出 1
+cli -C "$W" done "$P" --force >/dev/null 2>&1
+[ $? -eq 1 ] && ok "--force 不带 --reason 退出 1" || fail "应退出 1"
+
+# 8. 强制完成的任务在 ls 里标 unverified（F04 的跨 feature 契约）
+case "$(cli -C "$W" ls --closed 2>/dev/null)" in
+  *unverified*) ok "强制完成的任务标为 unverified" ;;
+  *) fail "ls --closed 没标 unverified" ;;
+esac
+
+# 9. done 的 Log 行带 verify / commit / dirty（spec §5.3.3）
+B=$(cli -C "$W" --json add "plain task" | jfield id)
+cli -C "$W" done "$B" >/dev/null 2>&1
+line="$(grep '^- 2' "$W/.todopi/tasks/$B.md" | tail -1)"
+case "$line" in *"verify=none"*) ok "Log 带 verify=none（F07 会填 pass/fail）" ;; *) fail "缺 verify：$line" ;; esac
+case "$line" in *"commit="*) ok "Log 带 commit" ;; *) fail "缺 commit：$line" ;; esac
+case "$line" in *"dirty="*) ok "Log 带 dirty" ;; *) fail "缺 dirty：$line" ;; esac
+
+# 9b. 不在 git 仓库里时省略 commit / dirty，而不是写 unknown
+NG="$TMP/nogit"; mkdir -p "$NG"
+cli -C "$NG" init >/dev/null 2>&1
+C=$(cli -C "$NG" --json add "no git here" | jfield id)
+cli -C "$NG" done "$C" >/dev/null 2>&1
+line="$(grep '^- 2' "$NG/.todopi/tasks/$C.md" | tail -1)"
+case "$line" in
+  *commit=*|*dirty=*) fail "不在 git 仓库里不该写 commit / dirty：$line" ;;
+  *) ok "不在 git 仓库里省略 commit / dirty" ;;
+esac
+case "$line" in *unknown*) fail "写了假的 commit=unknown" ;; *) ok "没有写假的 sha" ;; esac
+
+# 10. close --resolution
+D=$(cli -C "$W" --json add "to cancel" | jfield id)
+cli -C "$W" close "$D" --resolution wontfix >/dev/null 2>&1
+[ $? -eq 0 ] && ok "close --resolution 成功" || fail "close 应当成功"
+grep -q '^resolution: "wontfix"$' "$W/.todopi/tasks/$D.md" && ok "resolution 写入" || fail "resolution 没写"
+grep -q 'closed resolution=wontfix' "$W/.todopi/tasks/$D.md" && ok "Log 是 closed resolution=…" || fail "Log 形状不对"
+
+cli -C "$W" close "$B" --resolution nonsense >/dev/null 2>&1
+[ $? -eq 1 ] && ok "不合法的 resolution 退出 1" || fail "应退出 1"
+E=$(cli -C "$W" --json add "needs resolution" | jfield id)
+cli -C "$W" close "$E" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "close 不给 --resolution 退出 1" || fail "应退出 1"
+
+# 11. reopen 同时清掉 resolution 与 assignee
+cli -C "$W" reopen "$D" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "reopen 成功" || fail "reopen 应当成功"
+grep -q '^status: "open"$' "$W/.todopi/tasks/$D.md" && ok "状态回到 open" || fail "状态没回到 open"
+grep -q '^resolution:' "$W/.todopi/tasks/$D.md" && fail "resolution 必须被移除" || ok "resolution 已移除"
+grep -q '^assignee:' "$W/.todopi/tasks/$D.md" && fail "assignee 也必须被移除（不变量 3）" || ok "assignee 已移除"
+grep -q ' reopened$' "$W/.todopi/tasks/$D.md" && ok "Log 记 reopened" || fail "Log 没记 reopened"
+cli -C "$W" doctor >/dev/null 2>&1 && ok "reopen 之后通过 doctor" || fail "doctor 不过"
+
+# 12. reopen 一个未关闭的任务 → 退出 2
+cli -C "$W" reopen "$D" >/dev/null 2>&1
+[ $? -eq 2 ] && ok "reopen 未关闭的任务退出 2" || fail "应退出 2"
+
+# 13. 别名（FR-Q4）
+F=$(cli -C "$W" --json add "via finish" | jfield id)
+cli -C "$W" finish "$F" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "别名 finish 可用" || fail "finish 不可用"
+G=$(cli -C "$W" --json add "via complete" | jfield id)
+cli -C "$W" complete "$G" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "别名 complete 可用" || fail "complete 不可用"
+H=$(cli -C "$W" --json add "via cancel" | jfield id)
+cli -C "$W" cancel "$H" -r obsolete >/dev/null 2>&1
+[ $? -eq 0 ] && ok "别名 cancel 接受 -r" || fail "cancel -r 不可用"
+I=$(cli -C "$W" --json add "alias force" --ac "x" | jfield id)
+cli -C "$W" finish "$I" --force --reason "alias keeps every option" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "别名接受基础命令的全部选项" || fail "别名缺选项"
+
+# 14. 输出是英文，--json 的拒绝报告可解析
+J=$(cli -C "$W" --json add "english check" --ac "x" | jfield id)
+out="$(cli -C "$W" done "$J" 2>&1)"
+if printf '%s' "$out" | grep -q '[一-鿿]'; then
+  fail "门禁报告含中文（CLI 的 stdout 是产品表面，MUST 是英文）"
+else
+  ok "门禁报告是英文"
+fi
+if cli -C "$W" --json done "$J" 2>/dev/null | node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+  const r=JSON.parse(s);
+  for(const k of ["id","title","transition","refused","code"]) if(!(k in r)) throw new Error("缺 "+k);
+  if(!Array.isArray(r.refused)||r.refused.length===0) throw new Error("refused 应当非空");
+})'; then ok "--json 的拒绝报告可解析且字段齐全"; else fail "--json 拒绝报告不合格"; fi
+
+# 15. 带 external 与怪键的任务关闭后原样保留
+K2=$(cli -C "$W" --json add "has extensions" | jfield id)
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+fs.writeFileSync(p, fs.readFileSync(p,"utf8").replace(/^status: "open"$/m,
+  "status: \"open\"\nexternal:\n  linear:\n    id: \"ENG-1\"\n\"#meta\": \"keep\"\nx-count: 5"));
+' "$W/.todopi/tasks/$K2.md"
+cli -C "$W" done "$K2" >/dev/null 2>&1
+grep -q 'ENG-1' "$W/.todopi/tasks/$K2.md" && ok "external 原样保留" || fail "external 丢了"
+grep -q '"#meta"' "$W/.todopi/tasks/$K2.md" && ok "怪键原样保留" || fail "怪键丢了"
+grep -q '^x-count: 5$' "$W/.todopi/tasks/$K2.md" && ok "数字仍是数字" || fail "数字被加了引号"
+cli -C "$W" doctor >/dev/null 2>&1 && ok "带扩展字段的任务关闭后通过 doctor" || fail "doctor 不过"
+
+[ "$FAILED" -eq 0 ] && { echo "f06-gates: pass"; exit 0; } || { echo "f06-gates: fail"; exit 1; }
