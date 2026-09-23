@@ -3,7 +3,9 @@
 This repository is the development project for todopi — a CLI that keeps a
 dependency-aware task ledger as plain Markdown under `.todopi/`.
 
-todopi（土豆皮）的产品定义已完成，代码尚未开始。技术栈：TypeScript + Bun 编译
+todopi（土豆皮）的产品定义已完成。**F01–F07 已实现**（`doctor` / `init` / `add` /
+`ls` / `claim` / `release` / `done` / `close` / `reopen`），2026-09-23 起本仓库用
+todopi 管自己的开发任务。技术栈：TypeScript + Bun 编译
 单二进制，npm 包运行于 Node ≥ 20。本文件是 agent 的操作手册，只负责路由和不变量；
 细节在 [harness 权威地图](docs/harness/index.md)。
 
@@ -180,6 +182,9 @@ it is for the case where the check itself is wrong, and it is recorded permanent
 
 **Queries.** `todopi ls --ready` for what to pick up next. `todopi show <id>` for one task's
 detail. `todopi prime --full` when you need the whole picture. Add `--json` when parsing.
+
+> 本仓库现状：`show`（F08）与 `prime`（F11）**尚未实现**。现在读一条任务的详情用
+> `cat .todopi/tasks/<id>.md`，看全局用 `make status`。
 
 **Commits.** Include the `.todopi/` changes in the same commit as the work they describe,
 and mention the task id in the message.

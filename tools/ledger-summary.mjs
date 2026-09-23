@@ -14,7 +14,22 @@
 import { discoverLedger } from "../src/format/discover.ts";
 import { readTasks } from "../src/format/read.ts";
 
-const tasks = readTasks(discoverLedger(process.argv[2] ?? process.cwd()));
+// **读不到就非零退出，不能报 0/0/0。**
+//
+// `readTasks` 对缺失或不可读的目录返回空数组——评审把 tasks/ 设成不可读后复现：
+// 摘要报「0 open / 0 in_progress / 0 closed」并退出 0，于是 make status 把
+// 「账本读不到」当成了成功。这和 ARCH-023 那个洞是同一个形状，同一批改动里第二次。
+let tasks;
+try {
+  tasks = readTasks(discoverLedger(process.argv[2] ?? process.cwd()));
+} catch (err) {
+  process.stderr.write(`账本读不到：${err instanceof Error ? err.message : String(err)}\n`);
+  process.exit(1);
+}
+if (tasks.length === 0) {
+  process.stderr.write(".todopi/tasks/ 读不到任何任务。本仓库已自举，这不该发生\n");
+  process.exit(1);
+}
 
 const bad = tasks.filter((t) => t.parseError !== undefined);
 const ok = tasks.filter((t) => t.parseError === undefined);
