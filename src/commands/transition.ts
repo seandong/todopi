@@ -11,7 +11,8 @@ import { readTasks } from "../format/read.ts";
 import { withLedgerLock, prepareUpdate, nowStamp } from "../format/write.ts";
 import { deleteLease, readLease } from "../format/lease.ts";
 import { indexTasks } from "../domain/derive.ts";
-import { evaluateGates, worstCode, type Refusal, type Transition } from "../domain/gates.ts";
+import type { TaskFile } from "../domain/types.ts";
+import { evaluateGates, worstCode, type Refusal, type Transition, type VerifyOutcome } from "../domain/gates.ts";
 import { validateWrite } from "../domain/validate.ts";
 import { currentActor } from "./actor.ts";
 import { withLockConflictMapped } from "./claim.ts";
@@ -45,9 +46,21 @@ export type TransitionOptions = {
 /** 每种迁移写出的 frontmatter 变化与 Log 行，由调用方给。 */
 export type TransitionShape = {
   frontmatter: (current: Record<string, unknown>) => Record<string, unknown>;
-  logLine: (ctx: { now: string; actor: string; forced: boolean; reason?: string }) => string;
+  logLine: (ctx: {
+    now: string; actor: string; forced: boolean; reason?: string;
+    /** 这次 verify 的结果；没跑就是 undefined（Log 里记 verify=none） */
+    verify?: VerifyOutcome;
+  }) => string;
   /** 迁移之后租约怎么办。done/close 删掉，reopen 也删——三者都不再有人持有 */
   dropLease: boolean;
+  /**
+   * 跑这个任务的 `verify` 并给出结果。只有 `done` 提供它。
+   *
+   * 在锁内、其余门禁都过了之后才调用——为一个注定要被未勾复选框挡下的任务跑
+   * 十分钟测试，既浪费又出人意料（spec §6.1 的 done 行把 verify 写在最前，
+   * 那是效果的顺序不是求值的顺序）。
+   */
+  runVerify?: (task: TaskFile) => VerifyOutcome | undefined;
 };
 
 export function runTransition(opts: TransitionOptions, shape: TransitionShape): TransitionReport {
@@ -73,7 +86,7 @@ export function runTransition(opts: TransitionOptions, shape: TransitionShape): 
     }
 
     const title = String(task.frontmatter["title"] ?? "");
-    const refused: Refusal[] = evaluateGates({
+    const gateBase = {
       task,
       index: indexTasks(existing),
       actor,
@@ -84,26 +97,41 @@ export function runTransition(opts: TransitionOptions, shape: TransitionShape): 
       // 时钟用毫秒；秒级截断只用于序列化。F05 在这个边界上分叉过一次（D018）。
       now: Date.now(),
       leaseHours: ledger.config.lease_hours,
-    });
+    };
+
+    const refuse = (rs: Refusal[]): never => {
+      const base = {
+        id: opts.id, title, transition: opts.transition, refused: rs, code: worstCode(rs),
+      };
+      throw new GateRefused({ ...base, actions: gateActions(base) });
+    };
+
+    // 第一轮：先判**不需要跑任何东西**的那些门禁。
+    const cheap = evaluateGates(gateBase);
 
     // **状态门禁越不过去。** spec §6.1：`--force` 覆盖的是对「是否就绪」的判断，
     // 不是状态机本身。表格里没有 closed → closed 这一行，也没有 open → open。
     // 放行的话，一个已完成的任务能被再 done 一次、写出第二条 done 日志，
     // 随后还能被 close --force 改掉 resolution（Codex 评审实测复现）。
-    const blocking = forced ? refused.filter((r) => r.gate === "state") : refused;
-    if (blocking.length > 0) {
-      const base = {
-        id: opts.id, title, transition: opts.transition,
-        refused: blocking, code: worstCode(blocking),
-      };
-      throw new GateRefused({ ...base, actions: gateActions(base) });
+    const state = cheap.filter((r) => r.gate === "state");
+    if (state.length > 0) refuse(state);
+    // 非强制时，便宜的门禁没过就到此为止——**不去跑 verify**。
+    if (!forced && cheap.length > 0) refuse(cheap);
+
+    // 第二轮：跑 verify。**`--force` 也照跑**（PRD FR-D3）：绕过的是「门禁」那次
+    // 拒绝，不是执行。不跑的话 FR-D4a 说的「证据必须留在 diff 里看得见」永远
+    // 走不到——被越过的验证如果压根没跑，就没有任何证据可留。
+    const verify = shape.runVerify?.(task);
+    if (verify !== undefined && !forced) {
+      const withVerify = evaluateGates({ ...gateBase, verify });
+      if (withVerify.length > 0) refuse(withVerify);
     }
 
     const now = nowStamp();
     // 先构造并校验，此时还没有任何副作用（spec §6.1：被拒绝的迁移什么都不改）
     const prepared = prepareUpdate(ledger, existing, opts.id, {
       frontmatter: shape.frontmatter(task.frontmatter),
-      appendLog: shape.logLine({ now, actor, forced, reason: opts.reason }),
+      appendLog: shape.logLine({ now, actor, forced, reason: opts.reason, verify }),
     }, validateWrite, now);
 
     // **先写任务文件、后删租约**，与 release 同序、与 claim 反序。理由一致：
