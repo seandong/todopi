@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `5c5b5a3` —— F07 第七轮评审：拔掉 t.skip 这个根。
+- Last commit: `f672407` —— F07 第八轮评审的悬空引用已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -30,7 +30,7 @@
 ## In Progress
 
 **F07 `verify`** —— 三层通过、`passing`，在分支 `feat/f07-verify` 上，
-尚未合回 `main`。**第四轮 Go；第五至七轮（只审 guard 改动）各 No-go，第七轮改成拔根，待第八轮。**
+尚未合回 `main`。**第四轮 Go；第五至八轮（只审 guard 改动）各 No-go，第七轮改成拔根，待第九轮。**
 
 这两轮全在同一件小事上——「怎么判断一条测试被停掉了」——而它一路把我往深处带：
 
