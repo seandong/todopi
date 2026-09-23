@@ -314,6 +314,16 @@ todopi import <file.md> | import beads [path]
 - **FR-C4 的「agent 环境推断」这一级未实现，缺事实依据。** §17 核实六家 agent 时没有记录环境变量标记，而实测表明按变量名猜不可靠：`CODEX_HOME` 在一个 Claude Code 会话里同样存在（它是 codex CLI 的配置目录，不是「正在运行的 agent 是 codex」的证据）。猜错身份的代价是任务归属错乱，比少一级回退严重得多。当前解析链是 `--as` > `TODOPI_ACTOR` > `git config user.name`（经 §5.4 规范化）> `unknown@<host>`。做各家接入包时逐一核实各自是否有**唯一且只在自己运行时出现**的标记，核实结果写回 §17 再补这一级。（见 DECISIONS D014）
 - **`verify` 的完整日志没有大小上限，磁盘是已知风险点。** FR-D4a 要求完整输出一律写入 `.cache/verify/`，实现改成流式落盘之后这一条才真正成立（早先超过 1 MiB 的部分在写盘前就丢了）。代价是：一条疯狂刷屏的 `verify` 在默认 600 秒超时内可以写出几十 GB。没有悄悄加文件上限，因为那等于改契约——「完整输出」就不再完整。缓解在于 `.cache/` 按规格 §2 可随时删除，且 `verify` 本来就有超时。若 dogfooding 期间真的撑爆过磁盘，再把「日志上限」作为一次明确的契约变更提出来，而不是现在偷偷加。本条未经实测，仅为推理。
 - **`verify` 命令里含 NUL 字节时 runner 起不来。** 实测：Node 的 `spawn` 拒绝含 NUL 的参数，`runCommand` 于是报「runner 退出 1」而不是一条说得清的错。YAML 标量里几乎不会出现 NUL，所以没有现在修；要修的话应在 `exec/run.ts` 入口处明确拒绝并说明。
+- **自举第一天问出来的五条。** 2026-09-23 本仓库从 `feature_list.json` 迁到
+  `.todopi/`，用 todopi 管自己。旧 harness 有五件事新流程做不到，逐条列在
+  [迁移计划](../plans/2026-09-23-bootstrap.md)的损失表里；其中五条是**产品问题**，
+  记在这里：(i) 没有 `reverify` 的对应物——重跑一个已关闭任务的验证会被状态门禁
+  拒绝，而 evidence 指错 commit 时确实需要它；(ii) `verify` 只有一个退出码，
+  **表达不了某层 `not_applicable`**；(iii) `dirty=true` 该不该成为 `done` 的门禁
+  ——现在只记不拦，而旧 harness 拒绝把脏工作区的结果归给 HEAD；(iv) 协议文本
+  （FR-Q5 写进 AGENTS.md 的那段）说「`.todopi/` 改动与工作同一 commit」，而 `done`
+  必然在代码提交之后，要不要写明这个例外；(v) 拒绝报告该不该带上任务正文里的
+  Repair 段——旧 harness 会在失败层当场打印它。这五条都未经产品决策，仅为记录。
 - **`project_id`** —— 一个能在移动与克隆后保持稳定的标识，跨仓视图和将来任何同步都需要它。现在不加，是因为格式规格 §9 明确把「新增配置键」归类为不升版本的加性变更，所以它随时可以在有消费者时引入，并由 `doctor --fix` 回填。提前加等于发布一个没人读的字段。
 
 产品负责人的动作：续费 todopi.com（2026-11-20 到期）；注册 todopi.dev；在 npm 发布 `todopi` / `@todopi` 占位；创建 GitHub org；人工商标检索（USPTO、EUIPO）；为导入器测试准备两份真实 Beads Classic 导出。

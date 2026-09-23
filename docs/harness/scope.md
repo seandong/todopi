@@ -43,9 +43,16 @@ Scope 子系统防止两件事：一次做太多，和「做完了」的含糊�
 
 ### WIP = 1
 
-任意时刻最多一个 feature 处于 `state: active`。`make activate F=<id>` 在已有
-active feature 时会拒绝。要换任务，先把当前 feature 跑到 `passing`，或显式退回
-`not_started` 并在 PROGRESS.md 的 Blockers 里说明原因。
+任意时刻最多一个任务处于 `status: in_progress`。
+
+2026-09-23 自举之前，这条由 `make activate` 在**动作发生时**拒绝。现在由
+**ARCH-023 持续检查**——`make check` 每次都数一遍。这是一次明确的**降级**：从
+「当场拒绝」变成「事后发现」。换来的是它不挑入口：不论谁、用什么方式让第二个任务
+变成 `in_progress` 都会红。理由与全部损失见
+[迁移计划](../plans/2026-09-23-bootstrap.md)。
+
+要换任务，先 `todopi done` 跑完当前这个，或 `todopi release` 退回并在 PROGRESS.md
+的 Blockers 里说明原因。
 
 ### one session per feature
 
@@ -92,10 +99,9 @@ not_started ──activate──> active ──verify-feature(全层 pass)──
 目录结构、DTO 边界、领域模型形状，或需要 dogfooding 反馈的措辞；M3 的八个是
 叶子节点（没有东西依赖它们），且规格已细到不需要再做设计判断。
 
-WIP=1 禁止的是**并行**（第二个 `make activate` 会被拒，且 `feature_list.json` 与
-`PROGRESS.md` 都是单文件），不禁止顺序委派。委派在这个仓库比在一般仓库更安全，
-因为完成判据不由 agent 说了算：`state` 与 `evidence` 只能由 `make verify-feature`
-在三层真的通过后写入。
+WIP=1 禁止的是**并行**（ARCH-023 会在下一次 `make check` 抓到第二个
+`in_progress`），不禁止顺序委派。委派在这个仓库比在一般仓库更安全，因为完成判据
+不由 agent 说了算：`todopi done` 会跑任务的 `verify`，不通过就关不掉。
 
 新增 feature 时，每一条都要能回答：
 

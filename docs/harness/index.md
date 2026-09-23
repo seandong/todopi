@@ -14,7 +14,7 @@
 3. `tools/harness.sh` 与 `docs/harness/verification.md` —— 可执行的生命周期与
    验证行为。文档描述契约，脚本是契约的实现；两者不一致时以脚本的实际行为为准，
    并立刻修文档。
-4. `feature_list.json`、`PROGRESS.md`、`DECISIONS.md` —— 前向状态。
+4. `.todopi/`、`PROGRESS.md`、`DECISIONS.md` —— 前向状态。
    「现在在做什么、做到哪、为什么这么定」的唯一权威。
 5. `docs/product/**` —— 产品意图与需求。**不具备运行时权威**：它说要做什么，
    不说现在做到哪、该怎么验证。
@@ -36,18 +36,20 @@
 
 1. 只读环境诊断（`make doctor`）；
 2. 读当前状态（`PROGRESS.md` + `make status`）并确认基线为绿；
-3. 认领**恰好一个** feature（`make activate F=<id>`）；
-4. 实现，逐层验证，不跳层；
-5. `make verify-feature F=<id>` 由 harness 写入 `passing` 与证据；
-6. `make clean-check`，更新 `PROGRESS.md`，原子提交。
+3. 认领**恰好一个**任务（`todopi ls --ready` → `todopi claim <id>`）；
+4. 实现，逐层验证，不跳层；人核对任务正文的验收判据（散文，机器不查）；
+5. 先 `git commit` 代码，再 `todopi done <id>`——它跑任务的 `verify` 并把
+   `commit=<HEAD7> dirty=<bool>` 记进 Log；放在提交之后那条证据才指得实；
+6. `make clean-check`，更新 `PROGRESS.md`，提交账本改动。
 
 ## 状态层与自举计划
 
-当前前向状态放在 `feature_list.json` + `PROGRESS.md`（learn-harness-engineering
-课程的标准形态）。这是过渡形态：todopi 自己就是任务台账工具，CLI 可用后应当
-dogfood 自己的 `.todopi/` 格式。字段映射、迁移触发条件和迁移后权威变更，见
-[状态迁移契约](state-migration.md)。在迁移完成前，`feature_list.json` 是前向状态的
-唯一权威，`.todopi/` 不得抢先建立。
+**2026-09-23 自举完成。** 前向状态现在放在 `.todopi/` + `PROGRESS.md`，
+`feature_list.json` 已删除。todopi 用自己管理自己的开发任务。
+
+迁移的字段映射与触发条件见[状态迁移契约](state-migration.md)（已转为历史记录）；
+**这次迁移丢掉了什么、拿什么替代、哪些没有替代物**，见
+[迁移计划](../plans/2026-09-23-bootstrap.md)的损失表——十条，其中三条没有替代物。
 
 ## 有意缺省的部分
 
@@ -72,5 +74,5 @@ CRITICAL FAIL。这些是已知且有意的偏差，不要为了让校验器变�
 
 - [工程规则](engineering-rules.md) —— 实现、调试、依赖、评审的具体要求
 - [验证契约](verification.md) —— 三层模型、状态词汇、降级规则、结果留存
-- [Scope 契约](scope.md) —— feature_list 结构、WIP=1、状态机
+- [Scope 契约](scope.md) —— 任务粒度、WIP=1、状态机
 - [状态迁移契约](state-migration.md) —— 迁移到 `.todopi/` 的字段映射与触发条件

@@ -14,7 +14,6 @@ cd "$ROOT" || exit 2
 
 RESULTS_DIR=".harness-results"
 LAST_OVERALL=""   # 最近一次 check/test/e2e 的 overall，供 ci 汇总读取
-FEATURES="feature_list.json"
 ARCH_RULES=".harness/arch-rules.json"
 PROGRESS="PROGRESS.md"
 
@@ -249,7 +248,7 @@ cmd_doctor() {
   fi
 
   local missing=""
-  for f in AGENTS.md CLAUDE.md PROGRESS.md DECISIONS.md feature_list.json \
+  for f in AGENTS.md CLAUDE.md PROGRESS.md DECISIONS.md \
            "$ARCH_RULES" docs/harness/index.md docs/harness/verification.md \
            docs/harness/scope.md docs/harness/state-migration.md \
            docs/harness/engineering-rules.md Makefile init.sh; do
@@ -290,48 +289,23 @@ cmd_status() {
   printf '  分支            %s\n' "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
   printf '  工作区          %s\n' "$([ -n "$(git status --porcelain 2>/dev/null)" ] && echo '有未提交改动' || echo '干净')"
 
-  if ! have jq; then
-    printf '  %sfeature 状态    blocked：缺少 jq（brew install jq）%s\n' "$C_YEL" "$C_RST"
-  elif [ ! -f "$FEATURES" ]; then
-    printf '  %sfeature 状态    blocked：%s 不存在%s\n' "$C_YEL" "$FEATURES" "$C_RST"
+  if [ ! -d .todopi/tasks ]; then
+    printf '  %s账本            .todopi/ 不存在。先跑 todopi init%s\n' "$C_YEL" "$C_RST"
   else
-    local total active passing notstarted
-    total="$(jq '.features | length' "$FEATURES")"
-    active="$(jq '[.features[] | select(.state=="active")] | length' "$FEATURES")"
-    passing="$(jq '[.features[] | select(.state=="passing")] | length' "$FEATURES")"
-    notstarted="$(jq '[.features[] | select(.state=="not_started")] | length' "$FEATURES")"
-    printf '  feature 合计    %s（not_started %s / active %s / passing %s）\n' \
-      "$total" "$notstarted" "$active" "$passing"
-    printf '  VCR             %s\n' "$(vcr_value)"
-    if [ "$active" -gt 0 ]; then
-      printf '\n  %s当前 active：%s\n' "$C_BLD" "$C_RST"
-      jq -r '.features[] | select(.state=="active") | "    \(.id)  \(.behavior)"' "$FEATURES"
-    elif [ "$total" -eq 0 ]; then
-      printf '\n  %sfeature_list 为空表——这是有意的，理由见 docs/harness/scope.md。%s\n' "$C_DIM" "$C_RST"
-    else
-      printf '\n  %s没有 active feature。make activate F=<id> 认领一个。%s\n' "$C_DIM" "$C_RST"
+    printf '  账本            %s\n' "$(ls .todopi/tasks/*.md 2>/dev/null | wc -l | tr -d ' ') 个任务"
+    printf '\n  就绪队列（todopi ls --ready）：\n'
+    node src/cli.ts ls --ready 2>/dev/null | sed 's/^/    /' || printf '    （跑不动，先 make setup）\n'
+    local mine
+    mine="$(node src/cli.ts ls --mine 2>/dev/null | grep -v '^No tasks match')"
+    if [ -n "$mine" ]; then
+      printf '\n  在做（todopi ls --mine）：\n'
+      printf '%s\n' "$mine" | sed 's/^/    /'
     fi
   fi
 
-  header "PROGRESS.md — Current State"
-  if [ -f "$PROGRESS" ]; then
-    awk '/^## Current State/{p=1;next} /^## /{p=0} p' "$PROGRESS" | sed '/^[[:space:]]*$/d' | sed 's/^/  /'
-  else
-    printf '  %s%s 不存在%s\n' "$C_RED" "$PROGRESS" "$C_RST"
-  fi
-
-  local last
-  last="$(ls -1t "$RESULTS_DIR"/check-*.json 2>/dev/null | head -1)"
-  header "最近一次 check"
-  if [ -n "$last" ]; then
-    printf '  %s  overall=%s  at %s\n' "$last" "$(jq -r .overall "$last")" "$(jq -r .generated_at "$last")"
-  else
-    printf '  %s尚无记录。跑 make check。%s\n' "$C_DIM" "$C_RST"
-  fi
-  printf '\n'
+  printf '\n  PROGRESS.md     %s\n' "$(grep -m1 '^- Last commit:' PROGRESS.md 2>/dev/null | sed 's/^- //' || echo '读不到')"
+  printf '  最近 check      %s\n' "$(ls -t .harness-results/check-*.json 2>/dev/null | head -1 | xargs -I{} basename {} 2>/dev/null || echo '无')"
 }
-
-# ── 命令：check（Layer 1） ────────────────────────────────────────────────────
 
 cmd_check() {
   have jq || die "check 需要 jq。安装：brew install jq"
@@ -473,7 +447,7 @@ cmd_e2e() {
   header "e2e — Layer 3（系统确认）"
   have jq || die "e2e 需要 jq。安装：brew install jq"
   checks_init
-  # 每个 feature 一个 tools/e2e/f<NN>-<name>.sh，与 feature_list.json 的 system
+  # 每个 feature 一个 tools/e2e/f<NN>-<name>.sh，与任务 verify 字段里的 system
   # layer 命令一一对应。脚本只看用户会看到的东西——进程退出码与 stdout，不 import
   # 任何模块。这让它能抓到 Layer 2 抓不到的一类错误：模块都对，但装配接错了。
   if [ ! -f src/cli.ts ]; then
@@ -509,161 +483,6 @@ cmd_check_arch() {
   local overall; overall="$(checks_overall)"; checks_done
   print_overall "$overall" "check-arch"
   case "$overall" in pass|not_applicable) return 0 ;; *) return 1 ;; esac
-}
-
-# ── feature 状态机 ───────────────────────────────────────────────────────────
-
-features_guard() {
-  have jq || die "该命令需要 jq。安装：brew install jq"
-  [ -f "$FEATURES" ] || die "$FEATURES 不存在"
-}
-
-feature_field() { jq -r --arg id "$1" ".features[] | select(.id==\$id) | .$2 // \"\"" "$FEATURES"; }
-
-feature_exists() { [ -n "$(jq -r --arg id "$1" '.features[] | select(.id==$id) | .id' "$FEATURES")" ]; }
-
-features_write() { # stdin: 新的 JSON
-  local tmp; tmp="$(mktemp "${TMPDIR:-/tmp}/todopi-features.XXXXXX")"
-  cat > "$tmp" || return 1
-  jq -e . "$tmp" >/dev/null || { rm -f "$tmp"; die "生成的 feature_list.json 不是合法 JSON，已放弃写入"; }
-  mv "$tmp" "$FEATURES"
-}
-
-vcr_value() {
-  if ! have jq || [ ! -f "$FEATURES" ]; then echo "n/a"; return; fi
-  local a p act
-  a="$(jq '[.features[] | select(.state=="active")] | length' "$FEATURES")"
-  p="$(jq '[.features[] | select(.state=="passing")] | length' "$FEATURES")"
-  act=$((a + p))
-  if [ "$act" -eq 0 ]; then echo "n/a（尚无 activated feature）"; return; fi
-  printf '%s/%s\n' "$p" "$act"
-}
-
-cmd_vcr() {
-  features_guard
-  local v; v="$(vcr_value)"
-  printf 'VCR = %s\n' "$v"
-  case "$v" in
-    n/a*) printf '%s尚无 activated feature，可以 activate 第一个。%s\n' "$C_DIM" "$C_RST"; return 0 ;;
-  esac
-  local a; a="$(jq '[.features[] | select(.state=="active")] | length' "$FEATURES")"
-  if [ "$a" -gt 0 ]; then
-    printf '%s有 %s 个 feature 已 activate 但未 passing。session 结束前若仍如此，在 PROGRESS.md 写明卡在哪一层。%s\n' "$C_YEL" "$a" "$C_RST"
-    return 1
-  fi
-  printf '%s所有 activated feature 都已 passing。%s\n' "$C_GRN" "$C_RST"
-}
-
-cmd_activate() {
-  features_guard
-  local id="${1:-}"
-  [ -n "$id" ] || die "用法：make activate F=<id>"
-  feature_exists "$id" || die "feature '$id' 不存在于 $FEATURES"
-
-  local st; st="$(feature_field "$id" state)"
-  [ "$st" = "not_started" ] || die "feature '$id' 当前是 '$st'，只有 not_started 才能 activate（状态机不允许跳级）"
-
-  local cur; cur="$(jq -r '.features[] | select(.state=="active") | .id' "$FEATURES")"
-  [ -z "$cur" ] || die "WIP=1：'$cur' 仍处于 active。先 make verify-feature F=${cur}，或 make release F=$cur"
-
-  local dep unmet=""
-  for dep in $(jq -r --arg id "$id" '.features[] | select(.id==$id) | .depends_on // [] | .[]' "$FEATURES"); do
-    [ "$(feature_field "$dep" state)" = "passing" ] || unmet="$unmet $dep"
-  done
-  [ -z "$unmet" ] || die "依赖未 passing：$unmet"
-
-  jq --arg id "$id" '(.features[] | select(.id==$id) | .state) = "active"' "$FEATURES" | features_write
-  printf '%s%s 已置为 active。%s\n' "$C_GRN" "$id" "$C_RST"
-  printf '记住：one session per feature。完成后跑 make verify-feature F=%s。\n' "$id"
-}
-
-cmd_release() {
-  features_guard
-  local id="${1:-}"
-  [ -n "$id" ] || die "用法：make release F=<id>"
-  feature_exists "$id" || die "feature '$id' 不存在"
-  [ "$(feature_field "$id" state)" = "active" ] || die "只有 active 的 feature 才能 release"
-  jq --arg id "$id" '(.features[] | select(.id==$id) | .state) = "not_started"' "$FEATURES" | features_write
-  printf '%s%s 已退回 not_started。请在 PROGRESS.md 的 Blockers 写明原因。%s\n' "$C_YEL" "$id" "$C_RST"
-}
-
-# reverify —— 在**已 passing** 的 feature 上重跑三层并刷新 evidence。
-#
-# 它存在的唯一理由是修复坏掉的记录。scope.md 说 passing 是终态、evidence 不得手工
-# 编辑，理由是「历史证据的价值在于它不被改写」——但那个理由预设了证据是真的。
-# 2026-09-21 发现 verify-feature 验证工作区却记录 HEAD，于是 F01 与 F02 的 evidence
-# 都指向了不含被验证代码的 commit。由 bug 产生的记录不是证据，修它不是改写历史。
-#
-# 它不放宽状态机：feature 仍是 passing，行为要改仍须新开一个 feature。它只换那一行
-# evidence，而且必须在干净工作区上真的重跑完三层。
-cmd_reverify() {
-  features_guard
-  local id="${1:-}"
-  [ -n "$id" ] || die "用法：make reverify F=<id>"
-  feature_exists "$id" || die "feature '$id' 不存在"
-  local st; st="$(feature_field "$id" state)"
-  [ "$st" = "passing" ] || die "reverify 只用于已 passing 的 feature；'$id' 当前是 '$st'"
-  cmd_verify_feature "$id" --reverify
-}
-
-cmd_verify_feature() {
-  features_guard
-  local id="${1:-}"
-  [ -n "$id" ] || die "用法：make verify-feature F=<id>"
-  feature_exists "$id" || die "feature '$id' 不存在"
-
-  local st reverify=""
-  [ "${2:-}" = "--reverify" ] && reverify=1
-  st="$(feature_field "$id" state)"
-  if [ -z "$reverify" ]; then
-    [ "$st" != "passing" ] || { printf '%s%s 已经是 passing（终态）。行为要改就新开一个 feature；evidence 指向错误的 commit 时用 make reverify F=%s。%s\n' "$C_YEL" "$id" "$id" "$C_RST"; return 0; }
-    [ "$st" = "active" ] || die "feature '$id' 当前是 '$st'。先 make activate F=$id —— 状态机不允许跳级"
-  fi
-
-  # evidence 声称「在 commit X 上验证通过」，而验证跑的是**工作区**。工作区有未提交
-  # 改动时，这句话就是假的——被验证的代码不在那个 commit 里。这个 harness 的全部
-  # 价值在于 evidence 可信，所以这里必须挡住，而不是记一个含糊的 dirty 标记。
-  # 发现于 2026-09-21：F01 与 F02 的 evidence 都指向了不含最终代码的 commit。
-  if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-    printf '%s工作区有未提交的改动。%s\n' "$C_RED$C_BLD" "$C_RST"
-    printf '  verify-feature 跑的是工作区，记录的是 HEAD——两者不一致时 evidence 会指向\n'
-    printf '  一个不含被验证代码的 commit，而 evidence 是这个 harness 唯一的可信输出。\n'
-    printf '  先提交（或 stash），再重跑 make verify-feature F=%s。\n\n' "$id"
-    git status --short
-    return 1
-  fi
-
-  header "verify-feature $id"
-  local n i label cmd repair
-  n="$(jq -r --arg id "$id" '.features[] | select(.id==$id) | .layers // [] | length' "$FEATURES")"
-  if [ "$n" -eq 0 ]; then
-    die "feature '$id' 没有定义 layers[]。没有可执行的验证，就没有 passing —— 见 docs/harness/scope.md"
-  fi
-
-  i=0
-  while [ "$i" -lt "$n" ]; do
-    label="$(jq -r --arg id "$id" ".features[] | select(.id==\$id) | .layers[$i].label" "$FEATURES")"
-    cmd="$(jq -r --arg id "$id" ".features[] | select(.id==\$id) | .layers[$i].cmd" "$FEATURES")"
-    repair="$(jq -r --arg id "$id" ".features[] | select(.id==\$id) | .layers[$i].repair" "$FEATURES")"
-    printf '\n%s[layer %s/%s] %s%s\n  $ %s\n' "$C_BLD" "$((i + 1))" "$n" "$label" "$C_RST" "$cmd"
-    if eval "$cmd"; then
-      printf '  %spass%s\n' "$C_GRN" "$C_RST"
-    else
-      printf '\n  %sfail — layer "%s" 未通过。do not proceed 到下一层。%s\n' "$C_RED$C_BLD" "$label" "$C_RST"
-      printf '  %sHOW TO FIX%s %s\n' "$C_BLD" "$C_RST" "$repair"
-      printf '\n%s%s 仍为 active。修好后重跑 make verify-feature F=%s。%s\n' "$C_RED" "$id" "$id" "$C_RST"
-      return 1
-    fi
-    i=$((i + 1))
-  done
-
-  local ev
-  ev="commit $(git rev-parse --short HEAD 2>/dev/null || echo unknown), verified $(utc_now)"
-  jq --arg id "$id" --arg ev "$ev" \
-    '(.features[] | select(.id==$id) | .state) = "passing"
-     | (.features[] | select(.id==$id) | .evidence) = $ev' "$FEATURES" | features_write
-  printf '\n%s%s → passing%s\n  evidence: %s\n' "$C_GRN$C_BLD" "$id" "$C_RST" "$ev"
-  printf '下一步：make clean-check，然后更新 PROGRESS.md 并提交。\n'
 }
 
 # ── 命令：clean-check ────────────────────────────────────────────────────────
@@ -771,7 +590,7 @@ cmd_clean_check() {
 
   # 4. startup 路径可用
   local miss="" t
-  for t in doctor status check activate verify-feature clean-check; do
+  for t in doctor status check test e2e clean-check; do
     grep -qE "^$t[[:space:]]*:" Makefile 2>/dev/null || miss="$miss $t"
   done
   if [ -n "$miss" ]; then
@@ -824,17 +643,15 @@ usage() {
 用法：tools/harness.sh <command> [args]
 
   doctor                  只读环境诊断
-  status                  当前前向状态（feature / VCR / PROGRESS / 最近 check）
+  status                  当前前向状态（账本 / PROGRESS / 最近 check）
   check                   Layer 1 静态验证，结果写入 .harness-results/
   test                    Layer 2 运行时验证
   e2e                     Layer 3 系统验证
   check-arch              执行 .harness/arch-rules.json 的架构约束
-  vcr                     Verified Completion Ratio
-  activate <id>           认领 feature（WIP=1）
-  release <id>            把 active feature 退回 not_started
-  verify-feature <id>     逐层验证并由 harness 写入 passing + evidence
   clean-check             清洁态五维检查
   ci                      CI 入口：check + test + e2e，产出 ci-summary.md
+
+feature 的认领与完成现在走 CLI：todopi ls --ready / claim / done（2026-09-23 自举）。
 
 契约见 docs/harness/verification.md，操作手册见 AGENTS.md。
 USAGE
@@ -850,11 +667,6 @@ main() {
     test)           cmd_test "$@" ;;
     e2e)            cmd_e2e "$@" ;;
     check-arch)     cmd_check_arch "$@" ;;
-    vcr)            cmd_vcr "$@" ;;
-    activate)       cmd_activate "$@" ;;
-    release)        cmd_release "$@" ;;
-    verify-feature) cmd_verify_feature "$@" ;;
-    reverify)       cmd_reverify "$@" ;;
     clean-check)    cmd_clean_check "$@" ;;
     ci)             cmd_ci "$@" ;;
     -h|--help|help|"") usage ;;

@@ -1,0 +1,4 @@
+version: 1
+id_prefix: tp
+lease_hours: 2
+verify_timeout_seconds: 600
