@@ -48,3 +48,38 @@ export function gitUserName(root: string): string | null {
     return null;
   }
 }
+
+/**
+ * 当前 HEAD 的短 sha（7 位）；不在 git 仓库里、或仓库还没有任何提交时返回 null。
+ *
+ * spec §5.3.3 的 `done` 行带 `commit=<sha7>`。**拿不到就不写这个 key**，
+ * 不写 `commit=unknown`——一个假的 sha 比没有更坏：读日志的人会拿它去 checkout。
+ */
+export function gitHead(root: string): string | null {
+  try {
+    const out = execFileSync("git", ["rev-parse", "--short=7", "HEAD"], {
+      cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return out === "" ? null : out;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 工作区是否有未提交的改动；不在 git 仓库里返回 null。
+ *
+ * 用 `--porcelain`：它的输出是给程序读的，格式跨版本稳定。
+ * 含未跟踪文件——`done` 记的 `dirty` 要回答「这次完成对应的树干不干净」，
+ * 一个没加进 git 的新文件同样让它不干净。
+ */
+export function gitDirty(root: string): boolean | null {
+  try {
+    const out = execFileSync("git", ["status", "--porcelain"], {
+      cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    });
+    return out.trim() !== "";
+  } catch {
+    return null;
+  }
+}

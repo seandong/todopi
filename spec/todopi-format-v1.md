@@ -239,7 +239,7 @@ Log line (§5.3.3), and MUST match `^[^\s:]{1,64}$`.
 | `in_progress` | `open` | `release` | clear `assignee`; delete lease; log `released` |
 | `in_progress` | `in_progress` | `claim` (reclaim) | replace `assignee`; replace lease; log `claimed steal=true` naming the replaced actor |
 | `open`, `in_progress` | `closed` (`done`) | `done` | run `verify` if present; require Acceptance Criteria satisfied; require every child `closed`; set `resolution: done`; delete lease; log `done` |
-| `open`, `in_progress` | `closed` (other) | `close --as` | require every child `closed`; set `resolution`; delete lease; log `closed` |
+| `open`, `in_progress` | `closed` (other) | `close --resolution` | require every child `closed`; set `resolution`; delete lease; log `closed` |
 | `closed` | `open` | `reopen` | remove `resolution` and `assignee`; log `reopened` |
 
 Reclaim exists because §7.5 places a stale `in_progress` task in the ready queue: a
@@ -248,11 +248,24 @@ A reclaim of a task whose lease has expired needs no extra ceremony; overriding 
 that is still live is what `--steal` is for. Either way the replacement of another
 actor's `assignee` is what `steal=true` records.
 
-Gates. A transition MUST be refused when: `verify` exits non-zero; the Acceptance
-Criteria are unsatisfied; some child is not `closed`; or the task's `assignee` is
-another actor. Any of these MAY be forced with `--force --reason <text>`, which MUST
-record `forced=true` and the reason in the Log. A refused transition changes nothing
-and MUST NOT append to the Log (§5.3.3).
+Gates. A transition MUST be refused when a gate **that applies to it** does not hold.
+Which gates apply to which transition is the table above, not this list: `verify` and
+the Acceptance Criteria gate `done` only; every child being `closed` gates both `done`
+and `close`; the task being **currently held** by another actor gates every write. "Currently held"
+means an `in_progress` task whose `assignee` is someone else, or a shared lease (§8) that
+belongs to someone else and has not expired. An `assignee` left on a `closed` task is a
+historical record of who closed it (§6.2 invariant 3 permits it) and MUST NOT be read as a
+current holder — otherwise nobody could ever reopen a task someone else closed. `close` is
+how a task is abandoned rather than finished, so criteria left unticked are the normal
+case for it and MUST NOT refuse it.
+
+Any of these gates MAY be forced with `--force --reason <text>`, which MUST record
+`forced=true` and the reason in the Log. **A transition that has no row in the table
+above is not a gate and MUST NOT be forced**: `--force` overrides judgement about
+readiness, not the state machine. Closing an already-closed task, or reopening one that
+is not closed, is refused whatever flags are given.
+
+A refused transition changes nothing and MUST NOT append to the Log (§5.3.3).
 
 Writes that are not transitions — appending a note, toggling a criterion, editing a
 field — MUST also be refused when the task's `assignee` is another actor, so that two

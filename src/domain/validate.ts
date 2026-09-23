@@ -6,6 +6,7 @@ import {
 } from "./types.ts";
 import type { Finding } from "./findings.ts";
 import { validateGraph } from "./graph.ts";
+import { sectionLines } from "./acceptance.ts";
 
 const CONFLICT_RE = /^(<<<<<<<|=======|>>>>>>>)/m;
 
@@ -148,18 +149,14 @@ export function validateFile(t: TaskFile): Finding[] {
   return out;
 }
 
-/** 取 ## Log 小节下的列表项。续行（缩进两格）不是新的一项。 */
+/**
+ * 取 `## Log` 小节下的列表项。续行（缩进两格）不是新的一项。
+ *
+ * 小节查找共用 `acceptance.ts` 的 `sectionLines`——验收标准用的是同一套逻辑，
+ * 而 F09 的勾选写入端还要靠它定位具体行。两份实现迟早会漂。
+ */
 export function logLines(body: string): string[] {
-  const lines = body.split("\n");
-  const start = lines.findIndex((l) => l.trim() === "## Log");
-  if (start < 0) return [];
-  const out: string[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    const line = lines[i]!;
-    if (line.startsWith("## ")) break;
-    if (line.startsWith("- ")) out.push(line);
-  }
-  return out;
+  return sectionLines(body, "## Log").map((l) => l.text).filter((t) => t.startsWith("- "));
 }
 
 export type ParsedLogLine =

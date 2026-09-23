@@ -204,11 +204,11 @@
       "id": "F06",
       "behavior": "todopi done / close / reopen 在门禁不满足时拒绝，并打印一份不需要再跑别的命令就能据以行动的报告",
       "verification": "四道门禁各有用例：验收标准未勾全、子任务未关闭、归属是另一个 actor、（verify 留给 F07）；拒绝时退出 2（门禁）或 3（归属冲突），报告点名是哪道门并列出具体内容——未勾的标准带序号与文本、未关闭的子任务带 id/title/status——结尾给出两条出路（FR-D2a）；被拒绝的转换 MUST NOT 向 Log 追加任何内容（spec §5.3.3）；--force --reason 越过任一门禁并记 forced=true；reopen 同时清除 resolution 与 assignee（不变量 3）。",
-      "state": "not_started",
+      "state": "passing",
       "depends_on": [
         "F05"
       ],
-      "evidence": "",
+      "evidence": "commit e330152, verified 2026-09-23T02:18:24Z",
       "layers": [
         {
           "label": "static",
@@ -223,7 +223,7 @@
         {
           "label": "system",
           "cmd": "bash tools/e2e/f06-gates.sh",
-          "repair": "报告内容不足→src/output/report/gate.ts；它必须能独立回答「哪道门、具体是什么、下一步做什么」三个问题。"
+          "repair": "报告内容不足→src/output/dto/gate.ts 与 src/output/render/gate.ts；它必须能独立回答「哪道门、具体是什么、下一步做什么」三个问题。"
         }
       ]
     },

@@ -5,21 +5,21 @@
 
 ## Current State
 
-- Last commit: `ea1d305` —— F05 四轮评审通过并已合回 main。
+- Last commit: `be38ca2` —— F06 四轮评审通过（Go）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**20 条全部通过**，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **440 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **531 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
-  `f04-ls` 24 项 + `f05-claim` 47 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
+  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 66 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
   是单元测试抓不到的那类；Codex 第二轮评审另补了跨 worktree 锁测试
   （30 进程计数 30、无残留），确认 `leasePaths` 重构没有回归
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- VCR: `5/5` —— F01–F05 均 `passing`，evidence 由 harness 写入
+- VCR: `6/6` —— F01–F06 均 `passing`，evidence 由 harness 写入
 - 代码状态：**F01–F04 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
@@ -29,31 +29,33 @@
 
 ## In Progress
 
-无 feature 处于 `active`。**下一个是 F06**（WIP=1，开工前先 activate）。
+无 feature 处于 `active`。**下一个是 F07 `verify`**（WIP=1，开工前先 activate）。
 
-F01–F05 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
+F01–F06 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
 
-F05 经 **Codex 四轮评审**才拿到 Go，阻塞项数 **6 → 2 → 1 → 0**，
-详细理由见 DECISIONS D018–D021。回头看，每一轮的阻塞项都能归到同一条线上：
+F06 经 **Codex 四轮评审**才拿到 Go，阻塞项数 **4 → 2 → 1 → 0**，
+详细理由见 DECISIONS D022–D025。本 feature 还改过一次规格：
+spec §6.1 的 `close --as` → `close --resolution`（撞名会静默把 actor 设成
+resolution 的值），以及 Gates 段落的两处澄清（哪些门禁适用于哪条迁移、
+「assignee 门禁」指的是当前持有者而非 closed 上的历史记录）。
 
-1. **一条边界立起来之后，只用到了触发它的那个入口。** `claim` 修了 `release`
-   没修，前后三次。教训不是「下次记得」，而是：一条新边界立起来时要立刻问它
-   适用于哪几个入口。
-2. **一个判据只覆盖了一半。** 值查了键没查；字符形状查了 YAML 语义没查。
-3. **一条用例看起来在验证某件事，实际没有。** 串行的「并发」用例；只用自家
-   解析器的往返用例；屏障失效却报告通过。
+**六条阻塞项可以归成同一件事的不同形状**——边界只用到我想到的入口、权限只覆盖
+我理解的范围、门禁只按笼统那段话而不是明确那张表、判据只查 actor 不查过期、
+动作只按一种迁移生成、断言与验证之间隔了一个我亲手写的豁免。
 
-第 3 条最值得留下：**一条用例的价值全在「缺陷存在时它会不会红」，而这件事
-必须被证明，不能靠注释声称。** 本 feature 之后每条关键用例都跑了反向验证——
-把实现退回有缺陷的形状，确认它真的变红。
+两条跨 feature 的教训写在 DECISIONS D025：
 
-另有一条被纠正的错误技术结论（D021）：我在 D020 里写「preload 包
-`fs.unlinkSync` 走不通」，漏了 `syncBuiltinESMExports()`。一条写进决策文档的
-错误技术结论，会让后来的人据此排除掉一整条可行的路。
+1. **「看起来在测 X、实际只测了 Y」在这一个 feature 里出现了四次**：标题承诺三条
+   命令而循环只有两条、只用自家解析器、断言方向只有一半、自己写豁免再宣布全部
+   通过。最后一次不是疏忽——**当一条断言需要豁免才能成立时，先问那个豁免是不是
+   在承认被断言的东西不符合它自己的契约。**
+2. **我在 D022 里写了三条没验证过的断言**，都是「改完一处，顺手把预期写成了结果」。
+   推断出的结论和验证过的结论，在文档里长得一模一样。规矩已立：凡写进 DECISIONS
+   的行为断言，要么当场验证，要么写成「预期」而不是「已完成」。
 
 自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
-doctor 能检出违规 ✅、五个命令 passing 进度 **3/5**（`init`、`add`、`claim`
-已完成，还差 `done`、`verify`）。
+doctor 能检出违规 ✅、五个命令 passing 进度 **4/5**（`init`、`add`、`claim`、
+`done` 已完成，**只差 `verify`**）。**F07 完成后触发条件就齐了。**
 
 `feature_list.json` 于 2026-09-16 填入 21 条，拆分依据见 DECISIONS D011。
 
@@ -103,13 +105,22 @@ doctor 能检出违规 ✅、五个命令 passing 进度 **3/5**（`init`、`add
     其中两条是真正的数据正确性问题（改写既有任务破坏扩展字段、跨 worktree
     覆盖别人的活租约），一条是我写错的技术结论（D021 纠正）。
 20. ~~把 `feat/f05-claim` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-21. **下一步：activate F06 并写实现计划。**
-    F06 的地基：写入走 `withLedgerLock` + `prepareUpdate`（构造校验与落盘分开，
-    这样「读 → 决策 → 构造并校验 → 写」的顺序是天然的）；身份用
-    `commands/actor.ts` 的 `currentActor`；门禁用 `domain/validate.ts` 的
-    `validateWrite`。**普通写入（note / check / edit）要刷心跳但不得隐式重新
-    认领，也不能只查本树 assignee**——共享租约归属要一起查，这是 F05 三轮
-    评审换来的边界。
+21. ~~activate F06、写计划并执行~~ 已完成，6 个 task 逐个 TDD 通过，三层全绿。
+    顺带改了一处规格（`close --as` → `close --resolution`，见上）。
+22. ~~Codex 评审 F06~~ 四轮才拿到 Go，阻塞项 4 → 2 → 1 → 0，见 D022–D025。
+23. ~~把 `feat/f06-done` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
+24. **下一步：activate F07 并写实现计划。**
+    F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
+    门禁骨架在 `commands/transition.ts`，`verify` 那道门加进 `domain/gates.ts` 即可，
+    报告与动作走 `gateActions()`（`command` 无占位符、`template` 需填空）。
+
+    F07 的两处硬要求：FR-D2 说超时**必须终止整个进程组**而不只是直接子进程——
+    实测过运行时默认只向直接子进程发 SIGTERM，孙进程全部存活，而 `verify` 的
+    典型值（`pnpm test`、`cargo test`）都会 fork worker，被遗弃的 worker 会继续
+    占端口、写文件、烧 CPU。FR-D4 要求首次执行前按仓库路径确认信任，
+    而**信任记录 MUST NOT 放在 `.todopi/` 内**——随仓库传播的信任记录等于让仓库
+    为自己背书。FR-D4a 规定验证输出的去向：通过时不记录、强制关闭时记最后 512
+    字节、完整输出写 `.todopi/.cache/verify/` 且不提交。
     地基已在 F04 打好，**不要重写**：身份解析链在 `domain/actor.ts`（纯函数）
     + `commands/actor.ts`（取外部事实），租约目录与锁路径由 `format/lease.ts`
     的 `leasePaths` 一次派生，租约读取是 `readHeartbeats`。

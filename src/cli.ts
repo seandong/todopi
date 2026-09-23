@@ -181,6 +181,79 @@ program
     );
   });
 
+type TransitionCmdOptions = { force?: boolean; reason?: string; resolution?: string };
+
+/**
+ * 三条迁移命令共用的出口。门禁拒绝时打印 FR-D2a 的报告并按 worstCode 退出——
+ * 那份报告是 agent 唯一能看到的东西，所以它走 stdout 而不是 stderr：
+ * `--json` 下它就是结构化的拒绝，agent 解析它来决定修什么。
+ */
+async function transitionAction(
+  kind: "done" | "close" | "reopen",
+  id: string,
+  cmdOpts: TransitionCmdOptions,
+): Promise<void> {
+  const { GateRefused } = await import("./commands/transition.ts");
+  const { renderGateReport, renderGateJson, renderTransition, renderTransitionJson } =
+    await import("./output/render/gate.ts");
+  const opts = program.opts();
+  const common = {
+    directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+    id,
+    actor: opts["as"] as string | undefined,
+    force: cmdOpts.force,
+    reason: cmdOpts.reason,
+  };
+
+  try {
+    const run = kind === "done"
+      ? (await import("./commands/done.ts")).runDone
+      : kind === "close"
+        ? (await import("./commands/close.ts")).runClose
+        : (await import("./commands/reopen.ts")).runReopen;
+    const report = run({ ...common, ...(kind === "close" ? { resolution: cmdOpts.resolution } : {}) });
+    process.stdout.write(
+      opts["json"] === true
+        ? renderTransitionJson(report) + "\n"
+        : renderTransition(report, { quiet: opts["quiet"] === true }),
+    );
+  } catch (err) {
+    if (err instanceof GateRefused) {
+      process.stdout.write(
+        opts["json"] === true ? renderGateJson(err.report) + "\n" : renderGateReport(err.report),
+      );
+      throw new CliError(err.code as 2 | 3, "");
+    }
+    throw err;
+  }
+}
+
+/** FR-Q4 的动词宽容。别名接受与基础命令完全相同的选项，且不计入 20 个子命令上限。 */
+function registerTransition(
+  names: string[],
+  kind: "done" | "close" | "reopen",
+  describe: string,
+  extra: (c: Command) => Command = (c) => c,
+): void {
+  for (const [i, name] of names.entries()) {
+    const cmd = program.command(name)
+      .description(i === 0 ? describe : `alias for \`${names[0]}\``)
+      .argument("<id>", "the task to change");
+    if (kind !== "reopen") {
+      cmd.option("--force", "override every gate; requires --reason")
+        .option("--reason <text>", "why the gate was overridden; recorded in the task log");
+    }
+    extra(cmd).action(async (id: string, cmdOpts: TransitionCmdOptions) => {
+      await transitionAction(kind, id, cmdOpts);
+    });
+  }
+}
+
+registerTransition(["done", "finish", "complete"], "done", "close a task as finished");
+registerTransition(["close", "cancel"], "close", "close a task without finishing it",
+  (c) => c.option("-r, --resolution <resolution>", "wontfix | duplicate | obsolete"));
+registerTransition(["reopen"], "reopen", "put a closed task back to open");
+
 try {
   await program.parseAsync(process.argv);
   process.exitCode = EXIT.ok;
