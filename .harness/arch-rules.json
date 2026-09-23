@@ -186,10 +186,10 @@
       "id": "ARCH-019",
       "description": "fs/ 只依赖 node: 内置模块",
       "applies_when": "test -d src/fs",
-      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/fs --include='*.ts' | grep -vE \"from [\\\"']node:\" || true",
+      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/fs --include='*.ts' | grep -vE \"from [\\\"']node:\" | grep -vE \"from [\\\"']\\\\./[^/\\\"']+\\\\.ts[\\\"']\" || true",
       "expect": "empty",
       "what": "src/fs/ import 了 node: 之外的任何模块。",
-      "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。",
+      "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。 2026-09-23：check 原先把**同目录**的相对 import 也算成违规（`./tail.ts`），而规则自己写的意图是「不得 import format/ 或 domain/」——同层拆成两个文件并不越界。收窄成只放行 `./<name>.ts`，`../` 仍然抓得到（两个方向都实测过）。这是这类误伤的第六次：**规则的措辞对，check 比措辞宽。**",
       "fix": "把上层的类型换成本层自己定义的中性错误或数据结构，由调用方翻译。若确实需要共享某个常量，考虑它是否本就属于 fs/。"
     },
     {
@@ -206,10 +206,10 @@
       "id": "ARCH-021",
       "description": "exec/ 只依赖 node: 内置模块",
       "applies_when": "test -d src/exec",
-      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/exec --include='*.ts' | grep -vE \"from [\\\"']node:\" || true",
+      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/exec --include='*.ts' | grep -vE \"from [\\\"']node:\" | grep -vE \"from [\\\"']\\\\./[^/\\\"']+\\\\.ts[\\\"']\" || true",
       "expect": "empty",
       "what": "src/exec/ 引入了 node: 内置模块之外的东西。",
-      "why": "exec/ 与 fs/ 并列在最底层：它管子进程与用户级配置，不认识 todopi 的格式。一旦它 import 了 format/ 或 domain/，「以独立进程组执行一条命令」这件事就和 12 个字段绑死了，而它本该对任何要跑子进程的程序都一样。这条与 fs/ 的 ARCH-019 是同一条规则的两个实例。source: F07 建立 exec/ 时同批加入——边界要在第一个诱惑出现之前立起来。",
+      "why": "exec/ 与 fs/ 并列在最底层：它管子进程与用户级配置，不认识 todopi 的格式。一旦它 import 了 format/ 或 domain/，「以独立进程组执行一条命令」这件事就和 12 个字段绑死了，而它本该对任何要跑子进程的程序都一样。这条与 fs/ 的 ARCH-019 是同一条规则的两个实例。source: F07 建立 exec/ 时同批加入——边界要在第一个诱惑出现之前立起来。 2026-09-23：check 原先把**同目录**的相对 import 也算成违规（`./tail.ts`），而规则自己写的意图是「不得 import format/ 或 domain/」——同层拆成两个文件并不越界。收窄成只放行 `./<name>.ts`，`../` 仍然抓得到（两个方向都实测过）。这是这类误伤的第六次：**规则的措辞对，check 比措辞宽。**",
       "fix": "把需要格式知识的部分挪到 commands/，由它把已经算好的参数传进来。exec/ 只收原始的字符串与路径。"
     },
     {

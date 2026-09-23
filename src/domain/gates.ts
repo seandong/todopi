@@ -44,6 +44,8 @@ export type VerifyOutcome = {
   timedOut: boolean;
   tail: string;
   logPath: string;
+  /** 完整输出没存下来时说明原因；存下来了为 null */
+  logProblem: string | null;
 };
 
 /**
@@ -69,6 +71,14 @@ export type Refusal =
     tail: string;
     /** 完整输出的落点，agent 自己去读（FR-D4a） */
     logPath: string;
+    /**
+     * 完整输出没存下来时说明原因。
+     *
+     * 报告里那条 `cat <logPath>` 必须跟着它走：文件不在（或只写了一半）时还把
+     * 它交出去，agent 照着跑就是一次注定失败的命令。F06 第三轮的阻塞项正是
+     * 「报告给出的命令不可执行」，这是同一条线上的另一个入口。
+     */
+    logProblem: string | null;
   };
 
 /**
@@ -144,6 +154,7 @@ export function evaluateGates(input: GateInput): Refusal[] {
         gate: "verify", code: 2,
         command: v.command, exitCode: v.exitCode, signal: v.signal,
         timedOut: v.timedOut, tail: v.tail, logPath: v.logPath,
+        logProblem: v.logProblem,
       });
     }
   }

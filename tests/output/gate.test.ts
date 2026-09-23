@@ -272,11 +272,11 @@ test("reopen 的归属说明明说「没有可用的命令」", () => {
 
 const verifyFail: Refusal = {
   gate: "verify", code: 2, command: "pnpm test", exitCode: 1, signal: null,
-  timedOut: false, tail: "FAIL src/auth.test.ts\n  3 failing", logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log",
+  timedOut: false, tail: "FAIL src/auth.test.ts\n  3 failing", logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log", logProblem: null,
 };
 const verifyTimeout: Refusal = {
   gate: "verify", code: 2, command: "pnpm test", exitCode: null, signal: "SIGKILL",
-  timedOut: true, tail: "", logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log",
+  timedOut: true, tail: "", logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log", logProblem: null,
 };
 
 test("verify 的报告带原样的命令、退出码与输出尾部", () => {
@@ -313,4 +313,26 @@ test("verify 的动作里 command 不含占位符", () => {
       if (a.command !== undefined) assert.doesNotMatch(a.command, /[<>]/, a.command);
     }
   }
+});
+
+test("完整输出没存下来时，报告不给 cat —— 给不出能跑的命令就别给命令", () => {
+  // F06 第三轮的阻塞项是「报告给出的命令不可执行」。这是同一条线上的另一个
+  // 入口：日志写不成时文件根本不在，`cat` 照着跑必然失败，而 FR-D2a 要的是
+  // 一份「不需要再跑别的命令就能据以行动」的报告。
+  const base = {
+    gate: "verify" as const, code: 2 as const, command: "npm test",
+    exitCode: 1, signal: null, timedOut: false, tail: "3 failing",
+    logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log",
+    logProblem: "could not write the verify log to /repo/.todopi/.cache/verify/tp-000001-2026.log: EACCES",
+  };
+  const actions = report([base]).actions;
+
+  assert.equal(actions.filter((a) => a.command !== undefined && a.command.startsWith("cat ")).length, 0,
+    "日志不在，却还是把 cat 交了出去");
+  assert.ok(actions.some((a) => a.detail.includes("EACCES")),
+    "既然给不了命令，至少要说清为什么没有全文");
+
+  // 反过来：存下来了就必须给，否则 agent 只能看到 512 字节的尾部。
+  const ok = report([{ ...base, logProblem: null }]).actions;
+  assert.ok(ok.some((a) => a.command === `cat ${base.logPath}`), "存下来了却没给出读全文的路子");
 });

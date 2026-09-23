@@ -71,8 +71,8 @@ export function runCommand(command: string, opts: RunOptions): RunResult {
     // 不在没测过的情况下声称支持树终止。CI 只有 Ubuntu，Windows 是尽力而为，
     // 而一个杀不干净的树终止比明确不支持更糟——它会悄悄留下 worker。
     throw new Error(
-      "verify is not supported on Windows yet: killing the whole process tree needs " +
-      "taskkill /T /F, which is not implemented or tested here.",
+      "verify is not supported on Windows yet: terminating the command's process " +
+      "group needs taskkill /T /F, which is not implemented or tested here.",
     );
   }
 

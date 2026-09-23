@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, chmodSync, readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -303,12 +303,20 @@ function structure(body: string): string[] {
   return body.split("\n").filter((l) => /^(## |---|- )/.test(l));
 }
 
-for (const [name, script] of [
-  ["以 `- ` 开头，长得像新的一条 Log", `printf -- '- 2026-01-01T00:00:00Z fake@host done\\n'; exit 1`],
-  ["含 `: `，长得像 frontmatter 的键值", `printf 'key: value here\\n'; exit 1`],
-  ["以 `## ` 开头，长得像小节标题", `printf '## Log\\n- fake entry\\n'; exit 1`],
-  ["含 `---`，长得像 frontmatter 边界", `printf -- '---\\nid: "tp-fake"\\n---\\n'; exit 1`],
-  ["空行与制表符", `printf 'a\\n\\n\\tb\\n'; exit 1`],
+// 每条都带一个 marker：**那个危险形状必须真的出现在正文里**，而且是缩进过的。
+// 少了这一条，一个写错的 printf（比如 `#` 被转义成 `\\#`）会让用例悄悄改测别的东西，
+// 而它照样绿——这个 feature 里我已经栽过一次，所以让机器来发现，而不是靠读。
+for (const [name, script, marker] of [
+  ["以 `- ` 开头，长得像新的一条 Log",
+   `printf -- '- 2026-01-01T00:00:00Z fake@host done\\n'; exit 1`,
+   "- 2026-01-01T00:00:00Z fake@host done"],
+  ["含 `: `，长得像 frontmatter 的键值",
+   `printf 'key: value here\\n'; exit 1`, "key: value here"],
+  ["以 `## ` 开头，长得像小节标题",
+   `printf '## Log\\n- fake entry\\n'; exit 1`, "## Log"],
+  ["含 `---`，长得像 frontmatter 边界",
+   `printf -- '---\\nid: "tp-fake"\\n---\\n'; exit 1`, "---"],
+  ["空行与制表符", `printf 'a\\n\\n\\tb\\n'; exit 1`, "\tb"],
 ] as const) {
   test(`verify 输出撞上 Log 语法时仍然安全：${name}`, () => {
     withConfig(() => {
@@ -323,6 +331,9 @@ for (const [name, script] of [
       // 一个被注入的假 `## Log` 小节——它们只问「我关心的那条还在吗」，不问
       // 「有没有多出别的东西」。结构不变量两边都问了：顶格的结构行只允许
       // **多出一条** Log 条目，别的一个都不许变。
+      assert.ok(body.split("\n").includes(`  ${marker}`),
+        `那个危险形状根本没进正文——用例在测别的东西\n${body}`);
+
       const after = structure(body);
       const added = after.filter((l) => !before.includes(l));
       assert.equal(after.length, before.length + 1,
@@ -336,3 +347,32 @@ for (const [name, script] of [
     });
   });
 }
+
+test("日志写不成时，拒绝报告不给 cat，并说清为什么没有全文", (t) => {
+  // 上面那条只测了渲染器。这一条走完整条路：真的让日志写不进去，确认
+  // logProblem 从 runner 一路传到报告，而那条 `cat` 真的消失了。
+  if (process.getuid?.() === 0) { t.skip("以 root 运行，chmod 挡不住写入"); return; }
+  withConfig(() => {
+    const d = repo();
+    const cache = join(d, ".todopi", ".cache", "verify");
+    mkdirSync(cache, { recursive: true });
+    chmodSync(cache, 0o500);
+    try {
+      const task = runAdd({ directory: d, title: "T", verify: "echo boom; exit 1", actor: ME });
+      assert.throws(
+        () => runDone({ directory: d, id: task.id, actor: ME, yes: true }),
+        (e: unknown) => {
+          assert.ok(e instanceof GateRefused);
+          const v = e.report.refused.find((r) => r.gate === "verify");
+          assert.ok(v !== undefined && v.gate === "verify");
+          assert.match(String(v.logProblem), /EACCES/, "日志明明写不进去，logProblem 却是空的");
+          assert.equal(e.report.actions.filter((a) => a.command?.startsWith("cat ") === true).length, 0,
+            "日志不在，却还是把 cat 交了出去");
+          return true;
+        },
+      );
+    } finally {
+      chmodSync(cache, 0o700);
+    }
+  });
+});

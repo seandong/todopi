@@ -17,6 +17,7 @@
 
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
+import { makeTail } from "./tail.ts";
 import type { WriteStream } from "node:fs";
 
 type Payload = {
@@ -30,36 +31,6 @@ type Payload = {
 };
 
 const payload = JSON.parse(process.argv[2] ?? "{}") as Payload;
-
-/**
- * 有界的尾部环：只留最后 `max` 字节。**任何时刻**占用都不超过 `max` 加一个
- * chunk——这是「内存有界」这句话的全部依据，所以它必须自己成立，而不是靠
- * 「反正最后会截尾」。
- */
-function makeTail(max: number) {
-  const chunks: Buffer[] = [];
-  let total = 0;
-  let dropped = false;
-  return {
-    push(c: Buffer): void {
-      chunks.push(c);
-      total += c.length;
-      // 丢到「再丢一个就不够 max 了」为止，于是留下的恰好覆盖尾部 max 字节
-      while (chunks.length > 1 && total - chunks[0]!.length >= max) {
-        total -= chunks.shift()!.length;
-        dropped = true;
-      }
-    },
-    truncated(): boolean {
-      return dropped || total > max;
-    },
-    text(): string {
-      const all = Buffer.concat(chunks);
-      if (all.length <= max) return all.toString("utf8");
-      return all.subarray(all.length - max).toString("utf8");
-    },
-  };
-}
 
 const started = Date.now();
 const tail = makeTail(payload.maxOutputBytes);

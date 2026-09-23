@@ -93,6 +93,7 @@ export function runVerify(
     timedOut: result.timedOut,
     tail: tailOf(result.output, TAIL_BYTES),
     logPath,
+    logProblem: result.logProblem,
   };
 }
 

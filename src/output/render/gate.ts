@@ -87,8 +87,16 @@ export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
       case "verify":
         // 完整输出在磁盘上，报告只给尾部。把路径作为动作交出去，
         // agent 才能自己去读全文——那正是 FR-D2a 说的「据以行动」。
-        out.push({ for: "verify", command: `cat ${refusal.logPath}`,
-          detail: "Read the full output of the verify run." });
+        //
+        // **但只在它真的存下来了的时候。** 写不成还把 `cat` 交出去，agent 照着
+        // 跑就是一次注定失败的命令；说清楚「没存下来、为什么」才是据以行动的。
+        if (refusal.logProblem === null) {
+          out.push({ for: "verify", command: `cat ${refusal.logPath}`,
+            detail: "Read the full output of the verify run." });
+        } else {
+          out.push({ for: "verify",
+            detail: `The full output could not be saved, so only the tail above is available: ${refusal.logProblem}` });
+        }
         out.push({ for: "verify",
           detail: refusal.timedOut
             ? "It timed out. Either make it faster, or raise verify_timeout_seconds in .todopi/config.yml."

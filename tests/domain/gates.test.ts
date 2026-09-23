@@ -255,7 +255,7 @@ test("恰好等于 lease_hours 时还算活着 —— 与 claim 的 leaseExpired
 
 const okVerify = {
   command: "pnpm test", exitCode: 0, signal: null, timedOut: false,
-  tail: "", logPath: "/tmp/v.log",
+  tail: "", logPath: "/tmp/v.log", logProblem: null,
 };
 const failVerify = { ...okVerify, exitCode: 1, tail: "3 failing" };
 const timedOutVerify = { ...okVerify, exitCode: null, signal: "SIGKILL", timedOut: true };

@@ -50,10 +50,18 @@ test("正常退出后孙进程也不留下", () => {
   const pidFile = join(d, "grandchild.pid");
   // 先给孙进程一点写下 pid 的时间，否则父进程退得太快、整组被清掉时它还没写，
   // 用例就观察不到「它曾经存在过」——那样这条用例会因为**行为正确**而失败。
+  const started = Date.now();
   const r = runCommand(`bash -c 'echo $$ > ${pidFile}; sleep 30' & sleep 0.5; exit 0`,
     { cwd: d, timeoutMs: 10_000 });
+  const elapsed = Date.now() - started;
   assert.equal(r.timedOut, false);
   assert.equal(r.code, 0);
+
+  // **而且要立刻返回。** 杀组必须发生在 `exit`，不能等 `close`——孙进程握着
+  // stdout 管道，等 close 就等于等它睡完那 30 秒。只断言「最终死了」的话，
+  // 那个错误实现照样绿，只是慢 30 秒；这一条把「快」也钉住。留足余量：
+  // 命令自己要睡 0.5 秒。
+  assert.ok(elapsed < 3_000, `跑了 ${elapsed}ms —— 杀组被推迟到了 close 之后`);
 
   assert.ok(settle(() => existsSync(pidFile)));
   const gpid = Number(readFileSync(pidFile, "utf8").trim());
@@ -173,12 +181,24 @@ test("主动脱离进程组的后代杀不到 —— 这是固有边界，如实
     "读 src/exec/run.ts 顶部关于这条边界的说明再决定是不是该改这个断言");
 });
 
-test("捕获的内存有界 —— 200 MB 输出不该变成 200 MB 内存", async () => {
+/** `ps` 能不能用。受限环境（沙箱、某些容器）里它会 EPERM。 */
+function psWorks(): boolean {
+  const r = spawnSync("ps", ["-o", "rss=", "-p", String(process.pid)], { encoding: "utf8" });
+  return Number.isFinite(Number.parseInt((r.stdout ?? "").trim(), 10));
+}
+
+test("runner 的常驻内存有界 —— 200 MB 输出不该变成 200 MB 内存", async (t) => {
   // 这条不能走 runCommand：它是 spawnSync，中途量不到。直接起 runner，
   // 每 50ms 采一次 RSS 取峰值。
   //
-  // 早先的实现把每个 chunk 攒进数组、退出时才 concat 再截尾——返回值确实很短，
-  // 所以**只断言返回值长度的测试照样绿**。要判别它，必须量运行期间的内存。
+  // 早先的实现把每个 chunk 攒进数组、退出时才 Buffer.concat 再截尾——返回值确实
+  // 很短，所以**只断言返回值长度的测试照样绿**。要判别它，必须量运行期间的内存。
+  //
+  // **`ps` 不可用时明确 skip，而不是红。** Codex 评审复跑时在沙箱里撞到 EPERM，
+  // 那次红说的是环境，不是实现。不变量本身由 tail.test.ts 在进程内确定性地把
+  // 关，永远跑得了；这一条补的是「runner 真的用了那个环」这一段。
+  if (!psWorks()) { t.skip("ps 不可用（受限环境），这次量不到常驻内存"); return; }
+
   const d = dir();
   const logPath = join(d, "big.log");
   const runner = join(import.meta.dirname, "../../src/exec/runner.ts");
@@ -203,8 +223,8 @@ test("捕获的内存有界 —— 200 MB 输出不该变成 200 MB 内存", asy
   const size = statSync(logPath).size;
   rmSync(d, { recursive: true, force: true });
 
-  assert.ok(peakKb > 0, "没采到 RSS，这条用例什么都没验证");
-  // Node 自己的基线在 50 MB 上下；攒在内存里的话峰值会在 400 MB 量级。
+  assert.ok(peakKb > 0, "一开始 ps 还能用，采样却一次都没成功 —— 这条什么都没验证");
+  // Node 自己的基线在 50 MB 上下；攒在内存里的话峰值会在 250 MB 量级（实测）。
   assert.ok(peakKb < 150_000, `runner 峰值内存 ${peakKb} KB —— 输出被攒在内存里了`);
   assert.ok(size >= 200_000_000, `日志只有 ${size} 字节，完整输出没落全`);
   assert.equal((JSON.parse(out) as { truncated: boolean }).truncated, true);

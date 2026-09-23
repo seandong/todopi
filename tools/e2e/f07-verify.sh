@@ -105,7 +105,7 @@ case "$(grep '^- 2' "$TASKS/$C.md" | tail -1)" in
   *) fail "应当是 verify=none" ;;
 esac
 
-# 9. **超时终止整棵进程树** —— 按 pid 断言孙进程已死（FR-D2）
+# 9. **超时终止整个进程组** —— 按 pid 断言孙进程已死（FR-D2）
 #    这是本 feature 的核心：实测过默认方式只杀直接子进程，孙进程全部存活。
 PIDFILE="$TMP/grandchild.pid"
 rm -f "$PIDFILE"
