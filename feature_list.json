@@ -235,7 +235,7 @@
       "depends_on": [
         "F06"
       ],
-      "evidence": "commit c8a7edf, verified 2026-09-23T07:59:54Z",
+      "evidence": "commit 687e750, verified 2026-09-23T08:06:44Z",
       "layers": [
         {
           "label": "static",
