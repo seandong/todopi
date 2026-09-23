@@ -1,5 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { renderGateReport, renderGateJson, renderTransition, gateActions } from "../../src/output/render/gate.ts";
 import type { GateReport } from "../../src/output/dto/gate.ts";
 import type { Refusal } from "../../src/domain/gates.ts";
@@ -266,4 +270,101 @@ test("reopen 的归属说明明说「没有可用的命令」", () => {
   assert.equal(a?.command, undefined);
   assert.match(a?.detail ?? "", /No command available/i,
     "简单地从文本里抓命令的调用方也得看得出这里没有命令");
+});
+
+// ---- verify 的报告（F07）----
+
+const verifyFail: Refusal = {
+  gate: "verify", code: 2, command: "pnpm test", exitCode: 1, signal: null,
+  timedOut: false, tail: "FAIL src/auth.test.ts\n  3 failing", logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log", logProblem: null,
+};
+const verifyTimeout: Refusal = {
+  gate: "verify", code: 2, command: "pnpm test", exitCode: null, signal: "SIGKILL",
+  timedOut: true, tail: "", logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log", logProblem: null,
+};
+
+test("verify 的报告带原样的命令、退出码与输出尾部", () => {
+  const out = renderGateReport(report([verifyFail]));
+  assert.match(out, /pnpm test/, "命令要原样出现（FR-D4）");
+  assert.match(out, /exited 1/);
+  assert.match(out, /FAIL src\/auth\.test\.ts/, "输出尾部要能直接看到");
+  assert.match(out, /3 failing/);
+});
+
+test("超时说的是超时，不是「退出 null」", () => {
+  const out = renderGateReport(report([verifyTimeout]));
+  assert.match(out, /timed out/i);
+  assert.doesNotMatch(out, /exited null/);
+});
+
+test("完整日志的路径作为动作交出去 —— agent 自己去读全文", () => {
+  const r = report([verifyFail]);
+  const read = r.actions.find((a) => a.for === "verify" && a.command?.startsWith("cat "));
+  assert.ok(read, "--json 里要有读日志的动作");
+  assert.ok(read.command?.includes(".cache/verify/"));
+  assert.match(renderGateReport(r), /\.cache\/verify\//, "文本里也要有");
+});
+
+test("超时时给的建议是提高超时值，不是「修好它报的错」", () => {
+  const detail = report([verifyTimeout]).actions
+    .filter((a) => a.for === "verify").map((a) => a.detail).join(" ");
+  assert.match(detail, /verify_timeout_seconds/);
+});
+
+test("verify 的动作里 command 不含占位符", () => {
+  for (const r of [report([verifyFail]), report([verifyTimeout])]) {
+    for (const a of r.actions) {
+      if (a.command !== undefined) assert.doesNotMatch(a.command, /[<>]/, a.command);
+    }
+  }
+});
+
+test("完整输出没存下来时，报告不给 cat —— 给不出能跑的命令就别给命令", () => {
+  // F06 第三轮的阻塞项是「报告给出的命令不可执行」。这是同一条线上的另一个
+  // 入口：日志写不成时文件根本不在，`cat` 照着跑必然失败，而 FR-D2a 要的是
+  // 一份「不需要再跑别的命令就能据以行动」的报告。
+  const base = {
+    gate: "verify" as const, code: 2 as const, command: "npm test",
+    exitCode: 1, signal: null, timedOut: false, tail: "3 failing",
+    logPath: "/repo/.todopi/.cache/verify/tp-000001-2026.log",
+    logProblem: "could not write the verify log to /repo/.todopi/.cache/verify/tp-000001-2026.log: EACCES",
+  };
+  const actions = report([base]).actions;
+
+  assert.equal(actions.filter((a) => a.command !== undefined && a.command.startsWith("cat ")).length, 0,
+    "日志不在，却还是把 cat 交了出去");
+  assert.ok(actions.some((a) => a.detail.includes("EACCES")),
+    "既然给不了命令，至少要说清为什么没有全文");
+
+  // 反过来：存下来了就必须给，否则 agent 只能看到 512 字节的尾部。
+  const ok = report([{ ...base, logProblem: null }]).actions;
+  assert.ok(ok.some((a) => a.command === `cat ${base.logPath}`), "存下来了却没给出读全文的路子");
+});
+
+test("报告里的 cat 在刁钻路径下也真能跑 —— 不是看起来对，是跑过", () => {
+  // F06 第三轮的阻塞项是「报告给出的命令不可执行」，当时的形状是命令里留着
+  // `<占位符>`。这是同一条线上更隐蔽的一个：仓库路径里有个空格，
+  // `cat /Users/me/my repo/....log` 就被 shell 拆成了两个参数。
+  //
+  // **所以这条用例不比对字符串，它把命令交给 sh 去跑。** 断言的是「跑得通」，
+  // 而不是「我以为的引号规则对」。
+  for (const dirName of ["plain", "with space", "with'quote"]) {
+    const root = mkdtempSync(join(tmpdir(), "todopi-q-"));
+    const dir = join(root, dirName);
+    mkdirSync(dir);
+    const logPath = join(dir, "run.log");
+    writeFileSync(logPath, "FULL-OUTPUT-MARKER\n");
+
+    const actions = report([{
+      gate: "verify", code: 2, command: "npm test", exitCode: 1, signal: null,
+      timedOut: false, tail: "", logPath, logProblem: null,
+    }]).actions;
+    const cmd = actions.find((a) => a.command?.startsWith("cat ") === true)?.command;
+    assert.ok(cmd !== undefined, `${dirName}：压根没给出读全文的命令`);
+
+    const got = execFileSync("sh", ["-c", cmd], { encoding: "utf8" });
+    assert.match(got, /FULL-OUTPUT-MARKER/, `${dirName}：这条命令跑不出全文 —— ${cmd}`);
+
+    rmSync(root, { recursive: true, force: true });
+  }
 });

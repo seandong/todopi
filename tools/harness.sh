@@ -401,10 +401,66 @@ cmd_test() {
   elif ! have node; then
     emit unit-test blocked "测试本该运行，但环境缺少 node（见 .tool-versions）"
   else
-    if node --test; then
+    # **NODE_OPTIONS 非空即拒。**
+    #
+    # 这条先前写成「挡掉 --test-name-pattern / --test-skip-pattern / --test-only」，
+    # 评审随即找出第四个：`--test-shard=1/4` 只跑 188/608，三道门全 pass。
+    # 枚举「已知的坏东西」永远漏——这一课刚在 .skip 上学过一遍，我又犯了一次。
+    #
+    # 改成要求「允许什么」：这一趟必须在干净的 NODE_OPTIONS 下跑。全量与否是
+    # 「通过」这两个字的前提，不该由一个我维护的黑名单来担保。
+    if [ -n "${NODE_OPTIONS:-}" ]; then
+      emit test-not-filtered fail "NODE_OPTIONS 非空（${NODE_OPTIONS}）：它可以筛掉任意多用例而运行器照样退出 0。清空它再跑，这一趟才能算数"
+    else
+      emit test-not-filtered pass "NODE_OPTIONS 为空，这一趟是全量"
+    fi
+
+    # 输出仍然直接流出来，同时留一份给下面数 skipped。
+    #
+    # **退出码取 PIPESTATUS[0]，不是管道的。** 管道的退出码是最后一个命令
+    # （`tee`）的，它几乎总是 0——评审用 `exit 42 | tee /dev/null` 复现了：
+    # 测试全红也会被记成 pass。加 tee 是为了数 skipped，差点把整层的判据换掉。
+    local _tlog _rc
+    _tlog="$(mktemp)"
+    node --test 2>&1 | tee "$_tlog"
+    _rc="${PIPESTATUS[0]}"
+    if [ "$_rc" -eq 0 ]; then
       emit unit-test pass "node --test 通过"
     else
-      emit unit-test fail "node --test 失败，输出见上"
+      emit unit-test fail "node --test 失败（退出码 ${_rc}），输出见上"
+    fi
+
+    # **被跳过的测试，问运行器，不问源码。**
+    #
+    # 原先在 clean-check 里用 grep 找 `.skip(`，两轮评审找出四种绕法：单引号理由
+    # 被误报、`t.skip("")` 和 `test.skip (...)`（点或括号前有空格）被漏掉。根子
+    # 是在用字符形状近似一个需要真解析的判断——F04 的 plainKey 栽过同一个跟头，
+    # 那次的解法也是「去问真正的解析器」。
+    #
+    # node:test 自己报的 skipped 数是权威的：一条被停掉的测试必然进这个计数，
+    # 无论它写成什么样；而运行时的条件跳过（环境不具备）在正常机器上根本不触发。
+    #
+    # **但它只在这一趟是全量时才说明问题**——被筛掉的用例不算 skipped，只是没被
+    # 注册。所以上面那道 test-not-filtered 是它的前提，不是可有可无的附加。
+    #
+    # **状态是 fail，不是 blocked。** 早先留 blocked，是因为仓库里有一条为
+    # 「`ps` 不可用」准备的条件跳过。那条用例已经删了（见 tests/exec/run.test.ts
+    # 顶部的说明），现在**没有任何跳过是合法的**，所以也不必再区分。
+    #
+    # **这道门挡不住什么，如实写在这里：** 一个文件若先 `process.exit(0)` 再声明
+    # 测试，或把 `test(...)` 包在一个不成立的 `if` 里，它注册的测试数就是零——
+    # 而一个「真的只有零条测试的文件」长得一模一样。**没有任何运行器信号能区分
+    # 这两者**，所以这里不去假装能挡。防线是代码审查：diff 里出现 `process.exit`
+    # 或 `if (...) test(` 就是红旗。
+    local _skipped
+    _skipped="$(sed -n 's/^# skipped \([0-9][0-9]*\)$/\1/p' "$_tlog" | tail -1)"
+    rm -f "$_tlog"
+    if [ -z "${_skipped:-}" ]; then
+      emit no-skipped-tests blocked "从 node --test 的输出里读不到 skipped 计数"
+    elif [ "$_skipped" -eq 0 ]; then
+      emit no-skipped-tests pass "没有测试被跳过"
+    else
+      emit no-skipped-tests fail "${_skipped} 条测试被跳过 —— 仓库里不该有任何跳过，理由见上面的输出"
     fi
   fi
   local overall; overall="$(checks_overall)"; checks_done
@@ -637,11 +693,31 @@ cmd_clean_check() {
   #   tools/ scripts/ —— harness 自己的命令行脚本，它们的职责就是打印报告。
   #                    把正当输出算成残留，会逼着作者用 process.stdout.write 绕开，
   #                    规则就变成了纯仪式。这里只查无歧义的标记。
-  # 收窄而非放宽：debugger / .only / .skip 在任何地方都是残留。
+  # 收窄而非放宽：debugger / .only / 被停掉的测试，在任何地方都是残留。
+  #
+  # **.skip 分两种。** `test.skip(...)` / `it.skip(...)` 是把一条测试停在那儿——
+  # 那是残留。而 `t.skip("原因")` 是运行时的条件跳过：环境不具备时明确说一声，
+  # 比让用例因为环境而红要好。**但仓库里现在一条这样的跳过都没有**：唯一那条
+  # （量常驻内存要用 ps，ps 在受限沙箱里 EPERM）已经连同用例一起删了，见
+  # tests/exec/run.test.ts 顶部。所以下面判的是 fail，不是 blocked。
+  # 只认前者，外加不给理由的 `.skip()`。
+  #
+  # 这里**只认申明点**：`test.skip(` / `it.skip(` / `describe.skip(` / `suite.skip(`，
+  # 点和括号前允许空白（评审指出 `test.skip ("x")` 会绕过去）。
+  #
+  # **不再试图从源码判断一次 `t.skip(...)` 有没有给理由。** 试过两版：先是「括号里
+  # 只有空格」（制表符、注释能绕），再是「紧跟必须是引号」（单引号理由被误报，
+  # `t.skip("")` 漏掉）。两轮评审四种绕法，说明这是在用字符形状近似一个需要真解析
+  # 的判断——F04 的 plainKey 栽过同一个跟头。
+  #
+  # 那件事交给权威：`make test` 读 node:test 自己报的 skipped 计数（no-skipped-tests）。
+  # 一条被停掉的测试必然进那个计数，无论写成什么样。这里留的是一道便宜的早期信号。
+  #
+  # 2026-09-23 收窄；这是同类误伤的第七次，形状照旧：措辞对，check 比措辞宽。
   local dbg="" d
   for d in src tests; do
     [ -d "$d" ] || continue
-    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|\.skip\(' "$d" \
+    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|(test|it|describe|suite)[[:space:]]*\.[[:space:]]*skip[[:space:]]*\(' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
@@ -649,7 +725,7 @@ cmd_clean_check() {
   done
   for d in tools scripts; do
     [ -d "$d" ] || continue
-    if grep -rnE 'debugger;|\.only\(|\.skip\(' "$d" \
+    if grep -rnE 'debugger;|\.only\(|(test|it|describe|suite)[[:space:]]*\.[[:space:]]*skip[[:space:]]*\(' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
@@ -661,7 +737,7 @@ cmd_clean_check() {
   if [ -n "$dbg" ]; then
     emit no-debug-artifacts fail "发现 debug 残留：$dbg"
   else
-    emit no-debug-artifacts pass "未发现 console.log / debugger / .only / .skip / 临时文件残留"
+    emit no-debug-artifacts pass "未发现 console.log / debugger / .only / 被停掉的测试 / 临时文件残留"
   fi
 
   # 3. 状态文件已更新

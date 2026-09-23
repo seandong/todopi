@@ -181,7 +181,7 @@ program
     );
   });
 
-type TransitionCmdOptions = { force?: boolean; reason?: string; resolution?: string };
+type TransitionCmdOptions = { force?: boolean; reason?: string; resolution?: string; yes?: boolean };
 
 /**
  * 三条迁移命令共用的出口。门禁拒绝时打印 FR-D2a 的报告并按 worstCode 退出——
@@ -203,6 +203,7 @@ async function transitionAction(
     actor: opts["as"] as string | undefined,
     force: cmdOpts.force,
     reason: cmdOpts.reason,
+    ...(kind === "done" ? { yes: cmdOpts.yes } : {}),
   };
 
   try {
@@ -243,6 +244,8 @@ function registerTransition(
       cmd.option("--force", "override every gate; requires --reason")
         .option("--reason <text>", "why the gate was overridden; recorded in the task log");
     }
+    // FR-D4：首次在某个仓库执行 verify 前要求确认。--yes 是那次批准。
+    if (kind === "done") cmd.option("--yes", "trust this repository to run its verify commands");
     extra(cmd).action(async (id: string, cmdOpts: TransitionCmdOptions) => {
       await transitionAction(kind, id, cmdOpts);
     });

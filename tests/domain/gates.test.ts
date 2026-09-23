@@ -250,3 +250,55 @@ test("恰好等于 lease_hours 时还算活着 —— 与 claim 的 leaseExpired
   const justOver = { ...exactly, heartbeat_at: new Date(NOW - 4 * 3_600_000 - 1000).toISOString().replace(/\.\d{3}Z$/, "Z") };
   assert.deepEqual(evaluateGates(input({ task: t, transition: "reopen", lease: justOver })), []);
 });
+
+// ---- verify 门禁（F07）----
+
+const okVerify = {
+  command: "pnpm test", exitCode: 0, signal: null, timedOut: false,
+  tail: "", logPath: "/tmp/v.log", logProblem: null,
+};
+const failVerify = { ...okVerify, exitCode: 1, tail: "3 failing" };
+const timedOutVerify = { ...okVerify, exitCode: null, signal: "SIGKILL", timedOut: true };
+
+test("verify 通过就不拒绝", () => {
+  assert.deepEqual(evaluateGates(input({ transition: "done", verify: okVerify })), []);
+});
+
+test("verify 非零退出 → 拒绝，退出 2，带命令、退出码与输出尾部", () => {
+  const rs = evaluateGates(input({ transition: "done", verify: failVerify }));
+  assert.equal(rs.length, 1);
+  const r = rs[0]!;
+  assert.equal(r.gate, "verify");
+  assert.equal(r.code, 2);
+  assert.equal(r.gate === "verify" ? r.command : null, "pnpm test");
+  assert.equal(r.gate === "verify" ? r.exitCode : null, 1);
+  assert.equal(r.gate === "verify" ? r.tail : null, "3 failing");
+  assert.equal(r.gate === "verify" ? r.logPath : null, "/tmp/v.log");
+});
+
+test("verify 超时 → 拒绝，即使退出码是 null", () => {
+  const rs = evaluateGates(input({ transition: "done", verify: timedOutVerify }));
+  assert.equal(rs.length, 1);
+  assert.equal(rs[0]!.gate, "verify");
+  assert.equal(rs[0]!.gate === "verify" ? rs[0]!.timedOut : null, true);
+});
+
+test("**close 不跑 verify** —— §6.1 表格里 close 那一行没有它", () => {
+  assert.deepEqual(evaluateGates(input({ transition: "close", verify: failVerify })), []);
+});
+
+test("reopen 不跑 verify", () => {
+  const t = task("tp-000001", { status: "closed", resolution: "done" });
+  assert.deepEqual(evaluateGates(input({ task: t, transition: "reopen", verify: failVerify })), []);
+});
+
+test("没有注入 verify 结果时不拒绝 —— 任务没有 verify 字段就是这种情形", () => {
+  assert.deepEqual(evaluateGates(input({ transition: "done" })), []);
+});
+
+test("verify 与别的门禁一起不过时全部列出，退出码仍取最严重", () => {
+  const t = task("tp-000001", { status: "in_progress", assignee: OTHER }, AC("- [ ] a"));
+  const rs = evaluateGates(input({ task: t, transition: "done", verify: failVerify }));
+  assert.deepEqual(rs.map((r) => r.gate).sort(), ["acceptance", "ownership", "verify"]);
+  assert.equal(worstCode(rs), 3);
+});

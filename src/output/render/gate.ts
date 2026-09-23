@@ -45,6 +45,20 @@ function forceable(r: Omit<GateReport, "actions">): boolean {
  * 「两边共用」写成了已完成的事实（Codex 第二轮评审指出）。现在文本渲染遍历
  * `r.actions`，两边不可能分叉。
  */
+/**
+ * 把一个路径变成能原样粘进 shell 的样子。
+ *
+ * 报告里的命令**必须能跑**（F06 第三轮的阻塞项）。仓库路径里有一个空格，
+ * `cat /Users/me/my repo/.../x.log` 就会被拆成两个参数——这和给出一条指向
+ * 不存在文件的命令是同一种失败，只是更难看出来。
+ *
+ * 不需要引号的就不加：报告是给人读的，满屏引号会更难认。
+ */
+function shellQuote(p: string): string {
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(p)) return p;
+  return `'${p.replace(/'/g, `'\\''`)}'`;
+}
+
 export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
   const out: GateAction[] = [];
   for (const refusal of r.refused) {
@@ -83,6 +97,24 @@ export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
           out.push({ for: "children", command: `todopi done ${c.id}`,
             detail: `Child ${c.id} is ${c.status}; a parent closes when its children do.` });
         }
+        break;
+      case "verify":
+        // 完整输出在磁盘上，报告只给尾部。把路径作为动作交出去，
+        // agent 才能自己去读全文——那正是 FR-D2a 说的「据以行动」。
+        //
+        // **但只在它真的存下来了的时候。** 写不成还把 `cat` 交出去，agent 照着
+        // 跑就是一次注定失败的命令；说清楚「没存下来、为什么」才是据以行动的。
+        if (refusal.logProblem === null) {
+          out.push({ for: "verify", command: `cat ${shellQuote(refusal.logPath)}`,
+            detail: "Read the full output of the verify run." });
+        } else {
+          out.push({ for: "verify",
+            detail: `The full output could not be saved, so only the tail above is available: ${refusal.logProblem}` });
+        }
+        out.push({ for: "verify",
+          detail: refusal.timedOut
+            ? "It timed out. Either make it faster, or raise verify_timeout_seconds in .todopi/config.yml."
+            : "Fix what the command reports, then run done again." });
         break;
       case "state":
         out.push({ for: "state",
@@ -123,6 +155,21 @@ function headline(refusal: GateReport["refused"][number]): string[] {
     case "state":
       return [`State: this task is ${refusal.status || "in an unknown state"}, ` +
         `which cannot ${refusal.transition}.`];
+    case "verify": {
+      const how = refusal.timedOut
+        ? "timed out"
+        : refusal.signal !== null
+          ? `was killed by ${refusal.signal}`
+          : `exited ${refusal.exitCode}`;
+      const lines = [`Verify: the command ${how}.`, `  ${refusal.command}`];
+      // 原样的命令单独占一行（FR-D4：每次执行前都打印它，使它永远不会和上次
+      // 悄悄不同）。尾部缩进两格，和报告里其它的证据一致。
+      if (refusal.tail.trim() !== "") {
+        lines.push("  Last lines of its output:");
+        for (const l of refusal.tail.trimEnd().split("\n")) lines.push(`    ${l}`);
+      }
+      return lines;
+    }
   }
 }
 

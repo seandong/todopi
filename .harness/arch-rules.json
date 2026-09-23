@@ -189,7 +189,7 @@
       "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/fs --include='*.ts' | grep -vE \"from [\\\"']node:\" || true",
       "expect": "empty",
       "what": "src/fs/ import 了 node: 之外的任何模块。",
-      "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。",
+      "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。 2026-09-23：ARCH-021 为了 exec/ 内部拆出 tail.ts 放行了同目录的 `./<name>.ts`，**这一条没有跟着放**——fs/ 今天没有这个需求，为一个不存在的情形拆栏杆就是把 guard 改松。哪天 fs/ 真要同层拆分，再改这一条，那次改动会连同理由一起出现在 diff 里。",
       "fix": "把上层的类型换成本层自己定义的中性错误或数据结构，由调用方翻译。若确实需要共享某个常量，考虑它是否本就属于 fs/。"
     },
     {
@@ -201,6 +201,26 @@
       "what": "src/output/dto/ 对 src/domain/ 有**剥离类型之后仍然存在**的运行时依赖——也就是在调用领域函数，或至少在加载领域模块。",
       "why": "ARCHITECTURE.md 要求 dto 层「只做字段搬运与改名，不做计算」——一旦开始在映射里算派生态，这一层就白分了：--json 的形状会跟着领域逻辑一起漂移，而它是有版本承诺的公开 API（FR-Q3）。ARCH-008 只管 render/ 不碰 domain/，管不到 dto 内部在做什么，所以需要这一条。source: Codex 评审 F04 第 7 项。",
       "fix": "把派生态算在 domain/ 里（一个纯函数返回派生结果），由 commands/ 组装成投影传给 dto；dto 只把投影的字段搬到对外形状上。从 domain/ 只能用 `import type { X }`——它在类型剥离后整条消失。内联的 `import { type X }` 不行：类型没了，`import { } from \"...\"` 还在，模块照样被加载。只为副作用的裸 import 同理。"
+    },
+    {
+      "id": "ARCH-021",
+      "description": "exec/ 只依赖 node: 内置模块与同目录的 ./<name>.ts",
+      "applies_when": "test -d src/exec",
+      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/exec --include='*.ts' | grep -vE \"from [\\\"']node:\" | grep -vE \"from [\\\"']\\\\./[^/\\\"']+\\\\.ts[\\\"']\" || true",
+      "expect": "empty",
+      "what": "src/exec/ 引入了 node: 内置模块与同目录 ./<name>.ts 之外的东西。",
+      "why": "exec/ 与 fs/ 并列在最底层：它管子进程与用户级配置，不认识 todopi 的格式。一旦它 import 了 format/ 或 domain/，「以独立进程组执行一条命令」这件事就和 12 个字段绑死了，而它本该对任何要跑子进程的程序都一样。这条与 fs/ 的 ARCH-019 是同一条规则的两个实例。source: F07 建立 exec/ 时同批加入——边界要在第一个诱惑出现之前立起来。 2026-09-23：check 原先把**同目录**的相对 import 也算成违规（`./tail.ts`），而规则自己写的意图是「不得 import format/ 或 domain/」——同层拆成两个文件并不越界。收窄成只放行 `./<name>.ts`，`../` 仍然抓得到（两个方向都实测过）。这是这类误伤的第六次：**规则的措辞对，check 比措辞宽。**",
+      "fix": "把需要格式知识的部分挪到 commands/，由它把已经算好的参数传进来。exec/ 只收原始的字符串与路径。"
+    },
+    {
+      "id": "ARCH-022",
+      "description": "verify 的信任记录不得落在 .todopi/ 内",
+      "applies_when": "test -f src/exec/trust.ts",
+      "check": "node tools/check-trust-location.mjs",
+      "expect": "empty",
+      "what": "src/exec/trust.ts 里出现了 .todopi 或账本目录。",
+      "why": "spec §8：信任记录 MUST NOT 存在 .todopi/ 内的任何地方。随仓库一起传播的信任记录等于让仓库为自己背书，而那正是「要不要执行这条 verify」这个问题存在的理由——克隆一份别人的仓库就自动信任了它要跑的命令。信任属于用户级配置（~/.config/todopi/trust），在任何仓库之外。source: F07。 检查器挖空注释再查——这个文件的注释里正好在解释「绝不在 .todopi/ 里」，直接 grep 会把那段解释判成违规（ARCH-001/002/011/013 之后第五次同一类误伤）。",
+      "fix": "信任路径只由 trustFilePath() 决定，它读 TODOPI_CONFIG_DIR / XDG_CONFIG_HOME / ~/.config，与账本目录无关。需要仓库路径时把它当成**被信任的对象**传进去，而不是用来拼存储位置。"
     }
   ]
 }

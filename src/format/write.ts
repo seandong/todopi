@@ -250,7 +250,10 @@ export function nowStamp(): string {
 function appendLogLine(body: string, line: string): string {
   const lines = body.split("\n");
   const start = lines.findIndex((l) => l.trim() === "## Log");
-  const item = `- ${line}`;
+  // 多行文本按 §5.3.3 的续行规则：第一行是列表项，后面每行缩进两格。
+  // FR-D4a 的「强制关闭时记录输出尾部」就走这条路。
+  const [first, ...rest] = line.split("\n");
+  const item = [`- ${first}`, ...rest.map((l) => `  ${l}`)].join("\n");
   if (start < 0) {
     return `${body.replace(/\s*$/, "")}\n\n## Log\n\n${item}\n`;
   }

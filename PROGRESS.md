@@ -5,21 +5,21 @@
 
 ## Current State
 
-- Last commit: `2692df5` —— F06 四轮评审通过并已合回 main。
+- Last commit: `f672407` —— F07 第八轮评审的悬空引用已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
-  arch-rules（**20 条全部通过**，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
+  arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **531 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **607 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
-  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 66 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
+  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 66 项 + `f07-verify` 38 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
   是单元测试抓不到的那类；Codex 第二轮评审另补了跨 worktree 锁测试
   （30 进程计数 30、无残留），确认 `leasePaths` 重构没有回归
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- VCR: `6/6` —— F01–F06 均 `passing`，evidence 由 harness 写入
+- VCR: `7/7` —— F01–F07 均 `passing`，evidence 由 harness 写入
 - 代码状态：**F01–F04 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
@@ -29,33 +29,81 @@
 
 ## In Progress
 
-无 feature 处于 `active`。**下一个是 F07 `verify`**（WIP=1，开工前先 activate）。
+**F07 `verify`** —— 三层通过、`passing`，在分支 `feat/f07-verify` 上，
+尚未合回 `main`。**第四轮 Go；第五至八轮（只审 guard 改动）各 No-go，第七轮改成拔根，待第九轮。**
 
-F01–F06 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
+这两轮全在同一件小事上——「怎么判断一条测试被停掉了」——而它一路把我往深处带：
 
-F06 经 **Codex 四轮评审**才拿到 Go，阻塞项数 **4 → 2 → 1 → 0**，
-详细理由见 DECISIONS D022–D025。本 feature 还改过一次规格：
-spec §6.1 的 `close --as` → `close --resolution`（撞名会静默把 actor 设成
-resolution 的值），以及 Gates 段落的两处澄清（哪些门禁适用于哪条迁移、
-「assignee 门禁」指的是当前持有者而非 closed 上的历史记录）。
+1. 用 grep 猜字符形状，**三版三种绕法**。和 F04 的 `plainKey` 同一个跟头。
+2. 改成问权威（`node --test` 自己报的 `# skipped N`），**但问错了问题**：
+   `--test-name-pattern` 能把 608 个用例全筛掉，skipped 仍是 0。
+3. 加 `tee` 留输出时，`if` 判到了管道最后一个命令的退出码——**测试全红会记成
+   pass**，这是我自己引入的真回归。
 
-**六条阻塞项可以归成同一件事的不同形状**——边界只用到我想到的入口、权限只覆盖
-我理解的范围、门禁只按笼统那段话而不是明确那张表、判据只查 actor 不查过期、
-动作只按一种迁移生成、断言与验证之间隔了一个我亲手写的豁免。
+4. 第四个漏洞（`--test-shard`）让我看清形状：**收敛不了，说明根不在门上。**
+   整条线的唯一起因，是那条采 RSS 的用例需要在 `ps` 不可用时 `t.skip`。
 
-两条跨 feature 的教训写在 DECISIONS D025：
+所以删掉那条用例（环有界由 `tail.test.ts` 进程内断言、背压由 FIFO 用例覆盖；
+「runner 里没有第二个无界缓冲」现在靠代码审查，如实写在文件顶部）。guard 随之
+退回最简形式：`NODE_OPTIONS` 非空即拒、skipped > 0 即 fail、源码只认申明点。
 
-1. **「看起来在测 X、实际只测了 Y」在这一个 feature 里出现了四次**：标题承诺三条
-   命令而循环只有两条、只用自家解析器、断言方向只有一半、自己写豁免再宣布全部
-   通过。最后一次不是疏忽——**当一条断言需要豁免才能成立时，先问那个豁免是不是
-   在承认被断言的东西不符合它自己的契约。**
-2. **我在 D022 里写了三条没验证过的断言**，都是「改完一处，顺手把预期写成了结果」。
-   推断出的结论和验证过的结论，在文档里长得一模一样。规矩已立：凡写进 DECISIONS
-   的行为断言，要么当场验证，要么写成「预期」而不是「已完成」。
+1. **日志不是完整输出，而那个「上限」也没有限制内存。** runner 把每个 chunk 攒进
+   数组、退出时才 concat 再截尾——截尾只让返回值变小，concat 之前那份内存一直在
+   涨，超过 1 MiB 的输出在写盘前就丢了。计划文档第 57 行写的正是「全缓存在内存里
+   不合适」，实现却反着来。而我的用例只断言返回的字符串短，**无界版本照样绿**。
+   改成流式落盘 + 有界尾部环 + `pipe` 的背压（背压那条判据故意不用 RSS，基线就
+   100 MB、差距只有 1.5 倍；改问「日志挂住的那几秒里子进程写完了没有」）。
+2. 同上，同一个根因。
+3. **FR-D2 的 Windows MUST 与平台表「Windows 尽力」自相矛盾**，收窄到 POSIX（D026）。
 
-自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
-doctor 能检出违规 ✅、五个命令 passing 进度 **4/5**（`init`、`add`、`claim`、
-`done` 已完成，**只差 `verify`**）。**F07 完成后触发条件就齐了。**
+两条「应该改」也照做了：「整棵树」这个承诺过宽（PRD 写的一直是进程**组**，漂的是
+feature_list、测试名、计划文档）；特殊字符检查从一次性脚本变成仓库用例——写的时候
+发现原来那组断言本身就是「看起来在测 X、实际只测了 Y」：条数、末条可解析、doctor
+三个加起来都看不见一个被注入的假 `## Log` 小节。
+
+在等的这段时间，我把发给它的那几条最尖的检查自己跑了一遍（Log 语法撞车、
+刁钻进程树、求值顺序、输出落点、信任边角），抓到两处：
+
+1. 信任文件的位置被占成目录时抛裸 `EISDIR`，使用者无从知道该动哪里。已改成
+   说得清的错误。
+2. **我自己那条「孙进程用 setsid 脱离组」的检查是假绿**——macOS 没有 `setsid`
+   可执行文件，用例走了 `||` 的回退分支，等于又测了一遍普通情形。用 Node 的
+   `detached` 重新构造后确认：**主动脱离进程组的后代确实杀不到**。这是进程组
+   终止的固有边界（替代方案是遍历 `ps` 追整棵树，跨平台既不可靠也有竞态），
+   现已如实写进 `run.ts` 的注释并钉成一条用例——哪天有人「修好」它，那条会红，
+   然后他会读到那段说明。
+
+**状态迁移的触发条件到此齐了**（[状态迁移契约](docs/harness/state-migration.md)）：
+spec 定稿 ✅、doctor 能检出违规 ✅、五个命令 passing **5/5**
+（`init`、`add`、`claim`、`done`、`verify`）。**自举可以开始了。**
+
+本 feature 改过 PRD 一处：FR-D3 明确「`--force` 绕过的是门禁那次拒绝，**不是
+`verify` 的执行**」。两条规则本来对不上——FR-D3 说绕过任何门禁，FR-D4a 又说强制
+关闭时记录 verify 输出的最后 512 字节「因为证据必须留在 diff 里看得见」；
+若 `--force` 连执行都跳过，那条规则永远走不到。方案由产品负责人选定。
+
+新增 `src/exec/` 层（与 `fs/` 同级，只 import `node:*` 与同目录的 `./<name>.ts`），**在同一提交里登记
+ARCHITECTURE.md 并加 ARCH-021**；信任记录另有 ARCH-022 钉死它不进 `.todopi/`。
+现在 22 条架构规则。
+
+核心是一条实测结论：**默认方式杀不掉孙进程**。`spawn` + `child.kill()` 之后孙进程
+仍然存活，只有 `detached: true` + `process.kill(-pid)` 才终止整棵树——而 `pnpm
+test`、`cargo test` 都会 fork worker。实现因此分成两个进程：`done` 在文件锁内串行
+执行所以调用必须同步，而「独立进程组」只有 Node 的**异步** spawn 支持。
+
+第二轮的三条「应该改」里两条成立（正常退出没断言「及时」返回；两处残留的「整棵
+树」措辞），一条是误报（Codex 把 pane 渲染转义出来的 `\#\#` 当成了源码）。另外补了
+两处：日志写不成时报告不再给出跑不通的 `cat`；那条 RSS 用例不再依赖 `ps`（它在
+Codex 的沙箱里 EPERM 红过），不变量改由 `tail.ts` 在进程内确定性断言。
+
+第三轮的阻塞项正是我在提示里专门请它盯的那件事：**我为了让自己这次改动通过，把
+规则改松了。** ARCH-021 需要放行同目录 import（`runner.ts` 用 `tail.ts`），我顺手把
+ARCH-019（`fs/`）也放了，理由只有「对称」。已收回。
+
+收回时又踩了一次老坑：第一版 revert 是 no-op，**而我为它写的断言用了同一个错的
+串**，于是断言也没报警。和 PROGRESS 被 `str.replace()` 静默跳过同形。
+
+F01–F06 已合回 `main`。**整个仓库尚未推送到 remote。**
 
 `feature_list.json` 于 2026-09-16 填入 21 条，拆分依据见 DECISIONS D011。
 
@@ -109,7 +157,11 @@ doctor 能检出违规 ✅、五个命令 passing 进度 **4/5**（`init`、`add
     顺带改了一处规格（`close --as` → `close --resolution`，见上）。
 22. ~~Codex 评审 F06~~ 四轮才拿到 Go，阻塞项 4 → 2 → 1 → 0，见 D022–D025。
 23. ~~把 `feat/f06-done` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-24. **下一步：activate F07 并写实现计划。**
+24. ~~activate F07、写计划并执行~~ 已完成，5 个 task 逐个 TDD 通过，三层全绿。
+25. **下一步：请 Codex 评审 `feat/f07-verify` 并合回 `main`。**
+    F07 的子进程与信任面是全新的，而且「`--force` 照跑 `verify`」这条读法是新拍板
+    的，值得让第二双眼睛核一遍它与 §5.3.3 的 Log 语法、§6.1 的「被拒绝的迁移不写
+    Log」是否处处自洽。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
     门禁骨架在 `commands/transition.ts`，`verify` 那道门加进 `domain/gates.ts` 即可，
     报告与动作走 `gateActions()`（`command` 无占位符、`template` 需填空）。
