@@ -28,8 +28,10 @@ ARCH-006 已经把这条钉成机器规则（`applies_when: test -f feature_list
 
 ## 损失 / 替代物
 
-契约只预告了一条损失。**第一版计划我列了三条，评审实测出还有两条**——如实列全，
-不假装有替代物：
+契约只预告了一条损失。计划三稿，损失表 **三条 → 五条 → 八条 → 十条**，每一轮评审
+都实测出新的。第三轮我问它「还有没有第九条」，它的回答是**「至少还有，但我无法证明
+已经穷尽」**——那比一句「没了」有用得多，也是这份清单该有的态度。彩排（Task 5）
+存在的意义就是接住这份清单没接住的。
 
 | 没了 | 替代物 | 说明 |
 |---|---|---|
@@ -41,6 +43,8 @@ ARCH-006 已经把这条钉成机器规则（`applies_when: test -f feature_list
 | 旧状态机的三条约束：**不许跳级**（`not_started` 不能直接到 `passing`）、**`passing` 是终态**、**禁止手工编辑 `state`/`evidence`** | **部分，靠工作流** | todopi 允许 `open → done`（不必先 claim）与 `closed → reopen`。「历史证据不被改写」这条因此从机器约束降为约定。AGENTS.md 写明「先 claim 再干活」；`reopen` 留着是对的——它是格式规格的一部分，不该为本项目的偏好去改产品 |
 | `milestones`（M1/M2/M3 的 `features` 分组与 `done_when`） | **分组进 `labels`，`done_when` 进 PROGRESS.md** | 评审指出我会静默丢掉它。分组用 `labels: ["bootstrap", "m2"]`；`done_when` 是叙述性上下文，按契约「PROGRESS.md 与 DECISIONS.md 不迁移」的同一理由归 PROGRESS |
 | `schema`（字段清单与「state/evidence 不得手工编辑」的注记） | **无** | 它描述的是 `feature_list.json` 自己的结构，随文件一起消失。那条注记的精神移到上面一行 |
+| **完成不再要求存在验证命令** | **ARCH-023 第三条** | 旧 `verify-feature` 对空 `layers[]` 明确拒绝；而 `todopi add` 的 `--verify` 可以省略，无 `verify` 的任务能被 `done`，Log 记 `verify=none`（评审实测）。迁移的 21 条都有命令，**日后新建的开发任务没有这道保障**。加进检查器：本仓库的每个任务都必须有 `verify`；确实无可验证时显式写 `verify: "true"`——那是一次看得见的决定 |
+| 失败时**立即打印对应层的 `repair`** | **无** | 旧 harness 在失败层当场打印 `layers[].repair`；现在它只存在任务正文里，`done` 的拒绝报告不会自动带出来。失败后自己去读：`cat .todopi/tasks/<id>.md` 的 Repair 段（`todopi show` 要等 F08）。记进 PRD §15：拒绝报告该不该带上任务正文里的 Repair |
 
 ### ARCH-023 是**降级**，说清楚
 
@@ -176,9 +180,10 @@ Makefile 的 activate / verify-feature / reverify / release / vcr 目标与 .PHO
 
 ## Task 3：ARCH-023（WIP=1 与依赖）
 
-**Files:** Create `tools/check-wip.mjs`；Modify `.harness/arch-rules.json`
+**Files:** Create `tools/check-ledger-policy.mjs`；Modify `.harness/arch-rules.json`
 
-- [ ] **Step 1：写检查器**，用仓库自己的解析器加载 `.todopi/tasks/`，断言两条：
+- [ ] **Step 1：写检查器 `tools/check-ledger-policy.mjs`**，用仓库自己的解析器
+      加载 `.todopi/tasks/`，断言三条（第三条是评审第四轮补的）：
       至多一个 `in_progress`；没有 `in_progress` 任务的 `blocked_by` 指向
       **不是 `closed` + `resolution: done`** 的任务。
 
@@ -189,18 +194,55 @@ Makefile 的 activate / verify-feature / reverify / release / vcr 目标与 .PHO
       **不用 grep**——规格允许手写无引号的 `status: in_progress`，字符形状漏得掉
       （评审实测）。
 
+      第三条：**每个任务都必须有 `verify`**。旧 `verify-feature` 对空 `layers[]`
+      明确拒绝，而 `todopi add` 的 `--verify` 可省略、无 `verify` 也能 `done`。
+      确实无可验证时显式写 `verify: "true"`——**要求写出来，而不是默许省略**。
+
       **解析失败要吵**：读不动的任务文件必须输出诊断并失败，否则它会被读成空字段
       然后从计数里消失——那是最坏的一种假绿。
 
 - [ ] **Step 2：加规则**（`applies_when: test -d .todopi/tasks`，
       与 ARCH-020 / ARCH-022 同为 node 检查器）
 
-- [ ] **Step 3：三个反例都实测会红**
+- [ ] **Step 3：五个反例都实测会红**
       - 两条规范形式的 `in_progress`
       - 一条规范形式 + 一条**手写无引号**的 `in_progress`（这条专治第一版的 grep）
       - 一条 `in_progress` 的 `blocked_by` 指向 open 任务
       - 一条 `in_progress` 的 `blocked_by` 指向 **`closed` + `wontfix`** 的任务
       - 一个读不动的任务文件（必须报错，不能静默跳过）
+      - 一个没有 `verify` 字段的任务
+
+## 工作流的顺序，以及它和协议段的冲突
+
+评审第四轮指出：计划里写的「提交 → done → clean-check」按字面跑不通——`done` 会
+再次改动任务文件，而 `clean-check` 在工作区有改动且 PROGRESS 未更新时会失败。
+更麻烦的是，`init` 追加的**协议段第 43 行**写着「把 `.todopi/` 的改动放进它所描述的
+那次工作的同一个 commit」，而「先提交再 done」必然要第二次提交。两处都成立。
+
+**定下来的顺序：**
+
+```
+todopi claim <id>
+干活
+人对着 body 的验收判据段逐条核对          ← 散文判据，机器不查（见 Task 1）
+git commit                                ← 只提交代码
+todopi done <id>                          ← verify 跑在刚提交的那棵树上，dirty=false
+git commit（.todopi/ 的改动 + PROGRESS）   ← 第二次提交
+make clean-check
+```
+
+**为什么 `done` 只能在代码提交之后**：它的 Log 记 `commit=<HEAD7> dirty=<bool>`。
+放在提交前，验证跑的是未提交的树、`dirty=true`，那条证据就指不实任何东西——这正是
+损失表里第五条说的，旧 `verify-feature` 会直接拒绝这种情况。所以 `done` 必须在后，
+它的账本改动也就只能落进第二次提交。
+
+**协议段的那句话因此有一个例外，要写进 AGENTS.md 而不是藏着**：`add` / `note` /
+`claim` 的账本改动跟着工作走同一个 commit；**`done` 是例外，因为它验证的正是那个
+commit，只能在其后落地**。两种说法同时出现在 AGENTS.md 里却不说破，就是这个
+session 反复栽的那个形状。
+
+协议文本本身要不要带上这个例外，是**产品决定**（它是用户可见的英文文案），
+不在这次迁移里改，记进 PRD §15。
 
 ## Task 4：文档
 
@@ -238,9 +280,13 @@ Makefile 的 activate / verify-feature / reverify / release / vcr 目标与 .PHO
 
 - [ ] **Step 5：`scope.md`、`verification.md`、`clean-state-checklist.md` 里的
       `feature_list.json` 引用逐处改写**
-- [ ] **Step 6：PRD §15 记三条开放项**：`reverify` 没有对应物；`verify` 的单一
-      退出码表达不了 `not_applicable`；**`dirty=true` 该不该成为 `done` 的门禁**
-      （自举第一天就问出来的产品问题）
+- [ ] **Step 6：PRD §15 记五条开放项**——全部是自举第一天问出来的产品问题，
+      正是它该有的作用：
+      1. `reverify` 没有对应物
+      2. `verify` 的单一退出码表达不了 `not_applicable`
+      3. `dirty=true` 该不该成为 `done` 的门禁
+      4. 协议文本要不要写明「`done` 的账本改动是同一 commit 规则的例外」
+      5. 拒绝报告该不该带上任务正文里的 Repair 段
 - [ ] **Step 7：PROGRESS.md 的「VCR 7/7」措辞改写**——计数源没了
 
 ## Task 5：彩排，然后落地
@@ -258,6 +304,9 @@ tools/bootstrap-verify.mjs 退出 0
 make status / make clean-check 跑得通（它们刚被改写过）
 照 AGENTS.md 新写的路径真跑一遍（见下）
 ```
+
+**彩排按上面那个顺序跑**（代码提交 → `done` → 账本与 PROGRESS 提交 → `clean-check`），
+不是计划前几版写的「提交 → done → clean-check」。
 
 **彩排的 claim → done 要用一条一次性任务。** 评审指出两个问题，都成立：F08 的
 `verify` 指向尚不存在的 `tools/e2e/f08-show.sh`，`done` 必然被拒；而认领 F08 会
