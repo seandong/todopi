@@ -54,7 +54,10 @@ todopi ls --ready → todopi claim <id> → 干活 → 人核对验收判据
 → git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
 
-**整个仓库尚未推送到 remote。**
+**remote 状态**：`origin` 是 `github.com/seandong/todopi`，
+`origin/main` 停在 `b9beb6d`（F01 时期），本地领先 **128 个 commit**。
+（此前这一行写的是「整个仓库尚未推送到 remote」——那是错的，`git reflog show
+origin/main` 显示确实推过三次。2026-09-23 更正。）
 
 ## 里程碑
 
