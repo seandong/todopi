@@ -5,15 +5,15 @@
 
 ## Current State
 
-- Last commit: `08e8d84` —— F06 第一轮评审整改完成。
+- Last commit: `dbe34b9` —— F06 第二轮评审整改完成。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**20 条全部通过**，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **520 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **525 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
-  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 56 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
+  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 62 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
   是单元测试抓不到的那类；Codex 第二轮评审另补了跨 worktree 锁测试
   （30 进程计数 30、无残留），确认 `leasePaths` 重构没有回归
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
@@ -30,7 +30,7 @@
 ## In Progress
 
 **F06 `done` / `close` / `reopen`** —— 三层通过、`passing`，在分支 `feat/f06-done` 上，
-尚未合回 `main`。**第二轮评审待发。**
+尚未合回 `main`。**第三轮评审待发。**
 
 Codex 第一轮：**No-go，4 个阻塞项**，全部整改完毕（DECISIONS D022）。
 其中三个是同一种错误的不同形状——边界只用到我想到的入口（`reopen` 走了另一条
@@ -41,6 +41,16 @@ Codex 第一轮：**No-go，4 个阻塞项**，全部整改完毕（DECISIONS D0
 还有一条最该记的：**Codex 是读我的测试发现问题的**——我写了一条标题叫
 「D019 的边界用到三条命令上」的用例，循环里只有两条。「看起来在测 X、实际只测了
 Y」换了个形状又来一次。
+
+Codex 第二轮：**No-go，2 个阻塞项 + 2 条应改**，全部整改完毕（DECISIONS D023）。
+**其中两条来自 D022——我把没做到的事写成了已完成的事实**（「文本与 JSON 共用
+动作」「CRLF 写回自然回到 LF」），两句已在 D022 就地标注。决策文档里的一句假
+陈述比代码缺陷更难发现，因为后来的人会拿它当前提。往后凡写进 DECISIONS 的行为
+断言，要么当场验证，要么写成「预期」而不是「已完成」。
+
+另外「看起来在测 X、实际只测了 Y」在本 feature 出现了**第三次**：这次是断言的
+方向只有一半（只检查「JSON 的命令出现在文本里」，文本多一条、detail 分叉、
+甚至文本压根不调用 gateActions 都不会红）。
 
 本 feature 改过一次规格：spec §6.1 表格的 `close --as` 改成 `close --resolution`
 （短写 `-r`），PRD FR-D5 与命令参考同步。理由是实测出来的——全局 `--as` 是 actor
