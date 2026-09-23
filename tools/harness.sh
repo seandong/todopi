@@ -697,7 +697,9 @@ cmd_clean_check() {
   #
   # **.skip 分两种。** `test.skip(...)` / `it.skip(...)` 是把一条测试停在那儿——
   # 那是残留。而 `t.skip("原因")` 是运行时的条件跳过：环境不具备时明确说一声，
-  # 比让用例因为环境而红要好（F07：量常驻内存要用 ps，ps 在受限沙箱里 EPERM）。
+  # 比让用例因为环境而红要好。**但仓库里现在一条这样的跳过都没有**：唯一那条
+  # （量常驻内存要用 ps，ps 在受限沙箱里 EPERM）已经连同用例一起删了，见
+  # tests/exec/run.test.ts 顶部。所以下面判的是 fail，不是 blocked。
   # 只认前者，外加不给理由的 `.skip()`。
   #
   # 这里**只认申明点**：`test.skip(` / `it.skip(` / `describe.skip(` / `suite.skip(`，

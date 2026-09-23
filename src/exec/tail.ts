@@ -31,8 +31,8 @@ export function makeTail(max: number) {
      * chunk。
      *
      * **它量的是这里的保留量，不是进程的 RSS，也不是底层 Buffer 的实际分配量**
-     * （一个 chunk 可能来自更大的池）。真实常驻内存由 run.test.ts 里那条起
-     * runner 采 RSS 的用例把关。
+     * （一个 chunk 可能来自更大的池）。runner 的真实常驻内存**没有测试覆盖**——
+     * 量它要外调 `ps`，那条路的代价写在 tests/exec/run.test.ts 顶部。
      */
     retainedBytes(): number {
       return total;
