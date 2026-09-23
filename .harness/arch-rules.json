@@ -201,6 +201,16 @@
       "what": "src/output/dto/ 对 src/domain/ 有**剥离类型之后仍然存在**的运行时依赖——也就是在调用领域函数，或至少在加载领域模块。",
       "why": "ARCHITECTURE.md 要求 dto 层「只做字段搬运与改名，不做计算」——一旦开始在映射里算派生态，这一层就白分了：--json 的形状会跟着领域逻辑一起漂移，而它是有版本承诺的公开 API（FR-Q3）。ARCH-008 只管 render/ 不碰 domain/，管不到 dto 内部在做什么，所以需要这一条。source: Codex 评审 F04 第 7 项。",
       "fix": "把派生态算在 domain/ 里（一个纯函数返回派生结果），由 commands/ 组装成投影传给 dto；dto 只把投影的字段搬到对外形状上。从 domain/ 只能用 `import type { X }`——它在类型剥离后整条消失。内联的 `import { type X }` 不行：类型没了，`import { } from \"...\"` 还在，模块照样被加载。只为副作用的裸 import 同理。"
+    },
+    {
+      "id": "ARCH-021",
+      "description": "exec/ 只依赖 node: 内置模块",
+      "applies_when": "test -d src/exec",
+      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/exec --include='*.ts' | grep -vE \"from [\\\"']node:\" || true",
+      "expect": "empty",
+      "what": "src/exec/ 引入了 node: 内置模块之外的东西。",
+      "why": "exec/ 与 fs/ 并列在最底层：它管子进程与用户级配置，不认识 todopi 的格式。一旦它 import 了 format/ 或 domain/，「以独立进程组执行一条命令」这件事就和 12 个字段绑死了，而它本该对任何要跑子进程的程序都一样。这条与 fs/ 的 ARCH-019 是同一条规则的两个实例。source: F07 建立 exec/ 时同批加入——边界要在第一个诱惑出现之前立起来。",
+      "fix": "把需要格式知识的部分挪到 commands/，由它把已经算好的参数传进来。exec/ 只收原始的字符串与路径。"
     }
   ]
 }
