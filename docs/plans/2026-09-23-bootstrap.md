@@ -204,7 +204,7 @@ Makefile 的 activate / verify-feature / reverify / release / vcr 目标与 .PHO
 - [ ] **Step 2：加规则**（`applies_when: test -d .todopi/tasks`，
       与 ARCH-020 / ARCH-022 同为 node 检查器）
 
-- [ ] **Step 3：五个反例都实测会红**
+- [ ] **Step 3：六个反例都实测会红，逐项记录结果**
       - 两条规范形式的 `in_progress`
       - 一条规范形式 + 一条**手写无引号**的 `in_progress`（这条专治第一版的 grep）
       - 一条 `in_progress` 的 `blocked_by` 指向 open 任务
@@ -293,38 +293,45 @@ session 反复栽的那个形状。
 
 - [ ] **Step 1：在 `git worktree` 副本里彩排完整的最终形态**
 
-评审建议的，采纳。前面那次 dry run 只证明了 CLI 的基本路径能走、以及新旧并存时会
-被 ARCH-006 拒绝；**没有证明最终形态能自检**。彩排要在副本里把整套改动都做完，
-然后验证：
+前面那次 dry run 只证明了 CLI 的基本路径能走、以及新旧并存时会被 ARCH-006 拒绝；
+**没有证明最终形态能自检**。彩排按下面的顺序，每一步都有断言——评审指出前几版的
+彩排「可能全绿却没验到东西」，两处都补上了：
 
 ```
-make check / make test / make e2e 三层全绿
-todopi doctor 退出 0
-tools/bootstrap-verify.mjs 退出 0
-make status / make clean-check 跑得通（它们刚被改写过）
-照 AGENTS.md 新写的路径真跑一遍（见下）
+1. 副本里做完整套改动
+2. make check / make test / make e2e 三层全绿；todopi doctor 退出 0
+3. tools/bootstrap-verify.mjs 退出 0（此时 feature_list.json 还在 HEAD 上）
+4. 提交迁移
+5. **再跑一次 bootstrap-verify.mjs** ← 关键：这一次才走「从删除它的 commit 取父
+   提交」那条分支。不跑，那条分支到主工作区才第一次运行
+6. make status / make clean-check 跑得通（它们刚被改写过）
+7. todopi add 一条临时任务（--verify 'true'），演练完整回路：
+     claim → 改一个无关紧要的文件 → git commit（**把 add/claim 的账本改动一起提交**）
+     → todopi done
+     → 断言 Log 里 dirty=false 且 commit 等于刚才那次提交的短 SHA
+     → 提交账本与 PROGRESS → make clean-check
 ```
 
-**彩排按上面那个顺序跑**（代码提交 → `done` → 账本与 PROGRESS 提交 → `clean-check`），
-不是计划前几版写的「提交 → done → clean-check」。
+第 7 步那两个断言是评审补的，而它们正是彩排的要害：不断言 `dirty=false`，
+一次留着未提交账本改动的彩排照样「通过」，却证明不了「先提交再 done」这个顺序
+真的成立。
 
-**彩排的 claim → done 要用一条一次性任务。** 评审指出两个问题，都成立：F08 的
-`verify` 指向尚不存在的 `tools/e2e/f08-show.sh`，`done` 必然被拒；而认领 F08 会
-改动正在对账的那 21 条数据。所以顺序是：**先跑完 21 条对账**，再 `todopi add` 一条
-临时任务（`--verify 'true'`），拿它演练 claim → 提交 → done → `make clean-check`。
-彩排副本用完即弃。
+- [ ] **Step 2：主工作区重做同一套改动，然后对「真正要提交的那棵树」重跑全部检查**
 
-- [ ] **Step 2：彩排通过后，在主工作区重做同一套改动**（或把副本的改动搬过来）
-- [ ] **Step 3：删除 `tools/bootstrap-migrate.mjs`**（一次性脚本，留着会让人以为
+评审指出：`clean-check` 只重跑 `make check`，**不跑 `make test` 与 `make e2e`**。
+副本彩排全绿 + 重做时漏一处 = 最终树没被运行时验证过就提交了。所以顺序是：
+
+```
+主工作区做完全部改动，并删除 tools/bootstrap-migrate.mjs
+对这棵树跑：make check / make test / make e2e / todopi doctor / bootstrap-verify.mjs
+一个 commit 提交
+git show --stat 核对文件清单，断言 .todopi/tasks/ 下恰好 21 个文件进了这个 commit
+make clean-check
+```
+
+- [ ] **Step 3：`tools/bootstrap-migrate.mjs` 删除**（一次性脚本，留着会让人以为
       可以重跑）。`tools/bootstrap-verify.mjs` **保留**——它从 git 读原始数据，
       随时可重跑，是这次迁移唯一的事后证据
-- [ ] **Step 4：一个 commit 提交全部改动，并核对暂存区与 commit 的文件清单**
-
-      评审指出 ARCH-006 只能检出新旧并存，**证明不了所有迁移内容都进了同一个
-      commit**（比如 `.todopi/tasks/` 漏 add 几条，ARCH-006 照样通过）。
-      所以提交前 `git status --porcelain` 与提交后 `git show --stat` 两份清单
-      都要逐项核对，并断言 `.todopi/tasks/` 下恰好 21 个文件进了这个 commit。
-- [ ] **Step 5：`make clean-check` 通过**
 
 ## 自查清单
 
