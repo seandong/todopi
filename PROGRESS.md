@@ -5,12 +5,12 @@
 
 ## Current State
 
-- Last commit: `ed52289` —— F07 第六轮评审的两条阻塞项已修。
+- Last commit: `5c5b5a3` —— F07 第七轮评审：拔掉 t.skip 这个根。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **608 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **607 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
   `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 66 项 + `f07-verify` 38 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
@@ -30,7 +30,7 @@
 ## In Progress
 
 **F07 `verify`** —— 三层通过、`passing`，在分支 `feat/f07-verify` 上，
-尚未合回 `main`。**第四轮 Go；第五、六轮（只审 guard 改动）各 No-go，阻塞项均已修，待第七轮。**
+尚未合回 `main`。**第四轮 Go；第五至七轮（只审 guard 改动）各 No-go，第七轮改成拔根，待第八轮。**
 
 这两轮全在同一件小事上——「怎么判断一条测试被停掉了」——而它一路把我往深处带：
 
@@ -40,8 +40,12 @@
 3. 加 `tee` 留输出时，`if` 判到了管道最后一个命令的退出码——**测试全红会记成
    pass**，这是我自己引入的真回归。
 
-现在：`test-not-filtered`（挡筛选参数）+ `PIPESTATUS[0]`（取真退出码）+
-`no-skipped-tests`（问运行器）。三者是一组，前者是后者的前提。
+4. 第四个漏洞（`--test-shard`）让我看清形状：**收敛不了，说明根不在门上。**
+   整条线的唯一起因，是那条采 RSS 的用例需要在 `ps` 不可用时 `t.skip`。
+
+所以删掉那条用例（环有界由 `tail.test.ts` 进程内断言、背压由 FIFO 用例覆盖；
+「runner 里没有第二个无界缓冲」现在靠代码审查，如实写在文件顶部）。guard 随之
+退回最简形式：`NODE_OPTIONS` 非空即拒、skipped > 0 即 fail、源码只认申明点。
 
 1. **日志不是完整输出，而那个「上限」也没有限制内存。** runner 把每个 chunk 攒进
    数组、退出时才 concat 再截尾——截尾只让返回值变小，concat 之前那份内存一直在
