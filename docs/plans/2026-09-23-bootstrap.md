@@ -38,6 +38,9 @@ ARCH-006 已经把这条钉成机器规则（`applies_when: test -f feature_list
 | `make activate` 的 WIP=1 与「依赖未关闭不许开工」 | **ARCH-023，但是降级** | 见下 |
 | `make test` 的其余维度（`fixtures`、`no-skipped-tests`、`test-not-filtered`） | **改 `verify` 命令挽回** | 第一版计划直接搬了 `node --test`，会绕过它们。改成 `make check && make test && bash tools/e2e/fNN-*.sh` |
 | `verify-feature` **拒绝把脏工作区的结果归给 HEAD** | **无，改成工作流约定** | `todopi done` 允许脏工作区，只在 Log 记 `dirty=true`。AGENTS.md 写明「先提交再 done」；`dirty=true` 该不该成为门禁，记进 PRD §15 —— 这是自举第一天就问出来的产品问题，正是它该有的作用 |
+| 旧状态机的三条约束：**不许跳级**（`not_started` 不能直接到 `passing`）、**`passing` 是终态**、**禁止手工编辑 `state`/`evidence`** | **部分，靠工作流** | todopi 允许 `open → done`（不必先 claim）与 `closed → reopen`。「历史证据不被改写」这条因此从机器约束降为约定。AGENTS.md 写明「先 claim 再干活」；`reopen` 留着是对的——它是格式规格的一部分，不该为本项目的偏好去改产品 |
+| `milestones`（M1/M2/M3 的 `features` 分组与 `done_when`） | **分组进 `labels`，`done_when` 进 PROGRESS.md** | 评审指出我会静默丢掉它。分组用 `labels: ["bootstrap", "m2"]`；`done_when` 是叙述性上下文，按契约「PROGRESS.md 与 DECISIONS.md 不迁移」的同一理由归 PROGRESS |
+| `schema`（字段清单与「state/evidence 不得手工编辑」的注记） | **无** | 它描述的是 `feature_list.json` 自己的结构，随文件一起消失。那条注记的精神移到上面一行 |
 
 ### ARCH-023 是**降级**，说清楚
 
@@ -49,10 +52,15 @@ ARCH-006 已经把这条钉成机器规则（`applies_when: test -f feature_list
 东西——人照着文档敲 `todopi claim` 就绕过去了。事后检查反而更强：**不论谁、用什么
 方式**把第二个任务变成 `in_progress` 都会红。
 
-**为什么 CLI 不该承担这一条**：核实过 spec §6.1 的迁移表与 FR-C1——`claim` 对被
-阻塞的任务不设门禁是**明确设计**（`ls --ready` 才是队列过滤器，「队列把任务摆出来、
-claim 又拒绝它，两者会自相矛盾」）。WIP=1 更是本项目的策略，不是 todopi 的功能。
-所以这道门属于 harness，不属于 CLI。
+**为什么 CLI 不该承担这一条**：spec §6.1 的迁移表里 `claim` 那一行没有 `blocked_by`
+门禁，当前实现也确实允许——**这是现有契约与实现的边界，我不该说成「明确的产品
+决策」**。第二版计划我引了 FR-C1 里「队列把任务摆出来、claim 又拒绝它，两者会自相
+矛盾」来论证，而评审指出那句话针对的是**过期租约的重新认领**，撑不起这个结论。
+（这是本 session 第二次把推断写成既定事实，第一次是 D022 那三条。）
+
+真正的理由只有一条，而它够了：**WIP=1 是本项目的策略，不是 todopi 的功能**，
+所以这道门属于 harness。「被阻塞的任务能不能直接认领」是另一个问题，留给 dogfooding
+回答，不在这次迁移里改产品。
 
 **不能用 grep 数。** 第一版计划写的是 `grep -l '^status: "in_progress"$'`——评审
 指出它漏掉规格允许的**手写无引号**形式。改成 `tools/check-wip.mjs`，用仓库自己的
@@ -104,17 +112,35 @@ claim 又拒绝它，两者会自相矛盾」）。WIP=1 更是本项目的策�
 所以对账必须**逐条逐字段**，而且由一个**独立**脚本做——迁移函数不能兼任自己的
 唯一校验器。这正是本 session 栽过的那个形状：断言和被断言的东西共享同一个假设。
 
-对账脚本从 `git show HEAD:feature_list.json` 读原始数据（迁移后文件已删，从 git
-读让它随时可重跑），逐条核对：
+**原始数据从哪读。** 第二版写的是 `git show HEAD:feature_list.json`——评审指出它
+在迁移 commit 成为 HEAD 之后就失效了，和「随时可重跑」自相矛盾。改成两段式：
+
+```
+HEAD 上还有这个文件 → 直接读（迁移提交之前）
+HEAD 上没有了       → git log --diff-filter=D --format=%H -1 -- feature_list.json
+                      取删除它的那个 commit，读它的父提交
+```
+
+**对账清单。** 第二版那份评审指出「按字面无法实现，而且仍会漏数据」，两处都成立：
+
+- `layers[].cmd` 串联后与 `verify` **逐字相等**是错的——原数据是 `node --test`，
+  而目标已规定改成 `make test`。**期望值由对账脚本自己算**（独立实现那个转换），
+  不是拿迁移脚本的输出去对迁移脚本。
+- 清单漏了一批字段，补齐如下。
 
 ```
 21 条全在，legacy_id 集合与原 id 集合相等
-state → status/resolution 映射逐条正确（7 closed+done / 14 open）
-depends_on 的每条边在 blocked_by 里都有对应（用新 id 换算后集合相等）
-layers[].cmd 按 static→runtime→system 串联后与 verify 字段逐字相等
-verification 原文出现在 body 里（逐字包含）
+state → status/resolution：7 条 closed+done、14 条 open，逐条对
+behavior → title（≤200 字符）且完整原文出现在 body 里
+depends_on → blocked_by：换算成新 id 后每条边集合相等
+layers[].cmd → verify：脚本独立算出期望值（含 node --test → make test），逐字相等
 layers[].repair 原文出现在 body 的 Repair 段
+verification 原文出现在 body 的验收判据段
 evidence 原文出现在 body 的 Log 段
+labels 含 "bootstrap"，且 milestones 的分组落成 m1/m2/m3 标签
+created/updated 都是迁移时刻，body 注明真实创建时间未知
+原数组顺序 → rank 的字典序与之一致（F01 最前、F21 最后）
+milestones[].done_when 三条原文出现在 PROGRESS.md
 每条 Log 行经仓库自己的 parseLogLine 解析通过（§5.3.3）
 ```
 
@@ -153,9 +179,18 @@ Makefile 的 activate / verify-feature / reverify / release / vcr 目标与 .PHO
 **Files:** Create `tools/check-wip.mjs`；Modify `.harness/arch-rules.json`
 
 - [ ] **Step 1：写检查器**，用仓库自己的解析器加载 `.todopi/tasks/`，断言两条：
-      至多一个 `in_progress`；没有 `in_progress` 任务的 `blocked_by` 指向未关闭的
-      任务。**不用 grep**——规格允许手写无引号的 `status: in_progress`，
-      字符形状漏得掉（评审实测）。
+      至多一个 `in_progress`；没有 `in_progress` 任务的 `blocked_by` 指向
+      **不是 `closed` + `resolution: done`** 的任务。
+
+      **必须是 `done` 而不只是 `closed`**：旧 `make activate` 要求依赖
+      `state: passing`，而 `close --resolution wontfix` 之后后继同样会解除阻塞
+      （评审实测）。只查「已关闭」就是又一次静默降级。
+
+      **不用 grep**——规格允许手写无引号的 `status: in_progress`，字符形状漏得掉
+      （评审实测）。
+
+      **解析失败要吵**：读不动的任务文件必须输出诊断并失败，否则它会被读成空字段
+      然后从计数里消失——那是最坏的一种假绿。
 
 - [ ] **Step 2：加规则**（`applies_when: test -d .todopi/tasks`，
       与 ARCH-020 / ARCH-022 同为 node 检查器）
@@ -164,6 +199,8 @@ Makefile 的 activate / verify-feature / reverify / release / vcr 目标与 .PHO
       - 两条规范形式的 `in_progress`
       - 一条规范形式 + 一条**手写无引号**的 `in_progress`（这条专治第一版的 grep）
       - 一条 `in_progress` 的 `blocked_by` 指向 open 任务
+      - 一条 `in_progress` 的 `blocked_by` 指向 **`closed` + `wontfix`** 的任务
+      - 一个读不动的任务文件（必须报错，不能静默跳过）
 
 ## Task 4：文档
 
@@ -219,14 +256,25 @@ make check / make test / make e2e 三层全绿
 todopi doctor 退出 0
 tools/bootstrap-verify.mjs 退出 0
 make status / make clean-check 跑得通（它们刚被改写过）
-照 AGENTS.md 新写的路径真跑一遍：ls --ready → claim → done
+照 AGENTS.md 新写的路径真跑一遍（见下）
 ```
+
+**彩排的 claim → done 要用一条一次性任务。** 评审指出两个问题，都成立：F08 的
+`verify` 指向尚不存在的 `tools/e2e/f08-show.sh`，`done` 必然被拒；而认领 F08 会
+改动正在对账的那 21 条数据。所以顺序是：**先跑完 21 条对账**，再 `todopi add` 一条
+临时任务（`--verify 'true'`），拿它演练 claim → 提交 → done → `make clean-check`。
+彩排副本用完即弃。
 
 - [ ] **Step 2：彩排通过后，在主工作区重做同一套改动**（或把副本的改动搬过来）
 - [ ] **Step 3：删除 `tools/bootstrap-migrate.mjs`**（一次性脚本，留着会让人以为
       可以重跑）。`tools/bootstrap-verify.mjs` **保留**——它从 git 读原始数据，
       随时可重跑，是这次迁移唯一的事后证据
-- [ ] **Step 4：一个 commit 提交全部改动**
+- [ ] **Step 4：一个 commit 提交全部改动，并核对暂存区与 commit 的文件清单**
+
+      评审指出 ARCH-006 只能检出新旧并存，**证明不了所有迁移内容都进了同一个
+      commit**（比如 `.todopi/tasks/` 漏 add 几条，ARCH-006 照样通过）。
+      所以提交前 `git status --porcelain` 与提交后 `git show --stat` 两份清单
+      都要逐项核对，并断言 `.todopi/tasks/` 下恰好 21 个文件进了这个 commit。
 - [ ] **Step 5：`make clean-check` 通过**
 
 ## 自查清单
