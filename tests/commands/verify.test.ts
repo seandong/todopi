@@ -284,3 +284,55 @@ test("verify 字段是空白时按没有处理", () => {
       && (lastLog(d, t.id) as { args: Record<string, string> }).args["verify"], "none");
   });
 });
+
+// 这一组原本只是我手跑过一遍的自查脚本，结论写在了评审提示里——但仓库里没有任何
+// 东西能把它重现。Codex 指出这一点是对的：**跑过一次不等于钉住了。**
+//
+// 危险在于 verify 的输出会被缩进两格塞进 Log，而 Log 本身是一种语法：`- ` 开头
+// 是新条目、`## ` 是小节、`---` 是 frontmatter 边界。输出里有这些形状时，续行
+// 缩进是唯一挡在中间的东西。
+
+// **五条里只有三条有判别力**（`- `、`## `、`---`）：把续行缩进去掉，它们会红。
+// 另外两条（`: `、空行与制表符）按构造就产生不了顶格的结构行，所以任何突变都红不了。
+// 留着它们不是为了把关，而是因为「它们是惰性的」这句话是对**当前解析器**说的——
+// 哪天解析器把 `key: value` 当成别的东西，这两条就是第一现场。如实写在这里，
+// 免得有人数着「五条都绿」以为挡住了五种形状。
+
+/** 正文里**顶格**的结构行。缩进两格的续行不算——那正是我们要它变成的样子。 */
+function structure(body: string): string[] {
+  return body.split("\n").filter((l) => /^(## |---|- )/.test(l));
+}
+
+for (const [name, script] of [
+  ["以 `- ` 开头，长得像新的一条 Log", `printf -- '- 2026-01-01T00:00:00Z fake@host done\\n'; exit 1`],
+  ["含 `: `，长得像 frontmatter 的键值", `printf 'key: value here\\n'; exit 1`],
+  ["以 `## ` 开头，长得像小节标题", `printf '## Log\\n- fake entry\\n'; exit 1`],
+  ["含 `---`，长得像 frontmatter 边界", `printf -- '---\\nid: "tp-fake"\\n---\\n'; exit 1`],
+  ["空行与制表符", `printf 'a\\n\\n\\tb\\n'; exit 1`],
+] as const) {
+  test(`verify 输出撞上 Log 语法时仍然安全：${name}`, () => {
+    withConfig(() => {
+      const d = repo();
+      const t = runAdd({ directory: d, title: "T", verify: script, actor: ME });
+      const before = structure(read(d, t.id).split("---\n").slice(2).join("---\n"));
+
+      runDone({ directory: d, id: t.id, actor: ME, force: true, reason: "evidence", yes: true });
+
+      const body = read(d, t.id).split("---\n").slice(2).join("---\n");
+      // **这一条才是真判据。** 条数、末条可解析、doctor 通过，三个加起来都看不见
+      // 一个被注入的假 `## Log` 小节——它们只问「我关心的那条还在吗」，不问
+      // 「有没有多出别的东西」。结构不变量两边都问了：顶格的结构行只允许
+      // **多出一条** Log 条目，别的一个都不许变。
+      const after = structure(body);
+      const added = after.filter((l) => !before.includes(l));
+      assert.equal(after.length, before.length + 1,
+        `正文结构变了：verify 的输出漏进了顶格\n新增：${JSON.stringify(added)}\n${body}`);
+      assert.ok(added.every((l) => l.startsWith("- 2")), `多出来的不是 Log 条目：${JSON.stringify(added)}`);
+
+      const entries = logLines(body).map(parseLogLine);
+      assert.equal(entries.length, 2, `日志条数变了\n${body}`);
+      assert.ok(entries.at(-1)?.ok, `末条解析不出来\n${body}`);
+      assert.equal(runDoctor({ directory: d }).ok, true, `doctor 不通过\n${body}`);
+    });
+  });
+}

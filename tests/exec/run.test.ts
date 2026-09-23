@@ -27,7 +27,7 @@ function settle(cond: () => boolean, ms = 3000): boolean {
   return false;
 }
 
-test("超时终止**整棵进程树** —— 断言的是孙进程的 pid", () => {
+test("超时终止**整个进程组** —— 断言的是孙进程的 pid", () => {
   // 这条用例的全部价值在于它测的是**孙进程**。若改成断言父进程的退出码或
   // timedOut，把 detached 去掉它照样通过——而那正是要防的缺陷。
   // 实测过：默认方式下 child.kill() 之后孙进程仍然存活。

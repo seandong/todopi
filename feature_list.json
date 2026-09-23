@@ -229,8 +229,8 @@
     },
     {
       "id": "F07",
-      "behavior": "todopi done 执行任务的 verify 命令，失败则拒绝关闭，超时终止整个进程树",
-      "verification": "verify 非零退出→拒绝、退出 2、不写 Log；通过→记 done verify=pass commit=<sha7> dirty=<bool> 且不记录输出（FR-D4a）；--force 关闭时记录输出尾部 512 字节；完整输出落 .todopi/.cache/verify/ 且不提交；超时用例：verify 派生孙进程，超时后孙进程 MUST 全部终止——实测运行时默认只杀直接子进程；首次在某仓库执行 verify 要求确认并记入 ~/.config/todopi/trust，--yes 或 CI=true 跳过；每次执行前原样打印将要运行的命令。信任记录 MUST NOT 出现在 .todopi/ 内（spec §8）。",
+      "behavior": "todopi done 执行任务的 verify 命令，失败则拒绝关闭，超时终止整个进程组",
+      "verification": "verify 非零退出→拒绝、退出 2、不写 Log；通过→记 done verify=pass commit=<sha7> dirty=<bool> 且不记录输出（FR-D4a）；--force 关闭时记录输出尾部 512 字节；完整输出流式落 .todopi/.cache/verify/ 且不提交、不受尾部上限截断，捕获内存有界（含日志目标变慢时的背压）；超时用例：verify 派生孙进程，超时后**该进程组内**的孙进程 MUST 全部终止——实测运行时默认只杀直接子进程；主动 setsid 脱离该组的后代不在保证范围（FR-D2）；首次在某仓库执行 verify 要求确认并记入 ~/.config/todopi/trust，--yes 或 CI=true 跳过；每次执行前原样打印将要运行的命令。信任记录 MUST NOT 出现在 .todopi/ 内（spec §8）。",
       "state": "passing",
       "depends_on": [
         "F06"
@@ -245,7 +245,7 @@
         {
           "label": "runtime",
           "cmd": "node --test",
-          "repair": "孤儿进程用例失败→src/exec/run.ts 必须以独立进程组启动（detached）并在超时时向进程组发信号，而不是只 kill 直接子进程；Windows 走等价的树终止。"
+          "repair": "孤儿进程用例失败→src/exec/run.ts 必须以独立进程组启动（detached）并在超时时向进程组发信号，而不是只 kill 直接子进程；内存/背压用例失败→src/exec/runner.ts 必须流式写日志并用 pipe 保留背压，不得把 chunk 攒在内存或流的缓冲里。verify 在 Windows 上明确不支持（FR-D2）。"
         },
         {
           "label": "system",
