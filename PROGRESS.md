@@ -5,12 +5,12 @@
 
 ## Current State
 
-- Last commit: `466a612` —— F07 verify 三层通过。
+- Last commit: `17b9941` —— F07 verify 三层通过，自查两处已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **589 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **592 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
   `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 66 项 + `f07-verify` 38 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
@@ -30,7 +30,19 @@
 ## In Progress
 
 **F07 `verify`** —— 三层通过、`passing`，在分支 `feat/f07-verify` 上，
-尚未合回 `main`。**评审待发。**
+尚未合回 `main`。**评审卡住了：Codex 的周额度已用尽，要到 2026-09-28 才恢复。**
+
+在等的这段时间，我把发给它的那几条最尖的检查自己跑了一遍（Log 语法撞车、
+刁钻进程树、求值顺序、输出落点、信任边角），抓到两处：
+
+1. 信任文件的位置被占成目录时抛裸 `EISDIR`，使用者无从知道该动哪里。已改成
+   说得清的错误。
+2. **我自己那条「孙进程用 setsid 脱离组」的检查是假绿**——macOS 没有 `setsid`
+   可执行文件，用例走了 `||` 的回退分支，等于又测了一遍普通情形。用 Node 的
+   `detached` 重新构造后确认：**主动脱离进程组的后代确实杀不到**。这是进程组
+   终止的固有边界（替代方案是遍历 `ps` 追整棵树，跨平台既不可靠也有竞态），
+   现已如实写进 `run.ts` 的注释并钉成一条用例——哪天有人「修好」它，那条会红，
+   然后他会读到那段说明。
 
 **状态迁移的触发条件到此齐了**（[状态迁移契约](docs/harness/state-migration.md)）：
 spec 定稿 ✅、doctor 能检出违规 ✅、五个命令 passing **5/5**
