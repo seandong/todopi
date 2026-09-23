@@ -5,12 +5,12 @@
 
 ## Current State
 
-- Last commit: `0fa27c9` —— F07 第二轮评审 Go，增量待第三轮。
+- Last commit: `c8a7edf` —— F07 第三轮评审的一条阻塞项已收回。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **607 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **608 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
   `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 66 项 + `f07-verify` 38 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
@@ -30,8 +30,7 @@
 ## In Progress
 
 **F07 `verify`** —— 三层通过、`passing`，在分支 `feat/f07-verify` 上，
-尚未合回 `main`。**第二轮评审：零阻塞项，Go。** 但 Go 之后又改了三处（见下），
-增量待第三轮确认。
+尚未合回 `main`。**第二轮 Go；第三轮（只审 Go 之后的增量）No-go，一条阻塞项已收回，待第四轮。**
 
 1. **日志不是完整输出，而那个「上限」也没有限制内存。** runner 把每个 chunk 攒进
    数组、退出时才 concat 再截尾——截尾只让返回值变小，concat 之前那份内存一直在
@@ -81,6 +80,13 @@ test`、`cargo test` 都会 fork worker。实现因此分成两个进程：`done
 树」措辞），一条是误报（Codex 把 pane 渲染转义出来的 `\#\#` 当成了源码）。另外补了
 两处：日志写不成时报告不再给出跑不通的 `cat`；那条 RSS 用例不再依赖 `ps`（它在
 Codex 的沙箱里 EPERM 红过），不变量改由 `tail.ts` 在进程内确定性断言。
+
+第三轮的阻塞项正是我在提示里专门请它盯的那件事：**我为了让自己这次改动通过，把
+规则改松了。** ARCH-021 需要放行同目录 import（`runner.ts` 用 `tail.ts`），我顺手把
+ARCH-019（`fs/`）也放了，理由只有「对称」。已收回。
+
+收回时又踩了一次老坑：第一版 revert 是 no-op，**而我为它写的断言用了同一个错的
+串**，于是断言也没报警。和 PROGRESS 被 `str.replace()` 静默跳过同形。
 
 F01–F06 已合回 `main`。**整个仓库尚未推送到 remote。**
 
