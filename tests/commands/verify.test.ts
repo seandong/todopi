@@ -348,10 +348,15 @@ for (const [name, script, marker] of [
   });
 }
 
-test("日志写不成时，拒绝报告不给 cat，并说清为什么没有全文", (t) => {
+test("日志写不成时，拒绝报告不给 cat，并说清为什么没有全文", () => {
   // 上面那条只测了渲染器。这一条走完整条路：真的让日志写不进去，确认
   // logProblem 从 runner 一路传到报告，而那条 `cat` 真的消失了。
-  if (process.getuid?.() === 0) { t.skip("以 root 运行，chmod 挡不住写入"); return; }
+  //
+  // **以 root 跑就直接红，不跳过。** root 绕过 chmod，这条用例在那种环境下无从
+  // 验证——而「无从验证」和「验证通过」必须长得不一样。跳过会让套件看起来全绿，
+  // 红至少会告诉人「这台机器上少了一道把关」。测试套件本来也不该以 root 运行。
+  assert.notEqual(process.getuid?.(), 0,
+    "测试套件不应以 root 运行：chmod 挡不住 root，这条用例无从验证");
   withConfig(() => {
     const d = repo();
     const cache = join(d, ".todopi", ".cache", "verify");

@@ -401,17 +401,18 @@ cmd_test() {
   elif ! have node; then
     emit unit-test blocked "测试本该运行，但环境缺少 node（见 .tool-versions）"
   else
-    # **筛选参数先挡掉。** `--test-name-pattern` 能把 608 个用例全过滤干净，而
-    # 运行器照样报 skipped 0、退出 0——下面那个计数于是变成一句假话。评审实测
-    # 复现过。这里不悄悄清理环境（那等于替人改了他的命令），而是说出来并判 fail。
-    local _filter=""
-    case "${NODE_OPTIONS:-}" in
-      *--test-name-pattern*|*--test-skip-pattern*|*--test-only*) _filter="yes" ;;
-    esac
-    if [ -n "$_filter" ]; then
-      emit test-not-filtered fail "NODE_OPTIONS 里有测试筛选参数（${NODE_OPTIONS}）：这一趟不是全量，任何「通过」都不能据此得出"
+    # **NODE_OPTIONS 非空即拒。**
+    #
+    # 这条先前写成「挡掉 --test-name-pattern / --test-skip-pattern / --test-only」，
+    # 评审随即找出第四个：`--test-shard=1/4` 只跑 188/608，三道门全 pass。
+    # 枚举「已知的坏东西」永远漏——这一课刚在 .skip 上学过一遍，我又犯了一次。
+    #
+    # 改成要求「允许什么」：这一趟必须在干净的 NODE_OPTIONS 下跑。全量与否是
+    # 「通过」这两个字的前提，不该由一个我维护的黑名单来担保。
+    if [ -n "${NODE_OPTIONS:-}" ]; then
+      emit test-not-filtered fail "NODE_OPTIONS 非空（${NODE_OPTIONS}）：它可以筛掉任意多用例而运行器照样退出 0。清空它再跑，这一趟才能算数"
     else
-      emit test-not-filtered pass "没有测试筛选参数，这一趟是全量"
+      emit test-not-filtered pass "NODE_OPTIONS 为空，这一趟是全量"
     fi
 
     # 输出仍然直接流出来，同时留一份给下面数 skipped。
@@ -442,8 +443,15 @@ cmd_test() {
     # **但它只在这一趟是全量时才说明问题**——被筛掉的用例不算 skipped，只是没被
     # 注册。所以上面那道 test-not-filtered 是它的前提，不是可有可无的附加。
     #
-    # 状态用 blocked 而不是 fail：不是有东西坏了，是有东西**没跑**——这台机器上
-    # 少了一道把关，不能当成通过。
+    # **状态是 fail，不是 blocked。** 早先留 blocked，是因为仓库里有一条为
+    # 「`ps` 不可用」准备的条件跳过。那条用例已经删了（见 tests/exec/run.test.ts
+    # 顶部的说明），现在**没有任何跳过是合法的**，所以也不必再区分。
+    #
+    # **这道门挡不住什么，如实写在这里：** 一个文件若先 `process.exit(0)` 再声明
+    # 测试，或把 `test(...)` 包在一个不成立的 `if` 里，它注册的测试数就是零——
+    # 而一个「真的只有零条测试的文件」长得一模一样。**没有任何运行器信号能区分
+    # 这两者**，所以这里不去假装能挡。防线是代码审查：diff 里出现 `process.exit`
+    # 或 `if (...) test(` 就是红旗。
     local _skipped
     _skipped="$(sed -n 's/^# skipped \([0-9][0-9]*\)$/\1/p' "$_tlog" | tail -1)"
     rm -f "$_tlog"
@@ -452,7 +460,7 @@ cmd_test() {
     elif [ "$_skipped" -eq 0 ]; then
       emit no-skipped-tests pass "没有测试被跳过"
     else
-      emit no-skipped-tests blocked "${_skipped} 条测试被跳过 —— 这台机器上少了这几道把关，理由见上面的输出"
+      emit no-skipped-tests fail "${_skipped} 条测试被跳过 —— 仓库里不该有任何跳过，理由见上面的输出"
     fi
   fi
   local overall; overall="$(checks_overall)"; checks_done
