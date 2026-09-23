@@ -231,7 +231,7 @@
       "id": "F07",
       "behavior": "todopi done 执行任务的 verify 命令，失败则拒绝关闭，超时终止整个进程树",
       "verification": "verify 非零退出→拒绝、退出 2、不写 Log；通过→记 done verify=pass commit=<sha7> dirty=<bool> 且不记录输出（FR-D4a）；--force 关闭时记录输出尾部 512 字节；完整输出落 .todopi/.cache/verify/ 且不提交；超时用例：verify 派生孙进程，超时后孙进程 MUST 全部终止——实测运行时默认只杀直接子进程；首次在某仓库执行 verify 要求确认并记入 ~/.config/todopi/trust，--yes 或 CI=true 跳过；每次执行前原样打印将要运行的命令。信任记录 MUST NOT 出现在 .todopi/ 内（spec §8）。",
-      "state": "not_started",
+      "state": "active",
       "depends_on": [
         "F06"
       ],
