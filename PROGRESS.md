@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `1efc02c` —— 自举评审第四轮已修。
+- Last commit: `c373ffa` —— 自举已合回 main。下一步 F08。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -123,8 +123,11 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     guard。见 DECISIONS D026、D027。
 26. ~~开始自举~~ 已完成（2026-09-23）。21 条迁进 `.todopi/`，`feature_list.json`
     已删除。计划先经四轮评审才执行，损失表 三 → 五 → 八 → 十 → 十三条。
-27. **下一步：F08 `show`。** `todopi ls --ready` 看队列，`todopi claim` 认领。
-    这是第一个用 todopi 自己管出来的 feature。
+27. ~~自举评审并合回 `main`~~ 已完成。**五轮**（计划另有四轮）。
+    评审找出的东西里有三条不是迁移的必然代价，是我重写 `status` 面板时自己弄丢的
+    ——损失表里都标注了。
+28. **下一步：F08 `show`。** `todopi ls --ready` 看队列，`todopi claim <id>` 认领。
+    **这是第一个用 todopi 自己管出来的 feature。**
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
     门禁骨架在 `commands/transition.ts`，`verify` 那道门加进 `domain/gates.ts` 即可，
     报告与动作走 `gateActions()`（`command` 无占位符、`template` 需填空）。
