@@ -251,7 +251,11 @@ actor's `assignee` is what `steal=true` records.
 Gates. A transition MUST be refused when a gate **that applies to it** does not hold.
 Which gates apply to which transition is the table above, not this list: `verify` and
 the Acceptance Criteria gate `done` only; every child being `closed` gates both `done`
-and `close`; the task's `assignee` being another actor gates every write. `close` is
+and `close`; the task being **currently held** by another actor gates every write. "Currently held"
+means an `in_progress` task whose `assignee` is someone else, or a shared lease (§8) that
+belongs to someone else and has not expired. An `assignee` left on a `closed` task is a
+historical record of who closed it (§6.2 invariant 3 permits it) and MUST NOT be read as a
+current holder — otherwise nobody could ever reopen a task someone else closed. `close` is
 how a task is abandoned rather than finished, so criteria left unticked are the normal
 case for it and MUST NOT refuse it.
 

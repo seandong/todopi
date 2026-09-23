@@ -211,27 +211,74 @@ fs.writeFileSync(p, raw.slice(0,i) + raw.slice(i).replace(/\n/g,"\r\n"));
 cli -C "$W" done "$O" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "CRLF 正文下门禁照常生效" || fail "CRLF 正文让门禁静默失效了"
 
-# 20. **报告给出的每一条命令都真的能跑**（FR-D2a 的字面要求）
-#     判据是「不是用法错误」：退出 2 说明门禁还没修好，那是对的；
-#     退出 1 说明我们给了一条本身就写错的命令。
+# 20. **每一条 command 都真的能跑**，且覆盖全部场景
+#
+#     第一版这项有两个假绿：它**主动过滤掉了含 `<` 的项**（那些是模板，字面执行
+#     会被 shell 的 `<` 当成重定向），而且只跑了 done/close 的一个场景。
+#     现在：command 一条不漏地执行；template 单独断言它确实含占位符且**不**被执行。
+run_actions() {
+  local label="$1"; shift
+  local json="$TMP/act.json"
+  "$@" > "$json" 2>/dev/null
+  node -e '
+const fs=require("node:fs");
+const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+if(!Array.isArray(r.actions)||r.actions.length===0) throw new Error("没有 actions");
+for(const a of r.actions){
+  if(a.command!==undefined && a.template!==undefined) throw new Error("同时给了 command 与 template");
+  if(a.command!==undefined && /[<>]/.test(a.command)) throw new Error("command 含占位符: "+a.command);
+  if(a.template!==undefined && !/[<>]/.test(a.template)) throw new Error("template 不含占位符: "+a.template);
+  if(a.command!==undefined) console.log("CMD\t"+a.command);
+  if(a.template!==undefined) console.log("TPL\t"+a.template);
+  if(!a.detail) throw new Error("动作缺 detail");
+}' "$json" > "$TMP/acts" 2>"$TMP/acterr"
+  if [ $? -ne 0 ]; then fail "[$label] actions 不合格：$(cat "$TMP/acterr")"; return; fi
+
+  local n=0
+  while IFS="$(printf '\t')" read -r kind cmd; do
+    [ -z "$cmd" ] && continue
+    [ "$kind" = "TPL" ] && continue
+    n=$((n + 1))
+    real=$(printf '%s' "$cmd" | sed "s|^todopi |node $ROOT/src/cli.ts -C $W |")
+    eval "$real" >/dev/null 2>&1
+    code=$?
+    # 1 = 用法错误，说明我们给了一条本身就写错的命令；2/3 是门禁没过，那是对的
+    [ "$code" -eq 1 ] && fail "[$label] 命令是用法错误：$cmd"
+    [ "$code" -gt 3 ] && fail "[$label] 命令退出 $code：$cmd"
+  done < "$TMP/acts"
+  ok "[$label] $n 条 command 全部可执行"
+}
+
+# 场景 a：验收标准 + 子任务
 Q=$(cli -C "$W" --json add "runnable parent" --ac "todo" | jfield id)
 cli -C "$W" --json add "runnable child" --parent "$Q" >/dev/null 2>&1
-bad=0
-cli -C "$W" --json done "$Q" 2>/dev/null | node -e '
-let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-  const r=JSON.parse(s);
-  if(!Array.isArray(r.actions)||r.actions.length===0) throw new Error("--json 没有 actions");
-  for(const a of r.actions) if(a.command && !a.command.includes("<")) console.log(a.command);
-});' > "$TMP/cmds" || fail "--json 的 actions 不合格"
-while read -r cmd; do
-  [ -z "$cmd" ] && continue
-  real=$(printf '%s' "$cmd" | sed "s|^todopi |node $ROOT/src/cli.ts -C $W |")
-  eval "$real" >/dev/null 2>&1
-  [ $? -eq 1 ] && { fail "报告给出的命令是用法错误：$cmd"; bad=1; }
-done < "$TMP/cmds"
-[ "$bad" -eq 0 ] && ok "报告给出的每条命令都能跑（没有用法错误）" || true
-grep -q 'todopi check ' "$TMP/cmds" && fail "建议了尚不存在的 todopi check" || ok "没有建议尚不存在的命令"
+run_actions "done：标准+子任务" cli -C "$W" --json done "$Q"
 
+# 场景 b：close 的归属冲突
+Q2=$(cli -C "$W" --json add "runnable owned" | jfield id)
+cli -C "$W" --as someone@host claim "$Q2" >/dev/null 2>&1
+run_actions "close：归属冲突" cli -C "$W" --json close "$Q2" --resolution wontfix
+
+# 场景 c：done 的状态门禁
+Q3=$(cli -C "$W" --json add "runnable closed" | jfield id)
+cli -C "$W" done "$Q3" >/dev/null 2>&1
+run_actions "done：状态门禁" cli -C "$W" --json done "$Q3"
+
+# 场景 d：reopen 的状态门禁
+Q4=$(cli -C "$W" --json add "runnable open" | jfield id)
+run_actions "reopen：状态门禁" cli -C "$W" --json reopen "$Q4"
+
+# 场景 e：reopen 的归属冲突（活的共享租约）
+Q5=$(cli -C "$W" --json add "runnable reopen owned" | jfield id)
+cli -C "$W" done "$Q5" >/dev/null 2>&1
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+const now=new Date().toISOString().replace(/\.\d{3}Z$/,"Z");
+fs.writeFileSync(p, JSON.stringify({actor:"holder@host",claimed_at:now,heartbeat_at:now},null,2)+"\n");
+' "$LEASES/$Q5.json"
+run_actions "reopen：归属冲突" cli -C "$W" --json reopen "$Q5"
+
+grep -q 'todopi check ' "$TMP/acts" && fail "建议了尚不存在的 todopi check" || ok "没有建议尚不存在的命令"
 
 # 21. 过期的租约不该继续拦人（spec §8 的 stale 语义）
 R=$(cli -C "$W" --json add "expired lease" | jfield id)
@@ -259,7 +306,7 @@ if printf '%s' "$out" | grep -E '^\s*todopi .*--steal' >/dev/null; then
 else
   ok "reopen 不给出 claim --steal 这条命令"
 fi
-case "$out" in *"does not apply"*) ok "并且明说了它为什么不适用" ;; *) fail "没解释为什么不能 steal" ;; esac
+case "$out" in *"No command available"*) ok "并且明说了这里没有可用的命令" ;; *) fail "没说清这里没有命令可跑" ;; esac
 case "$out" in *holder@host*) ok "但说清了是谁持有" ;; *) fail "没说是谁持有" ;; esac
 
 # 23. CRLF 正文被改写后规范化成 LF（spec §5.1：行尾 LF）
@@ -285,7 +332,7 @@ if node -e '
 const fs=require("node:fs");
 const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
 const text=fs.readFileSync(process.argv[2],"utf8");
-const fromJson=[...new Set(r.actions.map(a=>a.command).filter(Boolean))].sort();
+const fromJson=[...new Set(r.actions.flatMap(a=>[a.command,a.template]).filter(Boolean))].sort();
 const inText=[...new Set(text.split("\n").map(l=>l.trim()).filter(l=>l.startsWith("todopi ")))].sort();
 if(JSON.stringify(fromJson)!==JSON.stringify(inText))
   throw new Error("文本 "+JSON.stringify(inText)+" 与 JSON "+JSON.stringify(fromJson)+" 不一致");

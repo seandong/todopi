@@ -146,7 +146,8 @@ test("文本里出现的命令，恰好就是 actions 里的那些 —— 两边
     const r = report([...rs], code, transition);
     const text = renderGateReport(r);
 
-    const fromActions = new Set(r.actions.map((a) => a.command).filter((c): c is string => c !== undefined));
+    const fromActions = new Set(
+      r.actions.flatMap((a) => [a.command, a.template]).filter((c): c is string => c !== undefined));
     // 文本里所有形如 `todopi …` 的整行，就是它给出的命令
     const inText = new Set(
       text.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("todopi ")),
@@ -202,4 +203,67 @@ test("成功的迁移给一行确认；强制时说明已记为未验证", () =>
   assert.match(forced, /unverified/i);
   assert.doesNotMatch(renderTransition({ id: "tp-000001", title: "T", status: "closed", forced: true }, { quiet: true }),
     /unverified/i, "--quiet 下只留结果");
+});
+
+// ---- command 必须真的可直接执行（Codex 第三轮评审的阻塞项）----
+
+test("command 里不得含占位符 —— 带 `<…>` 的要放在 template", () => {
+  // 第一版把 `todopi close <id> --resolution <wontfix|duplicate|obsolete>` 放进了
+  // command，而 DTO 说它「可直接执行」。字面执行会被 shell 的 `<` 当成重定向，
+  // 报 parse error。更糟的是我为此写的 e2e **主动过滤掉了含 `<` 的项**，
+  // 于是「每条命令都能跑」那句断言是假绿。
+  const cases: Array<[Refusal[], number, GateReport["transition"]]> = [
+    [[acceptance], 2, "done"],
+    [[children], 2, "close"],
+    [[ownership], 3, "done"],
+    [[ownership], 3, "reopen"],
+    [[{ gate: "state", code: 2, status: "closed", transition: "done" }], 2, "done"],
+  ];
+  for (const [rs, code, transition] of cases) {
+    for (const a of report(rs, code, transition).actions) {
+      if (a.command !== undefined) {
+        assert.doesNotMatch(a.command, /[<>]/, `${transition}/${a.for} 的 command 含占位符：${a.command}`);
+      }
+      assert.ok(a.command === undefined || a.template === undefined,
+        `${transition}/${a.for} 不能同时给 command 与 template`);
+    }
+  }
+});
+
+test("close 的重跑是 template —— 选哪个 resolution 该由使用者决定", () => {
+  const retry = report([children], 2, "close").actions.find((a) => a.for === "retry");
+  assert.equal(retry?.command, undefined);
+  assert.match(retry?.template ?? "", /--resolution <wontfix\|duplicate\|obsolete>/);
+});
+
+test("强制永远是 template —— --reason 的内容只有使用者写得出来", () => {
+  for (const transition of ["done", "close"] as const) {
+    const force = report([children], 2, transition).actions.find((a) => a.for === "force");
+    assert.equal(force?.command, undefined, `${transition} 的强制不该是 command`);
+    assert.match(force?.template ?? "", /--force --reason "<why>"/);
+  }
+});
+
+test("done / reopen 的重跑是完整命令，不是模板", () => {
+  for (const transition of ["done", "reopen"] as const) {
+    const retry = report([ownership], 3, transition).actions.find((a) => a.for === "retry");
+    assert.equal(retry?.template, undefined);
+    assert.equal(retry?.command, `todopi ${transition} tp-000001`);
+  }
+});
+
+test("验收标准与子任务同时不过时，说清 close 仍要先关子任务", () => {
+  const a = report([acceptance, children]).actions.find(
+    (x) => x.for === "acceptance" && x.command?.includes("--resolution wontfix"));
+  assert.match(a?.detail ?? "", /child/i, "不说的话 agent 会以为这是条立刻见效的出路");
+  const alone = report([acceptance]).actions.find(
+    (x) => x.for === "acceptance" && x.command?.includes("--resolution wontfix"));
+  assert.doesNotMatch(alone?.detail ?? "", /child/i, "只有验收标准那道门时不该提子任务");
+});
+
+test("reopen 的归属说明明说「没有可用的命令」", () => {
+  const a = report([ownership], 3, "reopen").actions.find((x) => x.for === "ownership");
+  assert.equal(a?.command, undefined);
+  assert.match(a?.detail ?? "", /No command available/i,
+    "简单地从文本里抓命令的调用方也得看得出这里没有命令");
 });

@@ -12,21 +12,25 @@ export function renderTransitionJson(r: TransitionReport): string {
 }
 
 /**
- * 把一条迁移拼成**可以直接粘贴执行**的命令。
+ * 重跑这条迁移的命令。
  *
- * 第一版在这里栽过：报告写 `todopi close <id> again`，而 close 必须带
- * `--resolution`，粘过去就退出 1；写 `todopi claim --steal` 而不带 id。
+ * 命令由这里按迁移拼，不由各处手写——第一版栽过两次：写 `todopi close <id> again`
+ * （缺必填的 --resolution，粘过去退出 1）、写 `todopi claim --steal`（缺 id）。
  * FR-D2a 要求「不需要再跑别的命令就能据以行动」，而一条跑不通的命令连
- * 「据以行动」的门都没进。所以命令由这里按迁移拼，不由各处手写。
+ * 「据以行动」的门都没进。
+ *`close` 必须由使用者选一个 resolution，所以它只能给
+ * **模板**——我们替他挑一个是越权。其余两条是完整可执行的命令。
  */
-function retryCommand(r: Omit<GateReport, "actions">): string {
+function retryAction(r: Omit<GateReport, "actions">): { command?: string; template?: string } {
   return r.transition === "close"
-    ? `todopi close ${r.id} --resolution <wontfix|duplicate|obsolete>`
-    : `todopi ${r.transition} ${r.id}`;
+    ? { template: `todopi close ${r.id} --resolution <wontfix|duplicate|obsolete>` }
+    : { command: `todopi ${r.transition} ${r.id}` };
 }
 
-function forceCommand(r: Omit<GateReport, "actions">): string {
-  return `${retryCommand(r)} --force --reason "<why>"`;
+/** 强制永远是模板：`--reason` 的内容只有使用者写得出来。 */
+function forceTemplate(r: Omit<GateReport, "actions">): string {
+  const retry = retryAction(r);
+  return `${retry.command ?? retry.template ?? ""} --force --reason "<why>"`;
 }
 
 /** `--force` 越不过状态门禁（spec §6.1），所以撞上它时不该建议强制。 */
@@ -52,9 +56,9 @@ export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
         out.push(r.transition === "reopen"
           ? {
             for: "ownership",
-            detail: `Held by ${refusal.holder}, most likely in another worktree. ` +
+            detail: `No command available. Held by ${refusal.holder}, most likely in another worktree. ` +
               "Wait for them to release it or for the lease to expire, then reopen. " +
-              "`claim --steal` does not apply here: the task is closed, and claim refuses closed tasks.",
+              "Taking it over is not possible here: the task is closed, and claim refuses closed tasks.",
           }
           : {
             for: "ownership", command: `todopi claim ${r.id} --steal`,
@@ -66,8 +70,13 @@ export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
         out.push({ for: "acceptance",
           detail: "Change `- [ ]` to `- [x]` for criteria " +
             `${refusal.unchecked.map((c) => c.n).join(", ")} in .todopi/tasks/${r.id}.md.` });
+        // 同时还有子任务没关时，这条命令仍会被 children 门禁挡住——
+        // 不把这一点说出来，agent 会以为它是条能立刻见效的出路（Codex 第三轮评审）。
         out.push({ for: "acceptance", command: `todopi close ${r.id} --resolution wontfix`,
-          detail: "If the work is being abandoned rather than finished; close does not need them ticked." });
+          detail: r.refused.some((x) => x.gate === "children")
+            ? "If the work is being abandoned rather than finished. close does not need criteria ticked, " +
+              "but it still needs every child closed first — see below."
+            : "If the work is being abandoned rather than finished; close does not need them ticked." });
         break;
       case "children":
         for (const c of refusal.open) {
@@ -85,10 +94,10 @@ export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
         break;
     }
   }
-  out.push({ for: "retry", command: retryCommand(r),
+  out.push({ for: "retry", ...retryAction(r),
     detail: "Run this again once the items above are fixed." });
   if (forceable(r)) {
-    out.push({ for: "force", command: forceCommand(r),
+    out.push({ for: "force", template: forceTemplate(r),
       detail: "Override every readiness gate. The task is then recorded as unverified." });
   }
   return out;
@@ -134,10 +143,11 @@ export function renderGateReport(r: GateReport): string {
     out.push(...headline(refusal));
     for (const a of r.actions) {
       if (a.for !== refusal.gate) continue;
-      if (a.command === undefined) {
+      const line = a.command ?? a.template;
+      if (line === undefined) {
         out.push(`  ${a.detail}`);
       } else {
-        out.push(`  ${a.command}`);
+        out.push(`  ${line}`);
         out.push(`    ${a.detail}`);
       }
     }
@@ -149,11 +159,13 @@ export function renderGateReport(r: GateReport): string {
   out.push(force === undefined ? "What you can do:" : "Two ways forward:");
   if (retry !== undefined) {
     out.push(`  1. ${retry.detail}`);
-    if (retry.command !== undefined) out.push(`     ${retry.command}`);
+    const line = retry.command ?? retry.template;
+    if (line !== undefined) out.push(`     ${line}`);
   }
   if (force !== undefined) {
     out.push(`  2. ${force.detail}`);
-    if (force.command !== undefined) out.push(`     ${force.command}`);
+    const line = force.command ?? force.template;
+    if (line !== undefined) out.push(`     ${line}`);
   }
   return out.join("\n") + "\n";
 }
