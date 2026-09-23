@@ -37,9 +37,9 @@ test("全部就绪时没有拒绝", () => {
   assert.deepEqual(evaluateGates(input()), []);
 });
 
-test("有未勾的标准 → acceptance，退出 2，逐条带序号与原文", () => {
+test("done 有未勾的标准 → acceptance，退出 2，逐条带序号与原文", () => {
   const t = task("tp-000001", {}, AC("- [x] done one", "- [ ] not yet", "- [ ] also not"));
-  const rs = evaluateGates(input({ task: t }));
+  const rs = evaluateGates(input({ task: t, transition: "done" }));
   assert.equal(rs.length, 1);
   const r = rs[0]!;
   assert.equal(r.gate, "acceptance");
@@ -50,7 +50,23 @@ test("有未勾的标准 → acceptance，退出 2，逐条带序号与原文", 
 
 test("全部勾上就不拒绝", () => {
   const t = task("tp-000001", {}, AC("- [x] a", "- [X] b"));
-  assert.deepEqual(evaluateGates(input({ task: t })), []);
+  assert.deepEqual(evaluateGates(input({ task: t, transition: "done" })), []);
+});
+
+test("**close 不查验收标准** —— 它是「不做了」的出口（spec §6.1 表格）", () => {
+  // done 那一行写了 require Acceptance Criteria satisfied，close 那一行没写。
+  // 拿它挡 close 的话，取消一个半截的任务只能靠 --force，于是每个被放弃的任务
+  // 都背上 unverified 标记——而那个标记本来是留给「跳过了验证的完成」的。
+  const t = task("tp-000001", {}, AC("- [ ] never finished"));
+  assert.deepEqual(evaluateGates(input({ task: t, transition: "close" })), []);
+});
+
+test("close 仍然查子任务与归属", () => {
+  const parent = task("tp-000001", { status: "in_progress", assignee: OTHER }, AC("- [ ] whatever"));
+  const kid = task("tp-000002", { parent: "tp-000001" });
+  const rs = evaluateGates(input({ task: parent, tasks: [parent, kid], transition: "close" }));
+  assert.deepEqual(rs.map((r) => r.gate).sort(), ["children", "ownership"],
+    "验收标准不在里面，另外两道还在");
 });
 
 test("有未关闭的子任务 → children，退出 2，带 id / title / status", () => {
@@ -106,7 +122,7 @@ test("未勾 + 别人持有 → 两条拒绝都在，退出码取 3", () => {
   // 报告要列出**全部**未通过的门禁——agent 该一次把活修完，
   // 而不是修一条重跑一次再看到下一条。
   const t = task("tp-000001", { status: "in_progress", assignee: OTHER }, AC("- [ ] not yet"));
-  const rs = evaluateGates(input({ task: t }));
+  const rs = evaluateGates(input({ task: t, transition: "done" }));
   assert.deepEqual(rs.map((r) => r.gate).sort(), ["acceptance", "ownership"]);
   assert.equal(worstCode(rs), 3, "归属是关于权限的，比就绪更严重");
 });
@@ -114,7 +130,7 @@ test("未勾 + 别人持有 → 两条拒绝都在，退出码取 3", () => {
 test("三道门一起不过时也全部列出", () => {
   const parent = task("tp-000001", { status: "in_progress", assignee: OTHER }, AC("- [ ] a"));
   const kid = task("tp-000002", { parent: "tp-000001" });
-  const rs = evaluateGates(input({ task: parent, tasks: [parent, kid] }));
+  const rs = evaluateGates(input({ task: parent, tasks: [parent, kid], transition: "done" }));
   assert.deepEqual(rs.map((r) => r.gate).sort(), ["acceptance", "children", "ownership"]);
   assert.equal(worstCode(rs), 3);
 });
@@ -143,6 +159,29 @@ test("reopen 对已关闭的任务不查归属 —— 关闭的任务没有持�
   // 而 spec §6.2 不变量 3 允许 closed 保留 assignee（记录是谁关的）。
   const t = task("tp-000001", { status: "closed", resolution: "done", assignee: OTHER });
   assert.deepEqual(evaluateGates(input({ task: t, transition: "reopen" })), []);
+});
+
+test("reopen 查共享租约 —— 别的 worktree 可能已经重开并认领了它", () => {
+  // 已关闭文件里留着的 assignee 不算持有者（不变量 3 允许它留下），
+  // 但共享租约是独立于任务文件的事实。不查的话，拿着旧视图的人 reopen 会
+  // 退出 0 并删掉对方的活租约（Codex 评审用真实双 worktree 复现）。
+  const t = task("tp-000001", { status: "closed", resolution: "done", assignee: OTHER });
+  const rs = evaluateGates(input({
+    task: t, transition: "reopen",
+    lease: { actor: OTHER, claimed_at: "2026-09-14T10:00:00Z", heartbeat_at: "2026-09-14T11:00:00Z" },
+  }));
+  assert.equal(rs.length, 1);
+  assert.equal(rs[0]!.gate, "ownership");
+  assert.equal(rs[0]!.code, 3);
+});
+
+test("reopen 在租约是我自己的、或没有租约时照常放行", () => {
+  const t = task("tp-000001", { status: "closed", resolution: "done", assignee: OTHER });
+  assert.deepEqual(evaluateGates(input({ task: t, transition: "reopen", lease: null })), []);
+  assert.deepEqual(evaluateGates(input({
+    task: t, transition: "reopen",
+    lease: { actor: ME, claimed_at: "2026-09-14T10:00:00Z", heartbeat_at: "2026-09-14T11:00:00Z" },
+  })), []);
 });
 
 test("reopen 不查验收标准与子任务", () => {

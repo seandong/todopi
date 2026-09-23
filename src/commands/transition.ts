@@ -16,6 +16,7 @@ import { validateWrite } from "../domain/validate.ts";
 import { currentActor } from "./actor.ts";
 import { withLockConflictMapped } from "./claim.ts";
 import { EXIT, CliError } from "../exit.ts";
+import { gateActions } from "../output/render/gate.ts";
 import type { GateReport, TransitionReport } from "../output/dto/gate.ts";
 
 /** 门禁拒绝时抛它：调用方据此打印 FR-D2a 的报告，而不是一句话。 */
@@ -82,10 +83,17 @@ export function runTransition(opts: TransitionOptions, shape: TransitionShape): 
       lease: readLease(ledger, opts.id),
     });
 
-    if (refused.length > 0 && !forced) {
-      throw new GateRefused({
-        id: opts.id, title, transition: opts.transition, refused, code: worstCode(refused),
-      });
+    // **状态门禁越不过去。** spec §6.1：`--force` 覆盖的是对「是否就绪」的判断，
+    // 不是状态机本身。表格里没有 closed → closed 这一行，也没有 open → open。
+    // 放行的话，一个已完成的任务能被再 done 一次、写出第二条 done 日志，
+    // 随后还能被 close --force 改掉 resolution（Codex 评审实测复现）。
+    const blocking = forced ? refused.filter((r) => r.gate === "state") : refused;
+    if (blocking.length > 0) {
+      const base = {
+        id: opts.id, title, transition: opts.transition,
+        refused: blocking, code: worstCode(blocking),
+      };
+      throw new GateRefused({ ...base, actions: gateActions(base) });
     }
 
     const now = nowStamp();
@@ -129,5 +137,7 @@ export function logLine(
   if (ctx.forced) pairs.push(["forced", "true"]);
   const head = [ctx.now, ctx.actor, verb, ...pairs.map(([k, v]) => `${k}=${v}`)].join(" ");
   if (!ctx.forced || ctx.reason === undefined) return head;
-  return `${head}: ${ctx.reason.replace(/\s+/g, " ").trim()}`;
+  // 只把换行（含续行的缩进）压成一个空格。原来用 \s+ 会把理由里的制表符与
+  // 连续空格一并折叠，那不是 §5.3.3 要求的——它只禁止 Log 行跨行。
+  return `${head}: ${ctx.reason.replace(/\r?\n\s*/g, " ").trim()}`;
 }

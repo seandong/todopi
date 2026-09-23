@@ -73,18 +73,80 @@ test("别人持有 → 拒绝，退出 3", () => {
   assert.throws(() => runDone({ directory: d, id: t.id, actor: ME }), refusal(EXIT.conflict));
 });
 
-test("共享租约属于别人 → 拒绝，即使本树 assignee 是我（D019 的边界用到三条命令上）", () => {
+test("共享租约属于别人 → 三条命令都拒绝（D019 的边界）", () => {
+  // 这条用例原先标题写「三条命令」，循环里却只有 done 与 close——
+  // reopen 因此带着缺陷溜过去了：它提前返回、跳过租约检查，却照样删租约。
+  // Codex 评审用真实双 worktree 复现了后果，并且是**读我的测试**发现标题
+  // 与内容对不上的。「看起来在测 X、实际只测了 Y」又一次。
+  const now = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+
+  for (const [name, prepare, run] of [
+    ["done", null,
+      (d: string, id: string) => runDone({ directory: d, id, actor: ME })],
+    ["close", null,
+      (d: string, id: string) => runClose({ directory: d, id, actor: ME, resolution: "wontfix" })],
+    // reopen 的起点必须是 closed，所以先关掉它
+    ["reopen", (d: string, id: string) => { runDone({ directory: d, id, actor: ME }); },
+      (d: string, id: string) => runReopen({ directory: d, id, actor: ME })],
+  ] as const) {
+    const d = repo();
+    const t = runAdd({ directory: d, title: "T", actor: ME });
+    runClaim({ directory: d, id: t.id, actor: ME });
+    prepare?.(d, t.id);
+    writeLease(discoverLedger(d), t.id, { actor: OTHER, claimed_at: now(), heartbeat_at: now() });
+
+    assert.throws(() => run(d, t.id), refusal(EXIT.conflict), `${name} 应当被共享租约挡住`);
+    assert.equal(readLease(discoverLedger(d), t.id)?.actor, OTHER, `${name} 不得删掉别人的活租约`);
+  }
+});
+
+test("--force 越不过状态门禁 —— 已关闭的任务不能再 done 一次", () => {
+  // spec §6.1：--force 覆盖的是对「是否就绪」的判断，不是状态机。
+  // 表格里没有 closed → closed 这一行。放行的话会写出第二条 done 日志，
+  // 随后还能被 close --force 改掉 resolution（Codex 评审实测复现）。
   const d = repo();
   const t = runAdd({ directory: d, title: "T", actor: ME });
-  runClaim({ directory: d, id: t.id, actor: ME });
-  const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  writeLease(discoverLedger(d), t.id, { actor: OTHER, claimed_at: now, heartbeat_at: now });
-  for (const run of [
-    () => runDone({ directory: d, id: t.id, actor: ME }),
-    () => runClose({ directory: d, id: t.id, actor: ME, resolution: "wontfix" }),
-  ]) {
-    assert.throws(run, refusal(EXIT.conflict));
-  }
+  runDone({ directory: d, id: t.id, actor: ME });
+  const before = read(d, t.id);
+
+  assert.throws(() => runDone({ directory: d, id: t.id, actor: ME, force: true, reason: "again" }),
+    refusal(EXIT.gate));
+  assert.throws(() => runClose({ directory: d, id: t.id, actor: ME, resolution: "wontfix",
+    force: true, reason: "rewrite" }), refusal(EXIT.gate));
+  assert.equal(read(d, t.id), before, "被拒绝的强制迁移同样什么都不改");
+  assert.equal(logsOf(d, t.id).filter((l) => l.ok && l.verb === "done").length, 1,
+    "只该有一条 done 日志");
+});
+
+test("--force 越不过状态门禁 —— 未关闭的任务不能 reopen", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME });
+  assert.throws(() => runReopen({ directory: d, id: t.id, actor: ME, force: true, reason: "x" }),
+    refusal(EXIT.gate));
+});
+
+test("close 不查验收标准 —— 取消一个半截的任务不必强制", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", acceptance: ["never finished"], actor: ME });
+  assert.doesNotThrow(() => runClose({ directory: d, id: t.id, actor: ME, resolution: "wontfix" }));
+  // 而且它不该被标成 unverified —— 那个标记是留给「跳过了验证的完成」的
+  assert.equal(runLs({ directory: d, closed: true }).tasks.find((x) => x.id === t.id)?.unverified,
+    false, "正常取消的任务不是未验证");
+});
+
+test("CRLF 正文不会让验收标准被当成空集", () => {
+  // §5.1 要求 LF，所以 CRLF 文件本就不合规；但**静默放行比报错危险得多**——
+  // 实测一份 CRLF 正文会让标题匹配失败、标准解析成空集，于是 done 悄悄越过
+  // 门禁而 doctor 还报一切正常（Codex 评审复现）。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", acceptance: ["not done yet"], actor: ME });
+  const p = taskPath(d, t.id);
+  const raw = readFileSync(p, "utf8");
+  const i = raw.indexOf("---", 3) + 4;
+  writeFileSync(p, raw.slice(0, i) + raw.slice(i).replace(/\n/g, "\r\n"));
+
+  assert.throws(() => runDone({ directory: d, id: t.id, actor: ME }), refusal(EXIT.gate),
+    "CRLF 正文不该让门禁失效");
 });
 
 test("多道门禁一起不过时全部报出，退出码取最严重", () => {

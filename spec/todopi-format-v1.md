@@ -248,11 +248,20 @@ A reclaim of a task whose lease has expired needs no extra ceremony; overriding 
 that is still live is what `--steal` is for. Either way the replacement of another
 actor's `assignee` is what `steal=true` records.
 
-Gates. A transition MUST be refused when: `verify` exits non-zero; the Acceptance
-Criteria are unsatisfied; some child is not `closed`; or the task's `assignee` is
-another actor. Any of these MAY be forced with `--force --reason <text>`, which MUST
-record `forced=true` and the reason in the Log. A refused transition changes nothing
-and MUST NOT append to the Log (§5.3.3).
+Gates. A transition MUST be refused when a gate **that applies to it** does not hold.
+Which gates apply to which transition is the table above, not this list: `verify` and
+the Acceptance Criteria gate `done` only; every child being `closed` gates both `done`
+and `close`; the task's `assignee` being another actor gates every write. `close` is
+how a task is abandoned rather than finished, so criteria left unticked are the normal
+case for it and MUST NOT refuse it.
+
+Any of these gates MAY be forced with `--force --reason <text>`, which MUST record
+`forced=true` and the reason in the Log. **A transition that has no row in the table
+above is not a gate and MUST NOT be forced**: `--force` overrides judgement about
+readiness, not the state machine. Closing an already-closed task, or reopening one that
+is not closed, is refused whatever flags are given.
+
+A refused transition changes nothing and MUST NOT append to the Log (§5.3.3).
 
 Writes that are not transitions — appending a note, toggling a criterion, editing a
 field — MUST also be refused when the task's `assignee` is another actor, so that two

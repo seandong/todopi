@@ -14,7 +14,11 @@ export type BodyLine = { index: number; text: string };
  * 标题精确匹配：spec §5.3 说四个 H2 标题是「exactly and case-sensitively」认的。
  */
 export function sectionLines(body: string, heading: string): BodyLine[] {
-  const lines = body.split("\n");
+  // 行尾的 \r 要去掉。spec §5.1 要求 LF，所以 CRLF 文件本就不合规；
+  // 但**静默放行比报错危险得多**——实测一份 CRLF 正文会让标题匹配失败、
+  // 验收标准被解析成空集，于是 `done` 悄悄越过门禁而 doctor 还报一切正常
+  // （Codex 评审复现）。这里按容错读取处理，写回时自然回到 LF。
+  const lines = body.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
   const start = lines.findIndex((l) => l === heading);
   if (start < 0) return [];
   const out: BodyLine[] = [];

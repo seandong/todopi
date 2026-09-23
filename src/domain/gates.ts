@@ -49,10 +49,17 @@ export function evaluateGates(input: GateInput): Refusal[] {
     if (status !== "closed") {
       return [{ gate: "state", code: 2, status, transition }];
     }
-    // 已关闭的任务没有持有者，也不必再问验收标准与子任务——
-    // spec §6.1 的 reopen 那一行只写了「移除 resolution 与 assignee」。
-    // §6.2 不变量 3 也允许 closed 保留 assignee（记录是谁关的），
-    // 拿它当归属冲突会让任何人都重开不了别人关过的任务。
+    // **已关闭文件里留着的 assignee 不算持有者**——§6.2 不变量 3 允许 closed
+    // 保留它（记录是谁关的），拿它当归属冲突会让任何人都重开不了别人关过的任务。
+    //
+    // **但共享租约要查。** 另一个 worktree 里可能已经有人重开并认领了它，
+    // 而本树的文件还是关闭态。不查的话，拿着旧视图的人 reopen 会退出 0
+    // 并删掉对方的活租约（Codex 评审用真实双 worktree 复现）。
+    // 这正是 D019 那条边界的第四个入口——我又一次只想到了「已关闭没有持有者」，
+    // 没想到租约是独立于任务文件的事实。
+    if (lease !== null && lease.actor !== actor) {
+      out.push({ gate: "ownership", code: 3, holder: lease.actor, heldSince: lease.heartbeat_at });
+    }
     return out;
   }
   if (status === "closed") {
@@ -64,8 +71,15 @@ export function evaluateGates(input: GateInput): Refusal[] {
   const holder = ownershipConflict(task, actor, lease);
   if (holder !== null) out.push(holder);
 
-  const missing = unchecked(parseAcceptance(task.body));
-  if (missing.length > 0) out.push({ gate: "acceptance", code: 2, unchecked: missing });
+  // **验收标准只挡 done。** spec §6.1 表格里 done 那一行写了「require Acceptance
+  // Criteria satisfied」，close 那一行没写——而 close 正是「不做了」的出口，
+  // 标准没勾完本来就是它的常态。拿它挡 close 的话，取消一个半截的任务只能靠
+  // --force，于是每一个被放弃的任务都背上 unverified 标记，那个标记本来是留给
+  // 「跳过了验证的完成」的（Codex 评审指出，§6.1 的 Gates 段落已一并澄清）。
+  if (transition === "done") {
+    const missing = unchecked(parseAcceptance(task.body));
+    if (missing.length > 0) out.push({ gate: "acceptance", code: 2, unchecked: missing });
+  }
 
   // 只看**直接**子任务：spec §6.1 写的是 require every child closed，
   // 孙子是子任务自己的门禁。

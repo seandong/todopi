@@ -23,6 +23,7 @@ git -C "$W" config user.name tester
 git -C "$W" config user.email t@e
 git -C "$W" commit -q --allow-empty -m init
 cli -C "$W" init >/dev/null 2>&1
+LEASES="$W/.git/todopi/leases"
 
 # 1. 未勾的验收标准 → 退出 2，报告带序号与原文
 A=$(cli -C "$W" --json add "has criteria" --ac "first thing" --ac "second thing" | jfield id)
@@ -166,5 +167,69 @@ grep -q 'ENG-1' "$W/.todopi/tasks/$K2.md" && ok "external 原样保留" || fail 
 grep -q '"#meta"' "$W/.todopi/tasks/$K2.md" && ok "怪键原样保留" || fail "怪键丢了"
 grep -q '^x-count: 5$' "$W/.todopi/tasks/$K2.md" && ok "数字仍是数字" || fail "数字被加了引号"
 cli -C "$W" doctor >/dev/null 2>&1 && ok "带扩展字段的任务关闭后通过 doctor" || fail "doctor 不过"
+
+
+# 16. close 不查验收标准 —— 取消一个半截的任务不必强制（spec §6.1 表格）
+L=$(cli -C "$W" --json add "abandon me" --ac "never finished" | jfield id)
+cli -C "$W" close "$L" --resolution wontfix >/dev/null 2>&1
+[ $? -eq 0 ] && ok "close 不被未勾的验收标准挡住" || fail "close 不该查验收标准"
+case "$(cli -C "$W" ls --closed 2>/dev/null | grep "$L")" in
+  *unverified*) fail "正常取消的任务不该被标成 unverified" ;;
+  *) ok "正常取消的任务不是未验证" ;;
+esac
+
+# 17. --force 越不过状态门禁（spec §6.1：它覆盖的是就绪判断，不是状态机）
+M=$(cli -C "$W" --json add "state gate" | jfield id)
+cli -C "$W" done "$M" >/dev/null 2>&1
+cli -C "$W" done "$M" --force --reason "again" >/dev/null 2>&1
+[ $? -eq 2 ] && ok "已关闭的任务 done --force 仍被拒（退出 2）" || fail "--force 越过了状态门禁"
+n=$(grep -c ' done ' "$W/.todopi/tasks/$M.md")
+[ "$n" -eq 1 ] && ok "只有一条 done 日志" || fail "写出了 $n 条 done 日志"
+cli -C "$W" close "$M" -r wontfix --force --reason "rewrite" >/dev/null 2>&1
+[ $? -eq 2 ] && ok "已关闭的任务 close --force 仍被拒" || fail "resolution 被改写了"
+grep -q '^resolution: "done"$' "$W/.todopi/tasks/$M.md" && ok "resolution 没被改写" || fail "resolution 变了"
+
+# 18. reopen 也查共享租约（D019 的边界，第四个入口）
+N=$(cli -C "$W" --json add "worktree reopen" | jfield id)
+cli -C "$W" done "$N" >/dev/null 2>&1
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+const now=new Date().toISOString().replace(/\.\d{3}Z$/,"Z");
+fs.writeFileSync(p, JSON.stringify({actor:"holder@host",claimed_at:now,heartbeat_at:now},null,2)+"\n");
+' "$LEASES/$N.json"
+cli -C "$W" reopen "$N" >/dev/null 2>&1
+[ $? -eq 3 ] && ok "共享租约属于别人时 reopen 被拒（退出 3）" || fail "reopen 跳过了共享租约检查"
+[ -f "$LEASES/$N.json" ] && ok "别人的活租约没被 reopen 删掉" || fail "reopen 删掉了别人的活租约"
+
+# 19. CRLF 正文不会让门禁静默失效
+O=$(cli -C "$W" --json add "crlf" --ac "not done yet" | jfield id)
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+const raw=fs.readFileSync(p,"utf8"); const i=raw.indexOf("---",3)+4;
+fs.writeFileSync(p, raw.slice(0,i) + raw.slice(i).replace(/\n/g,"\r\n"));
+' "$W/.todopi/tasks/$O.md"
+cli -C "$W" done "$O" >/dev/null 2>&1
+[ $? -eq 2 ] && ok "CRLF 正文下门禁照常生效" || fail "CRLF 正文让门禁静默失效了"
+
+# 20. **报告给出的每一条命令都真的能跑**（FR-D2a 的字面要求）
+#     判据是「不是用法错误」：退出 2 说明门禁还没修好，那是对的；
+#     退出 1 说明我们给了一条本身就写错的命令。
+Q=$(cli -C "$W" --json add "runnable parent" --ac "todo" | jfield id)
+cli -C "$W" --json add "runnable child" --parent "$Q" >/dev/null 2>&1
+bad=0
+cli -C "$W" --json done "$Q" 2>/dev/null | node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+  const r=JSON.parse(s);
+  if(!Array.isArray(r.actions)||r.actions.length===0) throw new Error("--json 没有 actions");
+  for(const a of r.actions) if(a.command && !a.command.includes("<")) console.log(a.command);
+});' > "$TMP/cmds" || fail "--json 的 actions 不合格"
+while read -r cmd; do
+  [ -z "$cmd" ] && continue
+  real=$(printf '%s' "$cmd" | sed "s|^todopi |node $ROOT/src/cli.ts -C $W |")
+  eval "$real" >/dev/null 2>&1
+  [ $? -eq 1 ] && { fail "报告给出的命令是用法错误：$cmd"; bad=1; }
+done < "$TMP/cmds"
+[ "$bad" -eq 0 ] && ok "报告给出的每条命令都能跑（没有用法错误）" || true
+grep -q 'todopi check ' "$TMP/cmds" && fail "建议了尚不存在的 todopi check" || ok "没有建议尚不存在的命令"
 
 [ "$FAILED" -eq 0 ] && { echo "f06-gates: pass"; exit 0; } || { echo "f06-gates: fail"; exit 1; }
