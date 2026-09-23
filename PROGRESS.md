@@ -5,21 +5,21 @@
 
 ## Current State
 
-- Last commit: `ea1d305` —— F05 四轮评审通过并已合回 main。
+- Last commit: `47c8876` —— F06 done / close / reopen 三层通过。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**20 条全部通过**，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **440 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **505 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
-  `f04-ls` 24 项 + `f05-claim` 47 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
+  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 45 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
   是单元测试抓不到的那类；Codex 第二轮评审另补了跨 worktree 锁测试
   （30 进程计数 30、无残留），确认 `leasePaths` 重构没有回归
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- VCR: `5/5` —— F01–F05 均 `passing`，evidence 由 harness 写入
+- VCR: `6/6` —— F01–F06 均 `passing`，evidence 由 harness 写入
 - 代码状态：**F01–F04 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
@@ -29,31 +29,27 @@
 
 ## In Progress
 
-无 feature 处于 `active`。**下一个是 F06**（WIP=1，开工前先 activate）。
+**F06 `done` / `close` / `reopen`** —— 三层通过、`passing`，在分支 `feat/f06-done` 上，
+尚未合回 `main`。**评审待发。**
 
-F01–F05 均 `passing` 且已合回 `main`，分支已删除。**整个仓库尚未推送到 remote。**
+本 feature 改过一次规格：spec §6.1 表格的 `close --as` 改成 `close --resolution`
+（短写 `-r`），PRD FR-D5 与命令参考同步。理由是实测出来的——全局 `--as` 是 actor
+（FR-C4），撞名时 commander 让全局优先，`todopi close tp-1 --as wontfix` 会把
+**actor 设成 `"wontfix"`** 而 resolution 为空，静默写坏。试过
+`enablePositionalOptions()` 保住原形，但它会让 `todopi ls --json` 报
+unknown option，而那是命令参考与协议文本给 agent 的写法。改的是 CLI 标志名不是
+格式语义，按 §9 不升 `version`。方案由产品负责人选定。
 
-F05 经 **Codex 四轮评审**才拿到 Go，阻塞项数 **6 → 2 → 1 → 0**，
-详细理由见 DECISIONS D018–D021。回头看，每一轮的阻塞项都能归到同一条线上：
+**三条迁移命令共用一份骨架**（`commands/transition.ts`）。这是对 F05 那个教训的
+直接应对：「共享租约也要查」那条边界在 F05 里被我按入口一个个加、漏了三次
+（D019）。同一个骨架意味着下次再立新边界时三条命令自动一起拿到——这次归属门禁
+同时看任务文件的 assignee 与共享租约，三条一并生效。
 
-1. **一条边界立起来之后，只用到了触发它的那个入口。** `claim` 修了 `release`
-   没修，前后三次。教训不是「下次记得」，而是：一条新边界立起来时要立刻问它
-   适用于哪几个入口。
-2. **一个判据只覆盖了一半。** 值查了键没查；字符形状查了 YAML 语义没查。
-3. **一条用例看起来在验证某件事，实际没有。** 串行的「并发」用例；只用自家
-   解析器的往返用例；屏障失效却报告通过。
-
-第 3 条最值得留下：**一条用例的价值全在「缺陷存在时它会不会红」，而这件事
-必须被证明，不能靠注释声称。** 本 feature 之后每条关键用例都跑了反向验证——
-把实现退回有缺陷的形状，确认它真的变红。
-
-另有一条被纠正的错误技术结论（D021）：我在 D020 里写「preload 包
-`fs.unlinkSync` 走不通」，漏了 `syncBuiltinESMExports()`。一条写进决策文档的
-错误技术结论，会让后来的人据此排除掉一整条可行的路。
+F01–F05 已合回 `main`。**整个仓库尚未推送到 remote。**
 
 自举触发条件（[状态迁移契约](docs/harness/state-migration.md)）：spec 定稿 ✅、
-doctor 能检出违规 ✅、五个命令 passing 进度 **3/5**（`init`、`add`、`claim`
-已完成，还差 `done`、`verify`）。
+doctor 能检出违规 ✅、五个命令 passing 进度 **4/5**（`init`、`add`、`claim`、
+`done` 已完成，**只差 `verify`**，那是 F07）。
 
 `feature_list.json` 于 2026-09-16 填入 21 条，拆分依据见 DECISIONS D011。
 
@@ -103,13 +99,19 @@ doctor 能检出违规 ✅、五个命令 passing 进度 **3/5**（`init`、`add
     其中两条是真正的数据正确性问题（改写既有任务破坏扩展字段、跨 worktree
     覆盖别人的活租约），一条是我写错的技术结论（D021 纠正）。
 20. ~~把 `feat/f05-claim` 合回 `main`~~ 已完成。若要上远端：`git push origin main`。
-21. **下一步：activate F06 并写实现计划。**
-    F06 的地基：写入走 `withLedgerLock` + `prepareUpdate`（构造校验与落盘分开，
-    这样「读 → 决策 → 构造并校验 → 写」的顺序是天然的）；身份用
-    `commands/actor.ts` 的 `currentActor`；门禁用 `domain/validate.ts` 的
-    `validateWrite`。**普通写入（note / check / edit）要刷心跳但不得隐式重新
-    认领，也不能只查本树 assignee**——共享租约归属要一起查，这是 F05 三轮
-    评审换来的边界。
+21. ~~activate F06、写计划并执行~~ 已完成，6 个 task 逐个 TDD 通过，三层全绿。
+    顺带改了一处规格（`close --as` → `close --resolution`，见上）。
+22. **下一步：请 Codex 评审 `feat/f06-done` 并合回 `main`**，然后 activate F07
+    （`verify` 的执行与超时终止整个进程组）。F07 完成后状态迁移的触发条件就齐了。
+    **下面这段是给 F06 评审看的**：
+    F06 的报告是 agent 唯一能看到的东西，值得重点审「它是不是真的不需要再跑
+    别的命令就能据以行动」。另外三条命令共用 `commands/transition.ts` 的骨架，
+    请确认那条共享租约边界三处都生效。
+
+    F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
+    FR-D2 要求超时**终止整个进程组**而不只是直接子进程——实测过运行时默认只向
+    直接子进程发 SIGTERM，孙进程全部存活，而 `verify` 的典型值（`pnpm test`、
+    `cargo test`）都会 fork worker。
     地基已在 F04 打好，**不要重写**：身份解析链在 `domain/actor.ts`（纯函数）
     + `commands/actor.ts`（取外部事实），租约目录与锁路径由 `format/lease.ts`
     的 `leasePaths` 一次派生，租约读取是 `readHeartbeats`。
