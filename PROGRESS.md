@@ -5,15 +5,15 @@
 
 ## Current State
 
-- Last commit: `47c8876` —— F06 done / close / reopen 三层通过。
+- Last commit: `08e8d84` —— F06 第一轮评审整改完成。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**20 条全部通过**，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **505 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **520 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
-  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 45 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
+  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 56 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
   是单元测试抓不到的那类；Codex 第二轮评审另补了跨 worktree 锁测试
   （30 进程计数 30、无残留），确认 `leasePaths` 重构没有回归
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
@@ -30,7 +30,17 @@
 ## In Progress
 
 **F06 `done` / `close` / `reopen`** —— 三层通过、`passing`，在分支 `feat/f06-done` 上，
-尚未合回 `main`。**评审待发。**
+尚未合回 `main`。**第二轮评审待发。**
+
+Codex 第一轮：**No-go，4 个阻塞项**，全部整改完毕（DECISIONS D022）。
+其中三个是同一种错误的不同形状——边界只用到我想到的入口（`reopen` 走了另一条
+分支，D019 那条边界第四次被漏）、权限只覆盖我理解的范围（`--force` 被当成万能
+钥匙，连状态机也越）、门禁只按笼统那段话而不是明确那张表（`close` 查了验收标准）。
+共同点是**按脑子里的模型做，没有逐条对回规格原文**。
+
+还有一条最该记的：**Codex 是读我的测试发现问题的**——我写了一条标题叫
+「D019 的边界用到三条命令上」的用例，循环里只有两条。「看起来在测 X、实际只测了
+Y」换了个形状又来一次。
 
 本 feature 改过一次规格：spec §6.1 表格的 `close --as` 改成 `close --resolution`
 （短写 `-r`），PRD FR-D5 与命令参考同步。理由是实测出来的——全局 `--as` 是 actor
