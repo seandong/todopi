@@ -401,12 +401,32 @@ cmd_test() {
   elif ! have node; then
     emit unit-test blocked "测试本该运行，但环境缺少 node（见 .tool-versions）"
   else
+    # **筛选参数先挡掉。** `--test-name-pattern` 能把 608 个用例全过滤干净，而
+    # 运行器照样报 skipped 0、退出 0——下面那个计数于是变成一句假话。评审实测
+    # 复现过。这里不悄悄清理环境（那等于替人改了他的命令），而是说出来并判 fail。
+    local _filter=""
+    case "${NODE_OPTIONS:-}" in
+      *--test-name-pattern*|*--test-skip-pattern*|*--test-only*) _filter="yes" ;;
+    esac
+    if [ -n "$_filter" ]; then
+      emit test-not-filtered fail "NODE_OPTIONS 里有测试筛选参数（${NODE_OPTIONS}）：这一趟不是全量，任何「通过」都不能据此得出"
+    else
+      emit test-not-filtered pass "没有测试筛选参数，这一趟是全量"
+    fi
+
     # 输出仍然直接流出来，同时留一份给下面数 skipped。
-    local _tlog; _tlog="$(mktemp)"
-    if node --test 2>&1 | tee "$_tlog"; then
+    #
+    # **退出码取 PIPESTATUS[0]，不是管道的。** 管道的退出码是最后一个命令
+    # （`tee`）的，它几乎总是 0——评审用 `exit 42 | tee /dev/null` 复现了：
+    # 测试全红也会被记成 pass。加 tee 是为了数 skipped，差点把整层的判据换掉。
+    local _tlog _rc
+    _tlog="$(mktemp)"
+    node --test 2>&1 | tee "$_tlog"
+    _rc="${PIPESTATUS[0]}"
+    if [ "$_rc" -eq 0 ]; then
       emit unit-test pass "node --test 通过"
     else
-      emit unit-test fail "node --test 失败，输出见上"
+      emit unit-test fail "node --test 失败（退出码 ${_rc}），输出见上"
     fi
 
     # **被跳过的测试，问运行器，不问源码。**
@@ -418,6 +438,9 @@ cmd_test() {
     #
     # node:test 自己报的 skipped 数是权威的：一条被停掉的测试必然进这个计数，
     # 无论它写成什么样；而运行时的条件跳过（环境不具备）在正常机器上根本不触发。
+    #
+    # **但它只在这一趟是全量时才说明问题**——被筛掉的用例不算 skipped，只是没被
+    # 注册。所以上面那道 test-not-filtered 是它的前提，不是可有可无的附加。
     #
     # 状态用 blocked 而不是 fail：不是有东西坏了，是有东西**没跑**——这台机器上
     # 少了一道把关，不能当成通过。
