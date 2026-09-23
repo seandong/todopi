@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `c673fa8` —— F07 第五轮评审的两条阻塞项已修。
+- Last commit: `ed52289` —— F07 第六轮评审的两条阻塞项已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -30,12 +30,18 @@
 ## In Progress
 
 **F07 `verify`** —— 三层通过、`passing`，在分支 `feat/f07-verify` 上，
-尚未合回 `main`。**第四轮 Go；第五轮（只审 guard 改动）No-go，两条阻塞项已修，待第六轮。**
+尚未合回 `main`。**第四轮 Go；第五、六轮（只审 guard 改动）各 No-go，阻塞项均已修，待第七轮。**
 
-第五轮值得记：`.skip` 的无参检测我用 grep 写了三版，每版都被找出绕法。三版都在
-**用字符形状近似一个需要真解析的判断**——和 F04 的 `plainKey` 同一个跟头。改成问
-权威：`node --test` 自己报的 `# skipped N`。`make test` 因此多一维
-`no-skipped-tests`。
+这两轮全在同一件小事上——「怎么判断一条测试被停掉了」——而它一路把我往深处带：
+
+1. 用 grep 猜字符形状，**三版三种绕法**。和 F04 的 `plainKey` 同一个跟头。
+2. 改成问权威（`node --test` 自己报的 `# skipped N`），**但问错了问题**：
+   `--test-name-pattern` 能把 608 个用例全筛掉，skipped 仍是 0。
+3. 加 `tee` 留输出时，`if` 判到了管道最后一个命令的退出码——**测试全红会记成
+   pass**，这是我自己引入的真回归。
+
+现在：`test-not-filtered`（挡筛选参数）+ `PIPESTATUS[0]`（取真退出码）+
+`no-skipped-tests`（问运行器）。三者是一组，前者是后者的前提。
 
 1. **日志不是完整输出，而那个「上限」也没有限制内存。** runner 把每个 chunk 攒进
    数组、退出时才 concat 再截尾——截尾只让返回值变小，concat 之前那份内存一直在
