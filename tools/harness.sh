@@ -293,8 +293,19 @@ cmd_status() {
     printf '  %s账本            .todopi/ 不存在。先跑 todopi init%s\n' "$C_YEL" "$C_RST"
   else
     printf '  账本            %s\n' "$(ls .todopi/tasks/*.md 2>/dev/null | wc -l | tr -d ' ') 个任务"
+    # **先取退出码，再管道。** `cmd | sed || fallback` 里的 `||` 判的是 sed 的退出
+    # 码，它几乎总是 0——CLI 崩了会显示成一个空的就绪队列，而 status 退出 0
+    # （评审用 NODE_OPTIONS=--definitely-invalid 实测）。这和 make test 里那个被
+    # tee 吞掉退出码的 bug 是同一个形状，同一个 session 里第二次。
+    local ready rc
+    ready="$(node src/cli.ts ls --ready 2>&1)"; rc=$?
     printf '\n  就绪队列（todopi ls --ready）：\n'
-    node src/cli.ts ls --ready 2>/dev/null | sed 's/^/    /' || printf '    （跑不动，先 make setup）\n'
+    if [ "$rc" -ne 0 ]; then
+      printf '    %s跑不动（退出码 %s）：%s%s\n' "$C_YEL" "$rc" "$(printf '%s' "$ready" | head -1)" "$C_RST"
+    else
+      printf '%s\n' "$ready" | sed 's/^/    /'
+    fi
+
     local mine
     mine="$(node src/cli.ts ls --mine 2>/dev/null | grep -v '^No tasks match')"
     if [ -n "$mine" ]; then

@@ -38,9 +38,10 @@
 2. 读当前状态（`PROGRESS.md` + `make status`）并确认基线为绿；
 3. 认领**恰好一个**任务（`todopi ls --ready` → `todopi claim <id>`）；
 4. 实现，逐层验证，不跳层；人核对任务正文的验收判据（散文，机器不查）；
-5. 先 `git commit` 代码，再 `todopi done <id>`——它跑任务的 `verify` 并把
-   `commit=<HEAD7> dirty=<bool>` 记进 Log；放在提交之后那条证据才指得实；
-6. `make clean-check`，更新 `PROGRESS.md`，提交账本改动。
+5. `git commit` 代码**加上 `claim` 留下的账本改动**，再 `todopi done <id>`——
+   它跑任务的 `verify` 并把 `commit=<HEAD7> dirty=<bool>` 记进 Log；放在提交之后
+   那条证据才指得实，而漏掉 `claim` 的改动会让它 `dirty=true`；
+6. 更新 `PROGRESS.md`，提交 `done` 的账本改动，**最后**跑 `make clean-check`。
 
 ## 状态层与自举计划
 

@@ -96,18 +96,22 @@ Layer 3 在改动 cross-component 或跨领域边界时是 required，不是可�
 工作的同一个 commit」。**`done` 是这句话的例外**，而且必须是：
 
 ```
-todopi claim <id>
+todopi claim <id>                    ← 它会改任务文件，那处改动跟着工作走
 干活
 人核对 Acceptance Criteria           ← 散文判据，机器不查
-git commit                           ← 只提交代码
+git commit                           ← 代码 **加上** claim 留下的账本改动
 todopi done <id>                     ← verify 跑在刚提交的那棵树上，dirty=false
-git commit                           ← .todopi/ 的改动 + PROGRESS
-make clean-check
+git commit                           ← done 的账本改动 + PROGRESS
+make clean-check                     ← 必须在两次提交都完成之后
 ```
 
 `done` 的 Log 记 `commit=<HEAD7> dirty=<bool>`。把它放在提交之前，验证跑的是未提交
 的树、`dirty=true`，那条证据就指不实任何东西。所以 `done` 只能在后，它的账本改动也
 就只能落进第二次提交。
+
+**第一次提交必须带上 `claim` 的账本改动**，否则工作区在 `done` 时仍是脏的，
+`dirty=true`——评审实测过这条。这恰好就是协议段那句话的正常形态：`claim` 跟着工作
+走同一个 commit。
 
 `add` / `note` / `claim` 不受这个例外影响——它们跟着工作走同一个 commit。
 
@@ -116,15 +120,17 @@ make clean-check
 1. **人对着任务正文的「Acceptance Criteria」段逐条核对。** 那一段是散文不是勾选项
    （勾选要 `check`，F09 尚未实现），所以 `todopi done` 通过**不等于**这些判据已被
    机器核对过。
-2. `git commit` —— **只提交代码**。
+2. `git commit` —— 代码**加上** `claim` 留下的账本改动。漏掉后者，下一步就会
+   `dirty=true`。**一个 commit 一个完整逻辑改动**（atomic）；每次 commit 后仓库都
+   MUST 处于一致状态，不提交半成品。commit message 解释 **why**, not just what。
+   文档与代码在 same commit 内一起更新。
 3. `todopi done <id>` —— 它跑任务的 `verify`，并把 `commit=<HEAD7> dirty=<bool>`
    记进 Log。放在提交之后，那条证据才指得实。
-4. `make clean-check` —— 五维清洁态：基线绿、无 debug artifact、状态文件已更新、
-   startup 路径可用、diff 聚焦。
-5. 更新 `PROGRESS.md`：Current State（commit + check 结果）、Next Steps、Blockers。
-4. 提交。**一个 commit 一个完整逻辑改动**（atomic）；每次 commit 后仓库都 MUST
-   处于一致状态，不提交半成品。commit message 解释 **why**, not just what。
-   文档与代码在 same commit 内一起更新。
+4. 更新 `PROGRESS.md`：Current State（commit + check 结果）、Next Steps、Blockers。
+5. `git commit` —— `done` 的账本改动 + PROGRESS。
+6. `make clean-check` —— 五维清洁态：基线绿、无 debug artifact、状态文件已更新、
+   startup 路径可用、diff 聚焦。**必须在两次提交都完成之后**：它的
+   state-updated 一维要求工作区有改动时 PROGRESS 已同步，工作区还脏就会红。
 
 **context 快用完时，do not rush to finish。** 停下来、更新 PROGRESS.md、提交一个
 干净的 checkpoint，把没做完的部分如实写进 Next Steps。赶在 context 耗尽前宣布完成，
@@ -148,6 +154,14 @@ after a compaction, on another machine, or under a different agent.
 **Granularity.** One todopi task is roughly one change worth a commit, with an outcome
 somebody could check. Editing a file or running a test is a step, not a task. Keep using
 your own todo list for the steps inside this turn, and never copy todopi tasks into it.
+
+> **本仓库的现状（2026-09-23 自举）**：下面这张表里，`prime`、`note`、`handoff`
+> 分别属于 F11、F09、F12，**都还没实现**；`add --from` 的 `--from` 也要等 F10。
+> 现在真能跑的只有 `ls` / `claim` / `release` / `done` / `close` / `reopen` /
+> `doctor` / `init` / `add`。照表里敲那几条会得到「命令不存在」。
+>
+> 当前可执行的路径在本文件上方的 clock-in / clock-out 两节，以及
+> 「提交的顺序」那一节。表格随各自的 feature 落地逐条变真。
 
 **Do these without deliberating:**
 

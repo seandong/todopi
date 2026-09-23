@@ -225,11 +225,11 @@
     {
       "id": "ARCH-023",
       "description": "账本策略：WIP=1、开工的前置必须 done、每个任务都有 verify",
-      "applies_when": "test -d .todopi/tasks",
+      "applies_when": "true",
       "check": "node tools/check-ledger-policy.mjs",
       "expect": "empty",
       "what": "本仓库自己的账本违反了三条策略之一。",
-      "why": "这三条原本由 make activate / make verify-feature 在**动作发生时**拒绝：WIP=1（一次只做一个 feature）、依赖必须 state: passing 才能开工、空 layers[] 不许完成。2026-09-23 自举之后那两个子命令没有了——契约要求工作流直接改成 todopi claim / done，而一个没人调用的薄包装保不住任何东西。改成持续检查：不论谁、用什么方式让账本进入违规状态都会红，比只在动作时查一次更强；代价是从「当场拒绝」降为「事后发现」，这是一次明确的约束降级，写在 docs/plans/2026-09-23-bootstrap.md 的损失表里。\n\n三条都是本项目的策略，不是 todopi 的功能：todopi 没有 WIP 概念，spec §6.1 的迁移表里 claim 也不拦被阻塞的任务，而 add 的 --verify 可以省略。\n\n检查器用仓库自己的解析器而不是 grep——规格允许手写无引号的 status: in_progress，按字符形状去数漏得掉（评审实测）。六个反例都验证过会红，含无引号形式、closed/wontfix 的前置、读不动的文件、缺 verify。",
+      "why": "这三条原本由 make activate / make verify-feature 在**动作发生时**拒绝：WIP=1（一次只做一个 feature）、依赖必须 state: passing 才能开工、空 layers[] 不许完成。2026-09-23 自举之后那两个子命令没有了——契约要求工作流直接改成 todopi claim / done，而一个没人调用的薄包装保不住任何东西。改成持续检查：不论谁、用什么方式让账本进入违规状态都会红，比只在动作时查一次更强；代价是从「当场拒绝」降为「事后发现」，这是一次明确的约束降级，写在 docs/plans/2026-09-23-bootstrap.md 的损失表里。\n\n三条都是本项目的策略，不是 todopi 的功能：todopi 没有 WIP 概念，spec §6.1 的迁移表里 claim 也不拦被阻塞的任务，而 add 的 --verify 可以省略。\n\n检查器用仓库自己的解析器而不是 grep——规格允许手写无引号的 status: in_progress，按字符形状去数漏得掉（评审实测）。六个反例都验证过会红，含无引号形式、closed/wontfix 的前置、读不动的文件、缺 verify。\n\n2026-09-23 评审：applies_when 原为 test -d .todopi/tasks——目录没了就记 not_applicable，而 readTasks 对读不到的目录返回空列表，三条策略随即全部「通过」。本仓库已自举，账本消失或读不动永远是故障，不是「不适用」。改成恒真，缺失与空列表由检查器自己报。",
       "fix": "WIP 超了：先 todopi done 或 todopi release 手上那个。前置没 done：先把它做完——若它被 wontfix 关掉，说明这条依赖本身该重新考虑。缺 verify：补上；确实无可验证时显式写 verify: \"true\"。"
     }
   ]

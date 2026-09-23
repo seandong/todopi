@@ -28,7 +28,8 @@ ARCH-006 已经把这条钉成机器规则（`applies_when: test -f feature_list
 
 ## 损失 / 替代物
 
-契约只预告了一条损失。计划三稿，损失表 **三条 → 五条 → 八条 → 十条**，每一轮评审
+契约只预告了一条损失。损失表 **三条 → 五条 → 八条 → 十条 → 十一条**（最后一条是
+执行**之后**的评审才找出来的），每一轮评审
 都实测出新的。第三轮我问它「还有没有第九条」，它的回答是**「至少还有，但我无法证明
 已经穷尽」**——那比一句「没了」有用得多，也是这份清单该有的态度。彩排（Task 5）
 存在的意义就是接住这份清单没接住的。
@@ -45,6 +46,7 @@ ARCH-006 已经把这条钉成机器规则（`applies_when: test -f feature_list
 | `schema`（字段清单与「state/evidence 不得手工编辑」的注记） | **无** | 它描述的是 `feature_list.json` 自己的结构，随文件一起消失。那条注记的精神移到上面一行 |
 | **完成不再要求存在验证命令** | **ARCH-023 第三条** | 旧 `verify-feature` 对空 `layers[]` 明确拒绝；而 `todopi add` 的 `--verify` 可以省略，无 `verify` 的任务能被 `done`，Log 记 `verify=none`（评审实测）。迁移的 21 条都有命令，**日后新建的开发任务没有这道保障**。加进检查器：本仓库的每个任务都必须有 `verify`；确实无可验证时显式写 `verify: "true"`——那是一次看得见的决定 |
 | 失败时**立即打印对应层的 `repair`** | **无** | 旧 harness 在失败层当场打印 `layers[].repair`；现在它只存在任务正文里，`done` 的拒绝报告不会自动带出来。失败后自己去读：`cat .todopi/tasks/<id>.md` 的 Repair 段（`todopi show` 要等 F08）。记进 PRD §15：拒绝报告该不该带上任务正文里的 Repair |
+| **VCR 与「session 末未完成」提醒** | **无** | 评审在执行后才指出——前十条没有它。`make vcr` 的计数源是 `feature_list.json` 的 `state`，随文件一起消失。对应信号现在分散在 `make status`（就绪队列 + 在做）与 ARCH-023（第二个 in_progress 报警），但「这个 session 认领的活干完了没有」这个提醒没有了 |
 
 ### ARCH-023 是**降级**，说清楚
 
@@ -222,13 +224,13 @@ Makefile 的 activate / verify-feature / reverify / release / vcr 目标与 .PHO
 **定下来的顺序：**
 
 ```
-todopi claim <id>
+todopi claim <id>                    ← 它会改任务文件，那处改动跟着工作走
 干活
-人对着 body 的验收判据段逐条核对          ← 散文判据，机器不查（见 Task 1）
-git commit                                ← 只提交代码
-todopi done <id>                          ← verify 跑在刚提交的那棵树上，dirty=false
-git commit（.todopi/ 的改动 + PROGRESS）   ← 第二次提交
-make clean-check
+人核对 Acceptance Criteria           ← 散文判据，机器不查
+git commit                           ← 代码 **加上** claim 留下的账本改动
+todopi done <id>                     ← verify 跑在刚提交的那棵树上，dirty=false
+git commit                           ← done 的账本改动 + PROGRESS
+make clean-check                     ← 必须在两次提交都完成之后
 ```
 
 **为什么 `done` 只能在代码提交之后**：它的 Log 记 `commit=<HEAD7> dirty=<bool>`。
@@ -237,8 +239,9 @@ make clean-check
 它的账本改动也就只能落进第二次提交。
 
 **协议段的那句话因此有一个例外，要写进 AGENTS.md 而不是藏着**：`add` / `note` /
-`claim` 的账本改动跟着工作走同一个 commit；**`done` 是例外，因为它验证的正是那个
-commit，只能在其后落地**。两种说法同时出现在 AGENTS.md 里却不说破，就是这个
+`claim` 的账本改动跟着工作走同一个 commit——**第一次提交必须带上它们**，否则 `done`
+看到的工作区还是脏的（评审在执行后实测出这一点，计划前几版写的「只提交代码」是错
+的）；**`done` 是例外，因为它验证的正是那个 commit，只能在其后落地**。两种说法同时出现在 AGENTS.md 里却不说破，就是这个
 session 反复栽的那个形状。
 
 协议文本本身要不要带上这个例外，是**产品决定**（它是用户可见的英文文案），

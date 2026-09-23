@@ -34,6 +34,22 @@ function originalJson() {
 const problems = [];
 const bad = (m) => problems.push(m);
 
+/**
+ * 取正文里某个二级标题下的内容。
+ *
+ * 第一版用的是 `body.includes(原文)`——那只证明「这段字还在文件里」，证明不了它
+ * **落在指定的那一节**（评审指出，成立）。验收判据跑进 Description 段、Repair
+ * 跑进 Log 段，`includes` 都看不出来，而那正是迁移最容易出的错。
+ */
+function section(body, heading) {
+  const lines = body.split("\n");
+  const start = lines.findIndex((l) => l.trim() === heading);
+  if (start < 0) return null;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => /^## /.test(l));
+  return (end < 0 ? rest : rest.slice(0, end)).join("\n");
+}
+
 const src = originalJson();
 // 用仓库自己的读取器。解析失败要吵——不能让坏文件被读成空字段后从计数里消失。
 const tasks = [];
@@ -74,6 +90,12 @@ for (const [name, m] of Object.entries(src.milestones ?? {})) {
   for (const fid of m.features) msOf.set(fid, name.toLowerCase());
 }
 
+// 迁移时刻：全部任务应当共用同一个。取出现最多的那个当基准，任何偏离都会被上面
+// 那条断言逐条报出来。
+const stampCount = new Map();
+for (const t of tasks) stampCount.set(t.fm.created, (stampCount.get(t.fm.created) ?? 0) + 1);
+const MIGRATED_AT = [...stampCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+
 const newIdOf = new Map([...byLegacy].map(([legacy, t]) => [legacy, t.fm.id]));
 
 for (const f of src.features) {
@@ -93,7 +115,9 @@ for (const f of src.features) {
   // behavior → title + 正文原文
   if (!f.behavior.startsWith(t.fm.title.replace(/\.\.\.$/, ""))) w("title 不是 behavior 的前缀");
   if (t.fm.title.length > 200) w(`title ${t.fm.title.length} 字符，超过 200`);
-  if (!t.body.includes(f.behavior)) w("behavior 原文没有出现在正文里");
+  const desc = section(t.body, "## Description");
+  if (desc === null) w("正文没有 ## Description 段");
+  else if (!desc.includes(f.behavior)) w("behavior 原文不在 Description 段里");
 
   // depends_on → blocked_by
   const expDeps = (f.depends_on ?? []).map((d) => newIdOf.get(d)).sort();
@@ -107,11 +131,25 @@ for (const f of src.features) {
   if (t.fm.verify !== expV) w(`verify 不符：\n    期望 ${expV}\n    实际 ${t.fm.verify}`);
 
   // verification / repair / evidence 原文
-  if (!t.body.includes(f.verification)) w("verification 原文没有出现在正文里");
-  for (const l of f.layers ?? []) {
-    if (l.repair && !t.body.includes(l.repair)) w(`${l.label} 层的 repair 原文没有出现在正文里`);
+  const acc = section(t.body, "## Acceptance Criteria");
+  if (acc === null) w("正文没有 ## Acceptance Criteria 段");
+  else if (!acc.includes(f.verification)) w("verification 原文不在 Acceptance Criteria 段里");
+  else if (/^- \[[ x]\]/m.test(acc)) w("Acceptance Criteria 里出现了勾选项——这批任务约定是散文");
+
+  const repairs = (f.layers ?? []).filter((l) => l.repair);
+  if (repairs.length > 0) {
+    const rep = section(t.body, "## Repair");
+    if (rep === null) w("有 repair 文本，但正文没有 ## Repair 段");
+    else for (const l of repairs) {
+      if (!rep.includes(l.repair)) w(`${l.label} 层的 repair 原文不在 Repair 段里`);
+    }
   }
-  if (f.state === "passing" && !t.body.includes(f.evidence)) w("evidence 原文没有出现在 Log 里");
+
+  if (f.state === "passing") {
+    const log = section(t.body, "## Log");
+    if (log === null) w("正文没有 ## Log 段");
+    else if (!log.includes(f.evidence)) w("evidence 原文不在 Log 段里");
+  }
 
   // labels
   const labels = t.fm.labels ?? [];
@@ -119,8 +157,16 @@ for (const f of src.features) {
   const ms = msOf.get(f.id);
   if (ms && !labels.includes(ms)) w(`缺 milestone 标签 ${ms}`);
 
-  // 时间戳
+  // 时间戳：两件事分开验。相等只说明它们一致，不说明它们是迁移时刻——
+  // 而「迁移时刻」的判据是它晚于原始 evidence 里那个验证时间（评审指出）。
   if (t.fm.created !== t.fm.updated) w("created 与 updated 应同为迁移时刻");
+  if (t.fm.created !== MIGRATED_AT) {
+    w(`created=${t.fm.created}，与其余任务的迁移时刻 ${MIGRATED_AT} 不一致`);
+  }
+  const evTs = /verified (\S+Z)/.exec(f.evidence ?? "")?.[1];
+  if (evTs && !(evTs < t.fm.created)) {
+    w(`created=${t.fm.created} 不晚于原始验证时间 ${evTs}——它不像迁移时刻`);
+  }
 
   // Log 语法（§5.3.3）
   for (const line of logLines(t.body)) {

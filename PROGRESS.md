@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `ede9f62` —— 自举完成，todopi 开始管自己。
+- Last commit: `3e204ad` —— 自举评审第一轮的两条阻塞项已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,9 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- VCR: `7/7` —— F01–F07 均 `passing`，evidence 由 harness 写入
+- 账本: `.todopi/` 21 个任务，7 个 `closed/done`（F01–F07）、14 个 `open`。
+  **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
+  这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F04 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
@@ -46,8 +48,8 @@
 
 ```
 todopi ls --ready → todopi claim <id> → 干活 → 人核对验收判据
-→ git commit（只提交代码）→ todopi done <id> → git commit（账本 + PROGRESS）
-→ make clean-check
+→ git commit（代码 + claim 留下的账本改动）→ todopi done <id>
+→ git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
 
 **整个仓库尚未推送到 remote。**

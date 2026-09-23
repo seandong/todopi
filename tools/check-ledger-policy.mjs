@@ -11,10 +11,29 @@
 import { discoverLedger } from "../src/format/discover.ts";
 import { readTasks } from "../src/format/read.ts";
 
+const ROOT = process.argv[2] ?? process.cwd();
 const problems = [];
 const tasks = [];
 
-for (const t of readTasks(discoverLedger(process.argv[2] ?? process.cwd()))) {
+// **账本不在，本身就是违规。**
+//
+// 这条规则原先挂在 `applies_when: test -d .todopi/tasks` 上——目录没了就记
+// not_applicable，而 `readTasks` 对读不到的目录返回空列表，于是三条策略全部
+// 「通过」（评审实测）。本仓库已经自举，账本消失或读不动**永远**是故障，
+// 不是「这条规则不适用」。
+let entries;
+try {
+  entries = readTasks(discoverLedger(ROOT));
+} catch (err) {
+  console.log(`账本读不到：${err instanceof Error ? err.message : String(err)}`);
+  process.exit(0);
+}
+if (entries.length === 0) {
+  console.log(".todopi/tasks/ 里一个任务都没有。本仓库已自举，这不该发生");
+  process.exit(0);
+}
+
+for (const t of entries) {
   // 解析失败要吵。读不动的文件会被读成空字段，然后从下面每一条计数里消失——
   // 那是最坏的一种假绿：检查「通过」了，而它根本没看见那个文件。
   if (t.parseError !== undefined) { problems.push(`${t.path}: 解析失败 —— ${t.parseError}`); continue; }

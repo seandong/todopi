@@ -54,12 +54,22 @@ Scope 子系统防止两件事：一次做太多，和「做完了」的含糊�
 要换任务，先 `todopi done` 跑完当前这个，或 `todopi release` 退回并在 PROGRESS.md
 的 Blockers 里说明原因。
 
-### one session per feature
+### one session per task
 
-每个 feature 必须能在一个 session 内完成。如果预计跨 session，就在 activate 之前
-拆成多个 feature。跨 session 的 active feature 是 context 丢失的主要来源。
+每个任务必须能在一个 session 内完成。如果预计跨 session，就在 claim 之前拆开。
+跨 session 的 `in_progress` 任务是 context 丢失的主要来源。
 
 ### 状态机
+
+自 2026-09-23 自举起，状态机是 todopi 的，见格式规格 §6.1：
+
+```
+open ──claim──> in_progress ──done(verify 通过)──> closed/done
+  ^                  │
+  └────release───────┘        closed ──reopen──> open
+```
+
+**旧状态机（历史记录）**：
 
 ```
 not_started ──activate──> active ──verify-feature(全层 pass)──> passing
@@ -67,21 +77,28 @@ not_started ──activate──> active ──verify-feature(全层 pass)──
      └───────release─────────┘
 ```
 
-- 不允许跳级：`not_started` 不能直接变 `passing`。
-- `passing` 是终态。行为需要修改时新开一个 feature，不把 `passing` 改回去——
-  历史证据的价值在于它不被改写。
-- **MUST NOT 手工编辑 `state` 或 `evidence`。** 它们由 `tools/harness.sh` 写入。
-  手工改 `passing` 会让 evidence 与实际状态脱节，而 evidence 是这个 harness
-  唯一的可信输出。
+它有三条约束是新状态机没有的，**迁移时全部降级**，逐条记在
+[迁移计划](../plans/2026-09-23-bootstrap.md)的损失表里：
 
-### VCR（Verified Completion Ratio）
+- 不允许跳级（`not_started` 不能直接变 `passing`）。todopi 允许 `open → done`，
+  不必先 claim——现在靠 AGENTS.md 的工作流约定「先 claim 再干活」。
+- `passing` 是终态。todopi 有 `reopen`，那是格式规格的一部分，不该为本项目的
+  偏好去改产品。「历史证据不被改写」因此从机器约束降为约定。
+- **MUST NOT 手工编辑 `state` 或 `evidence`。** 对应的现在是：MUST NOT 手工把任务
+  改成 `closed`——完成判据由 `todopi done` 跑 `verify` 得出。
 
-`make vcr` 输出 `passing / (active + passing)`。
+### VCR（Verified Completion Ratio）—— 已随 `make vcr` 一起删除
 
-- 没有任何 activated feature 时，VCR 无定义，输出 `n/a`。
-- VCR < 1.0 表示有 feature 被 activate 但没验证通过。这是正常的工作中状态，
-  但一个 session 结束时 VCR 仍 < 1.0，说明工作跨 session 了——
-  在 PROGRESS.md 里如实记录，不要靠记忆。
+**这是迁移损失表的第十一条**（评审在执行后指出，前十条没有它）。
+
+`make vcr` 曾输出 `passing / (active + passing)`，并在 session 末尾提醒「有 feature
+被 activate 但没验证通过」。它的计数源是 `feature_list.json` 的 `state` 字段，
+随文件一起消失了。
+
+**没有替代物。** 对应的信号现在分散在两处：`make status` 显示就绪队列与在做的任务，
+ARCH-023 在第二个任务变成 `in_progress` 时报警。但「这个 session 有没有把认领的活
+干完」这个提醒没有了——换成 `make clean-check` 的 state-updated 一维间接兜着：
+工作区有改动而 PROGRESS 没更新就会红。
 
 ## 当前状态：21 条，三个里程碑
 
