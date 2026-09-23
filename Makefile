@@ -39,7 +39,7 @@ check-arch:
 ci:
 	@$(H) ci
 
-## Scope（WIP=1，状态机 not_started -> active -> passing）
+## Scope（WIP=1，状态机 open -> in_progress -> closed/done；见 .todopi/）
 ## 清洁态
 clean-check:
 	@$(H) clean-check

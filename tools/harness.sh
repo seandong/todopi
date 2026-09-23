@@ -285,6 +285,9 @@ cmd_doctor() {
 
 cmd_status() {
   header "status —— 当前前向状态"
+  # **查询失败要让 status 非零退出。** 只把错误打印出来不够：自动调用者看的是退出
+  # 码，而不是屏幕（评审实测——上一版打印了「跑不动」却仍然退出 0）。
+  local status_rc=0
   printf '  HEAD            %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   printf '  分支            %s\n' "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
   printf '  工作区          %s\n' "$([ -n "$(git status --porcelain 2>/dev/null)" ] && echo '有未提交改动' || echo '干净')"
@@ -297,25 +300,52 @@ cmd_status() {
     # 码，它几乎总是 0——CLI 崩了会显示成一个空的就绪队列，而 status 退出 0
     # （评审用 NODE_OPTIONS=--definitely-invalid 实测）。这和 make test 里那个被
     # tee 吞掉退出码的 bug 是同一个形状，同一个 session 里第二次。
-    local ready rc
+    local ready rc mine mrc
     ready="$(node src/cli.ts ls --ready 2>&1)"; rc=$?
     printf '\n  就绪队列（todopi ls --ready）：\n'
     if [ "$rc" -ne 0 ]; then
       printf '    %s跑不动（退出码 %s）：%s%s\n' "$C_YEL" "$rc" "$(printf '%s' "$ready" | head -1)" "$C_RST"
+      status_rc=1
     else
       printf '%s\n' "$ready" | sed 's/^/    /'
+      closed="$(grep -c '^status: "closed"$' .todopi/tasks/*.md 2>/dev/null | awk -F: '{n+=$2} END {print n+0}')"
+      open_n="$(grep -c '^status: "open"$' .todopi/tasks/*.md 2>/dev/null | awk -F: '{n+=$2} END {print n+0}')"
+      printf '\n  计数            %s closed / %s open\n' "$closed" "$open_n"
     fi
 
-    local mine
-    mine="$(node src/cli.ts ls --mine 2>/dev/null | grep -v '^No tasks match')"
-    if [ -n "$mine" ]; then
-      printf '\n  在做（todopi ls --mine）：\n'
-      printf '%s\n' "$mine" | sed 's/^/    /'
+    mine="$(node src/cli.ts ls --mine 2>&1)"; mrc=$?
+    if [ "$mrc" -ne 0 ]; then
+      printf '\n  %s在做：跑不动（退出码 %s）：%s%s\n' "$C_YEL" "$mrc" "$(printf '%s' "$mine" | head -1)" "$C_RST"
+      status_rc=1
+    else
+      mine="$(printf '%s\n' "$mine" | grep -v '^No tasks match')"
+      if [ -n "$mine" ]; then
+        printf '\n  在做（todopi ls --mine）：\n'
+        printf '%s\n' "$mine" | sed 's/^/    /'
+      fi
     fi
   fi
 
-  printf '\n  PROGRESS.md     %s\n' "$(grep -m1 '^- Last commit:' PROGRESS.md 2>/dev/null | sed 's/^- //' || echo '读不到')"
-  printf '  最近 check      %s\n' "$(ls -t .harness-results/check-*.json 2>/dev/null | head -1 | xargs -I{} basename {} 2>/dev/null || echo '无')"
+  header "PROGRESS.md — Current State"
+  if [ -f "$PROGRESS" ]; then
+    awk '/^## Current State/{p=1;next} /^## /{p=0} p' "$PROGRESS" | sed '/^[[:space:]]*$/d' | sed 's/^/  /'
+  else
+    printf '  %s%s 不存在%s\n' "$C_RED" "$PROGRESS" "$C_RST"
+  fi
+
+  local last
+  last="$(ls -1t "$RESULTS_DIR"/check-*.json 2>/dev/null | head -1)"
+  header "最近一次 check"
+  if [ -n "$last" ] && have jq; then
+    printf '  %s  overall=%s  at %s\n' "$last" "$(jq -r .overall "$last")" "$(jq -r .generated_at "$last")"
+  elif [ -n "$last" ]; then
+    printf '  %s（缺 jq，读不出 overall）\n' "$last"
+  else
+    printf '  %s尚无记录。跑 make check。%s\n' "$C_DIM" "$C_RST"
+  fi
+  printf '\n'
+
+  return "$status_rc"
 }
 
 cmd_check() {

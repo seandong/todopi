@@ -43,11 +43,23 @@ const bad = (m) => problems.push(m);
  */
 function section(body, heading) {
   const lines = body.split("\n");
-  const start = lines.findIndex((l) => l.trim() === heading);
-  if (start < 0) return null;
-  const rest = lines.slice(start + 1);
+  // **顶格精确匹配，不 trim。** Log 的续行缩进两格，`  ## Repair` 那样的一行在
+  // trim 之后看起来就是个真标题——原文被挪进续行里，逐段对账照样会通过
+  // （评审指出）。
+  const hits = lines.map((l, i) => (l === heading ? i : -1)).filter((i) => i >= 0);
+  if (hits.length === 0) return null;
+  if (hits.length > 1) return { duplicate: hits.length };
+  const rest = lines.slice(hits[0] + 1);
   const end = rest.findIndex((l) => /^## /.test(l));
   return (end < 0 ? rest : rest.slice(0, end)).join("\n");
+}
+
+/** section() 的结果拿来用之前过一道：重复章节算违规。 */
+function sectionOr(w, body, heading) {
+  const sec = section(body, heading);
+  if (sec === null) { w(`正文没有 ${heading} 段`); return null; }
+  if (typeof sec === "object") { w(`${heading} 出现了 ${sec.duplicate} 次`); return null; }
+  return sec;
 }
 
 const src = originalJson();
@@ -115,9 +127,8 @@ for (const f of src.features) {
   // behavior → title + 正文原文
   if (!f.behavior.startsWith(t.fm.title.replace(/\.\.\.$/, ""))) w("title 不是 behavior 的前缀");
   if (t.fm.title.length > 200) w(`title ${t.fm.title.length} 字符，超过 200`);
-  const desc = section(t.body, "## Description");
-  if (desc === null) w("正文没有 ## Description 段");
-  else if (!desc.includes(f.behavior)) w("behavior 原文不在 Description 段里");
+  const desc = sectionOr(w, t.body, "## Description");
+  if (desc !== null && !desc.includes(f.behavior)) w("behavior 原文不在 Description 段里");
 
   // depends_on → blocked_by
   const expDeps = (f.depends_on ?? []).map((d) => newIdOf.get(d)).sort();
@@ -131,24 +142,23 @@ for (const f of src.features) {
   if (t.fm.verify !== expV) w(`verify 不符：\n    期望 ${expV}\n    实际 ${t.fm.verify}`);
 
   // verification / repair / evidence 原文
-  const acc = section(t.body, "## Acceptance Criteria");
-  if (acc === null) w("正文没有 ## Acceptance Criteria 段");
-  else if (!acc.includes(f.verification)) w("verification 原文不在 Acceptance Criteria 段里");
-  else if (/^- \[[ x]\]/m.test(acc)) w("Acceptance Criteria 里出现了勾选项——这批任务约定是散文");
+  const acc = sectionOr(w, t.body, "## Acceptance Criteria");
+  if (acc !== null) {
+    if (!acc.includes(f.verification)) w("verification 原文不在 Acceptance Criteria 段里");
+    if (/^- \[[ x]\]/m.test(acc)) w("Acceptance Criteria 里出现了勾选项——这批任务约定是散文");
+  }
 
   const repairs = (f.layers ?? []).filter((l) => l.repair);
   if (repairs.length > 0) {
-    const rep = section(t.body, "## Repair");
-    if (rep === null) w("有 repair 文本，但正文没有 ## Repair 段");
-    else for (const l of repairs) {
+    const rep = sectionOr(w, t.body, "## Repair");
+    if (rep !== null) for (const l of repairs) {
       if (!rep.includes(l.repair)) w(`${l.label} 层的 repair 原文不在 Repair 段里`);
     }
   }
 
   if (f.state === "passing") {
-    const log = section(t.body, "## Log");
-    if (log === null) w("正文没有 ## Log 段");
-    else if (!log.includes(f.evidence)) w("evidence 原文不在 Log 段里");
+    const log = sectionOr(w, t.body, "## Log");
+    if (log !== null && !log.includes(f.evidence)) w("evidence 原文不在 Log 段里");
   }
 
   // labels

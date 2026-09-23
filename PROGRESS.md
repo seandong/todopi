@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `3e204ad` —— 自举评审第一轮的两条阻塞项已修。
+- Last commit: `f26ecac` —— 自举评审第二轮已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -22,7 +22,8 @@
 - 账本: `.todopi/` 21 个任务，7 个 `closed/done`（F01–F07）、14 个 `open`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F04 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）
+- 代码状态：**F01–F07 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+  `claim` / `release` / `done` / `close` / `reopen`
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
@@ -36,7 +37,8 @@
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
 
-- 迁移计划与**损失表**（十条，其中三条没有替代物）：
+- 迁移计划与**损失表**（十二条，其中四条没有替代物；最后两条是**执行之后**
+  的评审才找出来的）：
   [docs/plans/2026-09-23-bootstrap.md](docs/plans/2026-09-23-bootstrap.md)
 - 对账脚本 `tools/bootstrap-verify.mjs` 保留，随时可重跑——它从 git 读原始 JSON，
   逐条逐字段对回去。三个突变验证过它会红。
@@ -120,7 +122,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     全缓存」；第五至八轮全在「怎么判断一条测试被停掉」上，最后拔根而不是加第四版
     guard。见 DECISIONS D026、D027。
 26. ~~开始自举~~ 已完成（2026-09-23）。21 条迁进 `.todopi/`，`feature_list.json`
-    已删除。计划先经四轮评审才执行，损失表 三 → 五 → 八 → 十条。
+    已删除。计划先经四轮评审才执行，损失表 三 → 五 → 八 → 十 → 十二条。
 27. **下一步：F08 `show`。** `todopi ls --ready` 看队列，`todopi claim` 认领。
     这是第一个用 todopi 自己管出来的 feature。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
@@ -166,6 +168,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 - Current State 每次 clock-out 必须更新，至少包含 commit 与 `make check` 结果。
   `Last commit` 写的是写这行时的 HEAD；`make clean-check` 校验它在当前历史中，
   并校验最后一个 commit 确实带上了本文件。
-- 一个 session 结束时若 VCR < 1.0，必须在 In Progress 写明卡在哪一层、
-  下一步要跑什么命令。
+- 一个 session 结束时若还有任务处于 `in_progress`，必须在 In Progress 写明卡在
+  哪一层、下一步要跑什么命令。（旧措辞说的是 `VCR < 1.0`，而 `make vcr` 已随
+  自举删除——迁移损失表第十一条。）
 - 本文件记录**状态**，不记录决策理由。理由写进 [DECISIONS.md](DECISIONS.md)。
