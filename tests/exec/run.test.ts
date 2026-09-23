@@ -126,3 +126,29 @@ test("命令本身不存在时退出码非 0，而不是抛错", () => {
   assert.notEqual(r.code, 0);
   assert.equal(r.timedOut, false);
 });
+
+test("主动脱离进程组的后代杀不到 —— 这是固有边界，如实钉住它", () => {
+  // 子进程若自己调 setsid(2)（或 Node 的 detached）另起一个组，kill(-pid)
+  // 就够不着它。这不是缺陷，是进程组终止的固有边界：唯一的替代是遍历 ps
+  // 追整棵树，那在跨平台上既不可靠也有竞态。
+  //
+  // 把它写成用例，是为了让这条边界**有人知道**——哪天有人「修好」了它，
+  // 这条会红，然后他会读到这段注释。
+  const d = dir();
+  const pidFile = join(d, "escaped.pid");
+  const escape =
+    `node -e 'const{spawn}=require("node:child_process");` +
+    `const c=spawn("bash",["-c","echo $$ > ${pidFile}; sleep 30"],{detached:true,stdio:"ignore"});c.unref();'` +
+    `; sleep 30`;
+
+  const r = runCommand(escape, { cwd: d, timeoutMs: 1000, graceMs: 300 });
+  assert.equal(r.timedOut, true);
+  assert.ok(settle(() => existsSync(pidFile)), "脱离出去的进程没写下 pid");
+  const gpid = Number(readFileSync(pidFile, "utf8").trim());
+
+  const stillAlive = alive(gpid);
+  try { process.kill(gpid, "SIGKILL"); } catch { /* 已退出 */ }
+  assert.equal(stillAlive, true,
+    "主动脱离进程组的后代本就杀不到；若这条红了，说明实现变了——" +
+    "读 src/exec/run.ts 顶部关于这条边界的说明再决定是不是该改这个断言");
+});

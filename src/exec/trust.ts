@@ -62,12 +62,26 @@ export function isTrusted(repoRoot: string): boolean {
   return readLines().some((line) => line !== "" && canonical(line) === want);
 }
 
-/** 记下信任。已经在里面就什么都不做；**追加而不是重写**，用户写的注释原样保留。 */
-export function recordTrust(repoRoot: string): void {
-  if (isTrusted(repoRoot)) return;
+/**
+ * 记下信任。已经在里面就什么都不做；**追加而不是重写**，用户写的注释原样保留。
+ *
+ * 写不进去时给出一条说得清的错误，而不是让 Node 的 `EISDIR` / `EACCES` 直接
+ * 冒到使用者面前——实测过：信任文件的位置若被占成一个目录，原来抛的是裸错误，
+ * 看到的人无从知道该动哪里。
+ */
+export function recordTrust(repoRoot: string): string | null {
+  if (isTrusted(repoRoot)) return null;
   const p = trustFilePath();
-  mkdirSync(dirname(p), { recursive: true });
-  const existing = existsSync(p) ? readFileSync(p, "utf8") : "";
-  const prefix = existing === "" || existing.endsWith("\n") ? existing : `${existing}\n`;
-  writeFileSync(p, `${prefix}${canonical(repoRoot)}\n`);
+  try {
+    mkdirSync(dirname(p), { recursive: true });
+    const existing = existsSync(p) ? readFileSync(p, "utf8") : "";
+    const prefix = existing === "" || existing.endsWith("\n") ? existing : `${existing}\n`;
+    writeFileSync(p, `${prefix}${canonical(repoRoot)}\n`);
+    return null;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code ?? "unknown";
+    return `Could not record trust in ${p} (${code}). ` +
+      "Fix that path, or set TODOPI_CONFIG_DIR to somewhere writable. " +
+      "It must never be inside the repository.";
+  }
 }

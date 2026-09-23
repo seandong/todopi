@@ -34,7 +34,10 @@ export type VerifyOptions = {
 function ensureTrusted(ledger: Ledger, command: string, opts: VerifyOptions): void {
   if (isTrusted(ledger.root)) return;
   if (opts.yes === true || process.env["CI"] === "true") {
-    recordTrust(ledger.root);
+    const problem = recordTrust(ledger.root);
+    // 记不下来就别往下走：下次还会再问一遍，而这次的执行已经发生了——
+    // 那种「批准了但没记住」的状态比直接失败更难查。
+    if (problem !== null) throw new CliError(EXIT.usage, problem);
     return;
   }
   if (process.stdin.isTTY !== true) {

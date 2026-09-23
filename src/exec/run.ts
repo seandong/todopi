@@ -39,9 +39,17 @@ const DEFAULT_MAX_OUTPUT = 1024 * 1024;
  * 理由写在那个文件的头部：`done` 在文件锁内串行执行，所以这个函数必须同步；
  * 而「独立进程组」只有 Node 的异步 spawn 支持。
  *
- * **代价**：`detached` 的子进程在 todopi 自己被 SIGKILL 时会变成孤儿。
- * 这与 F05 的租约同属「运行时状态可能被留下」那一类，接受它——没有它就没有
- * 任何办法够到孙进程（实测：默认方式下 `child.kill()` 之后孙进程仍然存活）。
+ * **两条边界，如实写在这里而不是让人以为「整棵树」没有例外：**
+ *
+ * 1. `detached` 的子进程在 todopi 自己被 SIGKILL 时会变成孤儿。这与 F05 的租约
+ *    同属「运行时状态可能被留下」那一类，接受它——没有它就没有任何办法够到
+ *    孙进程（实测：默认方式下 `child.kill()` 之后孙进程仍然存活）。
+ * 2. **主动脱离进程组的后代杀不到。** 子进程若自己调 `setsid(2)`（或 Node 的
+ *    `detached`）另起一个组，`kill(-pid)` 就够不着它了——实测确认过。这是进程组
+ *    终止的固有边界，不是这里的缺陷：唯一的替代是遍历 `/proc` 或 `ps` 追整棵
+ *    树，那在跨平台上既不可靠也有竞态（进程可能在我们读到它之前就 fork 了）。
+ *    实际的 `verify`（`pnpm test`、`cargo test`）不会这么做；会这么做的是守护
+ *    进程，而那类东西本来就不该出现在一条 `verify` 里。
  */
 export function runCommand(command: string, opts: RunOptions): RunResult {
   if (process.platform === "win32") {
