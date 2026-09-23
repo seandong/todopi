@@ -3,8 +3,8 @@
 
 H := tools/harness.sh
 
-.PHONY: help setup dev doctor status check test e2e check-arch vcr \
-        activate release verify-feature reverify clean-check ci audit
+.PHONY: help setup dev doctor status check test e2e check-arch \
+        clean-check ci audit
 
 help:
 	@$(H)
@@ -39,22 +39,7 @@ check-arch:
 ci:
 	@$(H) ci
 
-## Scope（WIP=1，状态机 not_started -> active -> passing）
-vcr:
-	@$(H) vcr
-
-activate:
-	@$(H) activate "$(F)"
-
-release:
-	@$(H) release "$(F)"
-
-verify-feature:
-	@$(H) verify-feature "$(F)"
-
-reverify:
-	@$(H) reverify "$(F)"
-
+## Scope（WIP=1，状态机 open -> in_progress -> closed/done；见 .todopi/）
 ## 清洁态
 clean-check:
 	@$(H) clean-check

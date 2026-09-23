@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `ec8f04d` —— F07 已合回 main，自举可以开始了。
+- Last commit: `1efc02c` —— 自举评审第四轮已修。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,8 +19,11 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- VCR: `7/7` —— F01–F07 均 `passing`，evidence 由 harness 写入
-- 代码状态：**F01–F04 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）
+- 账本: `.todopi/` 21 个任务，7 个 `closed/done`（F01–F07）、14 个 `open`。
+  **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
+  这一行的计数由 `make status` 给出。
+- 代码状态：**F01–F07 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+  `claim` / `release` / `done` / `close` / `reopen`
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
@@ -29,25 +32,39 @@
 
 ## In Progress
 
-**无。** F07 `verify` 已合回 `main`（九轮 Codex 评审，阻塞项 3+0+1+0+2+2+2+1+0），
-分支已删。F01–F07 全部 `passing` 且都在 `main` 上。
+**无。** F01–F07 全部 `passing` 且都在 `main` 上。
 
-**状态迁移的触发条件到此齐了**（[状态迁移契约](docs/harness/state-migration.md)）：
-spec 定稿 ✅、doctor 能检出违规 ✅、五个命令 passing **5/5**
-（`init`、`add`、`claim`、`done`、`verify`）。**自举可以开始了。**
+**2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
+`.todopi/tasks/`，todopi 用自己管理自己的开发任务。
 
-F07 留下的两处收窄，如实记在这里：
+- 迁移计划与**损失表**（十三条，其中四条没有替代物；最后三条是**执行之后**
+  的评审才找出来的）：
+  [docs/plans/2026-09-23-bootstrap.md](docs/plans/2026-09-23-bootstrap.md)
+- 对账脚本 `tools/bootstrap-verify.mjs` 保留，随时可重跑——它从 git 读原始 JSON，
+  逐条逐字段对回去。三个突变验证过它会红。
+- 新的 WIP=1 / 依赖 / 必须有 verify 三条策略由 **ARCH-023** 持续检查
+  （`tools/check-ledger-policy.mjs`，六个反例验证过）。它是**事后发现**，
+  不是当场拒绝——这是从 `make activate` 降级而来的，如实记在损失表里。
 
-- **`verify` v0.1 只在 POSIX 上支持**，Windows 明确拒绝（FR-D2 收窄，D026）。
-  理由是平台表本来就写着「Windows 尽力」，而没测过的树终止比明确不支持更糟。
-- **「runner 里没有第二个无界缓冲」没有测试覆盖，靠代码审查。** 量它要外调 `ps`，
-  而 `ps` 在受限环境里 EPERM；为了让那条用例能「明确跳过而不是红」，我给 harness
-  加的门连着四轮都没收敛，最后删掉了那条用例。环有界由 `tail.test.ts` 在进程内
-  确定性断言，背压由 FIFO 用例覆盖。
+日常回路（见 AGENTS.md）：
 
-`feature_list.json` 于 2026-09-16 填入 21 条，拆分依据见 DECISIONS D011。
+```
+todopi ls --ready → todopi claim <id> → 干活 → 人核对验收判据
+→ git commit（代码 + claim 留下的账本改动）→ todopi done <id>
+→ git commit（done 的账本改动 + PROGRESS）→ make clean-check
+```
 
 **整个仓库尚未推送到 remote。**
+
+## 里程碑
+
+迁移自 `feature_list.json` 的 `milestones`。分组本身进了任务的 `labels`
+（`m1`/`m2`/`m3`），而「什么时候算完成」是叙述性上下文——按契约「PROGRESS.md 与
+DECISIONS.md 不迁移」的同一理由留在这里。
+
+- **M1**（F01–F07，共 7 条）——docs/harness/state-migration.md 的三个触发条件全部满足，仓库切换到用 todopi 管自己
+- **M2**（F08–F13，共 6 条）——20 个子命令中与日常回路相关的全部可用，dogfooding 不再需要手工绕开任何环节
+- **M3**（F14–F21，共 8 条）——PRD §13 首发清单中与代码相关的条目全部可勾
 
 ## Next Steps
 
@@ -104,9 +121,10 @@ F07 留下的两处收窄，如实记在这里：
     3+0+1+0+2+2+2+1+0。第一轮抓到「计划写着不该全缓存在内存、实现却正好在内存里
     全缓存」；第五至八轮全在「怎么判断一条测试被停掉」上，最后拔根而不是加第四版
     guard。见 DECISIONS D026、D027。
-26. **下一步：开始自举。** 触发条件已 5/5 满足——用 todopi 自己管理 todopi 的
-    剩余 feature。先 `todopi init`，把 `feature_list.json` 里 F08 之后的条目导入
-    成任务，然后照常走「activate → 计划 → TDD → 评审 → 合并」。
+26. ~~开始自举~~ 已完成（2026-09-23）。21 条迁进 `.todopi/`，`feature_list.json`
+    已删除。计划先经四轮评审才执行，损失表 三 → 五 → 八 → 十 → 十三条。
+27. **下一步：F08 `show`。** `todopi ls --ready` 看队列，`todopi claim` 认领。
+    这是第一个用 todopi 自己管出来的 feature。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
     门禁骨架在 `commands/transition.ts`，`verify` 那道门加进 `domain/gates.ts` 即可，
     报告与动作走 `gateActions()`（`command` 无占位符、`template` 需填空）。
@@ -150,6 +168,7 @@ F07 留下的两处收窄，如实记在这里：
 - Current State 每次 clock-out 必须更新，至少包含 commit 与 `make check` 结果。
   `Last commit` 写的是写这行时的 HEAD；`make clean-check` 校验它在当前历史中，
   并校验最后一个 commit 确实带上了本文件。
-- 一个 session 结束时若 VCR < 1.0，必须在 In Progress 写明卡在哪一层、
-  下一步要跑什么命令。
+- 一个 session 结束时若还有任务处于 `in_progress`，必须在 In Progress 写明卡在
+  哪一层、下一步要跑什么命令。（旧措辞说的是 `VCR < 1.0`，而 `make vcr` 已随
+  自举删除——迁移损失表第十一条。）
 - 本文件记录**状态**，不记录决策理由。理由写进 [DECISIONS.md](DECISIONS.md)。

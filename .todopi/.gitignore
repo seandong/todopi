@@ -1,0 +1,2 @@
+# Derived data. May be deleted at any time; holds no state needed to reconstruct the ledger (spec §2).
+.cache/

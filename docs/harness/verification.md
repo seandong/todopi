@@ -59,7 +59,7 @@
 harness 必须在「什么都还没有」的仓库里也能诚实运行。降级的唯一正确形式是
 **报 `not_applicable` 并说明理由**，而不是跳过、静默或报 `pass`。
 
-- 缺 `jq` → 依赖 `feature_list.json` 的命令报 `blocked`，给出安装命令。
+- 缺 `jq` → 依赖它的 harness 子命令报 `blocked`，给出安装命令。
 - 缺 `bun` → Layer 2 / Layer 3 报 `blocked`，不是 `not_applicable`——
   测试本该跑，只是环境不具备。
 - 无 `src/` / 无 `tests/` → 对应检查报 `not_applicable`。
@@ -102,11 +102,19 @@ harness 必须在「什么都还没有」的仓库里也能诚实运行。降级
 
 ## Feature 级验证
 
-`make verify-feature F=<id>` 是 feature 从 `active` 走到 `passing` 的唯一通道：
+`todopi done <id>` 是任务从 `in_progress` 走到 `closed` 的唯一通道：
 
-1. 读 `feature_list.json` 中该 feature 的 `layers[]`；
-2. 按顺序执行每层的 `cmd`；任一层失败即停止，打印该层的 `repair` 文本；
-3. 全部通过后，由 harness 写入 `state: passing` 和 `evidence`
-   （commit SHA + UTC 时间戳）。
+1. 读任务的 `verify` 字段——三层按 `static → runtime → system` 用 `&&` 串成一条
+   命令行；
+2. 执行它；非零退出即拒绝，打印一份不需要再跑别的命令就能据以行动的报告；
+3. 通过后写 `status: closed` / `resolution: done`，Log 记
+   `done verify=pass commit=<HEAD7> dirty=<bool>`。
 
-手工编辑 `state` 绕过这个流程，是本 harness 明确禁止的行为。
+**2026-09-23 自举带来的两处退化，如实记在这里：**
+
+- `&&` 串起来只有一个退出码，**表达不了某层 `not_applicable`**——跳过的层和通过
+  的层都表现为「没让整条命令失败」。
+- 失败时**不再当场打印该层的 `repair`**。它在任务正文的 Repair 段里，自己去读：
+  `cat .todopi/tasks/<id>.md`（`todopi show` 要等 F09 之后的 F08）。
+
+手工把任务改成 `closed` 绕过这个流程，是本 harness 明确禁止的行为。

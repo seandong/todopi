@@ -1,4 +1,18 @@
-# 状态层迁移契约：feature_list.json → `.todopi/`
+# 状态层迁移契约：feature_list.json → `.todopi/`（已完成，历史记录）
+
+> **迁移完成于 2026-09-23**，即「删除 `feature_list.json` 并改写本文件」的那个
+> commit。查找它：
+>
+> ```
+> git log --diff-filter=D --oneline -- feature_list.json
+> ```
+>
+> 本文件此后只是历史记录。**这次迁移丢掉了什么、拿什么替代、哪些没有替代物**，
+> 见[迁移计划](../plans/2026-09-23-bootstrap.md)的损失表——**十三条**，其中四条
+> 没有替代物。最后三条是**执行之后**的评审才找出来的，这本身就是那份清单的结论：
+> 纸面上穷尽不了。对账脚本 `tools/bootstrap-verify.mjs` 保留着，随时可重跑。
+>
+> 契约原文如下，一字未改。
 
 todopi 是一个任务台账工具，却用 `feature_list.json` 管理自己的开发任务。这是
 过渡形态，不是终点。本文件固化迁移的触发条件与字段映射，避免「以后再说」变成
