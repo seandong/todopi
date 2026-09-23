@@ -211,6 +211,16 @@
       "what": "src/exec/ 引入了 node: 内置模块之外的东西。",
       "why": "exec/ 与 fs/ 并列在最底层：它管子进程与用户级配置，不认识 todopi 的格式。一旦它 import 了 format/ 或 domain/，「以独立进程组执行一条命令」这件事就和 12 个字段绑死了，而它本该对任何要跑子进程的程序都一样。这条与 fs/ 的 ARCH-019 是同一条规则的两个实例。source: F07 建立 exec/ 时同批加入——边界要在第一个诱惑出现之前立起来。",
       "fix": "把需要格式知识的部分挪到 commands/，由它把已经算好的参数传进来。exec/ 只收原始的字符串与路径。"
+    },
+    {
+      "id": "ARCH-022",
+      "description": "verify 的信任记录不得落在 .todopi/ 内",
+      "applies_when": "test -f src/exec/trust.ts",
+      "check": "node tools/check-trust-location.mjs",
+      "expect": "empty",
+      "what": "src/exec/trust.ts 里出现了 .todopi 或账本目录。",
+      "why": "spec §8：信任记录 MUST NOT 存在 .todopi/ 内的任何地方。随仓库一起传播的信任记录等于让仓库为自己背书，而那正是「要不要执行这条 verify」这个问题存在的理由——克隆一份别人的仓库就自动信任了它要跑的命令。信任属于用户级配置（~/.config/todopi/trust），在任何仓库之外。source: F07。 检查器挖空注释再查——这个文件的注释里正好在解释「绝不在 .todopi/ 里」，直接 grep 会把那段解释判成违规（ARCH-001/002/011/013 之后第五次同一类误伤）。",
+      "fix": "信任路径只由 trustFilePath() 决定，它读 TODOPI_CONFIG_DIR / XDG_CONFIG_HOME / ~/.config，与账本目录无关。需要仓库路径时把它当成**被信任的对象**传进去，而不是用来拼存储位置。"
     }
   ]
 }
