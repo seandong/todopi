@@ -1,5 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { renderGateReport, renderGateJson, renderTransition, gateActions } from "../../src/output/render/gate.ts";
 import type { GateReport } from "../../src/output/dto/gate.ts";
 import type { Refusal } from "../../src/domain/gates.ts";
@@ -335,4 +339,32 @@ test("完整输出没存下来时，报告不给 cat —— 给不出能跑的�
   // 反过来：存下来了就必须给，否则 agent 只能看到 512 字节的尾部。
   const ok = report([{ ...base, logProblem: null }]).actions;
   assert.ok(ok.some((a) => a.command === `cat ${base.logPath}`), "存下来了却没给出读全文的路子");
+});
+
+test("报告里的 cat 在刁钻路径下也真能跑 —— 不是看起来对，是跑过", () => {
+  // F06 第三轮的阻塞项是「报告给出的命令不可执行」，当时的形状是命令里留着
+  // `<占位符>`。这是同一条线上更隐蔽的一个：仓库路径里有个空格，
+  // `cat /Users/me/my repo/....log` 就被 shell 拆成了两个参数。
+  //
+  // **所以这条用例不比对字符串，它把命令交给 sh 去跑。** 断言的是「跑得通」，
+  // 而不是「我以为的引号规则对」。
+  for (const dirName of ["plain", "with space", "with'quote"]) {
+    const root = mkdtempSync(join(tmpdir(), "todopi-q-"));
+    const dir = join(root, dirName);
+    mkdirSync(dir);
+    const logPath = join(dir, "run.log");
+    writeFileSync(logPath, "FULL-OUTPUT-MARKER\n");
+
+    const actions = report([{
+      gate: "verify", code: 2, command: "npm test", exitCode: 1, signal: null,
+      timedOut: false, tail: "", logPath, logProblem: null,
+    }]).actions;
+    const cmd = actions.find((a) => a.command?.startsWith("cat ") === true)?.command;
+    assert.ok(cmd !== undefined, `${dirName}：压根没给出读全文的命令`);
+
+    const got = execFileSync("sh", ["-c", cmd], { encoding: "utf8" });
+    assert.match(got, /FULL-OUTPUT-MARKER/, `${dirName}：这条命令跑不出全文 —— ${cmd}`);
+
+    rmSync(root, { recursive: true, force: true });
+  }
 });

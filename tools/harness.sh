@@ -637,11 +637,22 @@ cmd_clean_check() {
   #   tools/ scripts/ —— harness 自己的命令行脚本，它们的职责就是打印报告。
   #                    把正当输出算成残留，会逼着作者用 process.stdout.write 绕开，
   #                    规则就变成了纯仪式。这里只查无歧义的标记。
-  # 收窄而非放宽：debugger / .only / .skip 在任何地方都是残留。
+  # 收窄而非放宽：debugger / .only / 被停掉的测试，在任何地方都是残留。
+  #
+  # **.skip 分两种。** `test.skip(...)` / `it.skip(...)` 是把一条测试停在那儿——
+  # 那是残留。而 `t.skip("原因")` 是运行时的条件跳过：环境不具备时明确说一声，
+  # 比让用例因为环境而红要好（F07：量常驻内存要用 ps，ps 在受限沙箱里 EPERM）。
+  # 只认前者，外加不给理由的 `.skip()`。
+  #
+  # grep 是逐行的，所以 `.skip(` 后面直接换行也当成无参——评审指出，否则把理由
+  # 挪到下一行就绕过去了。代价是跳过的理由必须和调用写在同一行：那是个一秒能满足
+  # 的约束，而漏掉一条被停掉的测试要很久以后才会被发现。宁可严。
+  #
+  # 2026-09-23 收窄；这是同类误伤的第七次，形状照旧：措辞对，check 比措辞宽。
   local dbg="" d
   for d in src tests; do
     [ -d "$d" ] || continue
-    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\( *\)' "$d" \
+    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\( *\)|\.skip\( *$' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
@@ -649,7 +660,7 @@ cmd_clean_check() {
   done
   for d in tools scripts; do
     [ -d "$d" ] || continue
-    if grep -rnE 'debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\( *\)' "$d" \
+    if grep -rnE 'debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\( *\)|\.skip\( *$' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"

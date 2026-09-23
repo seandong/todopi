@@ -26,7 +26,14 @@ export function makeTail(max: number) {
         dropped = true;
       }
     },
-    /** 此刻实际持有多少字节。不变量：不超过 `max` 加一个 chunk。 */
+    /**
+     * 此刻仍被这个环引用的 chunk 加起来有多少字节。不变量：不超过 `max` 加一个
+     * chunk。
+     *
+     * **它量的是这里的保留量，不是进程的 RSS，也不是底层 Buffer 的实际分配量**
+     * （一个 chunk 可能来自更大的池）。真实常驻内存由 run.test.ts 里那条起
+     * runner 采 RSS 的用例把关。
+     */
     retainedBytes(): number {
       return total;
     },

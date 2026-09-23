@@ -186,10 +186,10 @@
       "id": "ARCH-019",
       "description": "fs/ 只依赖 node: 内置模块",
       "applies_when": "test -d src/fs",
-      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/fs --include='*.ts' | grep -vE \"from [\\\"']node:\" | grep -vE \"from [\\\"']\\\\./[^/\\\"']+\\\\.ts[\\\"']\" || true",
+      "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/fs --include='*.ts' | grep -vE \"from [\\\"']node:\" || true",
       "expect": "empty",
       "what": "src/fs/ import 了 node: 之外的任何模块。",
-      "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。 2026-09-23：check 原先把**同目录**的相对 import 也算成违规（`./tail.ts`），而规则自己写的意图是「不得 import format/ 或 domain/」——同层拆成两个文件并不越界。收窄成只放行 `./<name>.ts`，`../` 仍然抓得到（两个方向都实测过）。这是这类误伤的第六次：**规则的措辞对，check 比措辞宽。**",
+      "why": "ARCHITECTURE.md 定义 fs/ 是最底层：文件系统原语，不认识 todopi 的格式，也不认识 CLI 的退出码协议。2026-09-21 的第四轮 review 抓到 fs/lock.ts import 了 ../exit.ts——那是修退出码时顺手加的，反向依赖了上层。锁被占用应当抛中性的 LockBusyError，由 commands/ 映射为 CliError(EXIT.conflict)。一个只依赖 node: 的模块可以被任何上下文复用，也不会把上层的约定固化进底层。 2026-09-23：ARCH-021 为了 exec/ 内部拆出 tail.ts 放行了同目录的 `./<name>.ts`，**这一条没有跟着放**——fs/ 今天没有这个需求，为一个不存在的情形拆栏杆就是把 guard 改松。哪天 fs/ 真要同层拆分，再改这一条，那次改动会连同理由一起出现在 diff 里。",
       "fix": "把上层的类型换成本层自己定义的中性错误或数据结构，由调用方翻译。若确实需要共享某个常量，考虑它是否本就属于 fs/。"
     },
     {

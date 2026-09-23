@@ -45,6 +45,20 @@ function forceable(r: Omit<GateReport, "actions">): boolean {
  * 「两边共用」写成了已完成的事实（Codex 第二轮评审指出）。现在文本渲染遍历
  * `r.actions`，两边不可能分叉。
  */
+/**
+ * 把一个路径变成能原样粘进 shell 的样子。
+ *
+ * 报告里的命令**必须能跑**（F06 第三轮的阻塞项）。仓库路径里有一个空格，
+ * `cat /Users/me/my repo/.../x.log` 就会被拆成两个参数——这和给出一条指向
+ * 不存在文件的命令是同一种失败，只是更难看出来。
+ *
+ * 不需要引号的就不加：报告是给人读的，满屏引号会更难认。
+ */
+function shellQuote(p: string): string {
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(p)) return p;
+  return `'${p.replace(/'/g, `'\\''`)}'`;
+}
+
 export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
   const out: GateAction[] = [];
   for (const refusal of r.refused) {
@@ -91,7 +105,7 @@ export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
         // **但只在它真的存下来了的时候。** 写不成还把 `cat` 交出去，agent 照着
         // 跑就是一次注定失败的命令；说清楚「没存下来、为什么」才是据以行动的。
         if (refusal.logProblem === null) {
-          out.push({ for: "verify", command: `cat ${refusal.logPath}`,
+          out.push({ for: "verify", command: `cat ${shellQuote(refusal.logPath)}`,
             detail: "Read the full output of the verify run." });
         } else {
           out.push({ for: "verify",
