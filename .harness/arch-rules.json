@@ -204,11 +204,11 @@
     },
     {
       "id": "ARCH-021",
-      "description": "exec/ 只依赖 node: 内置模块",
+      "description": "exec/ 只依赖 node: 内置模块与同目录的 ./<name>.ts",
       "applies_when": "test -d src/exec",
       "check": "grep -rnE \"from [\\\"'][^\\\"']+[\\\"']\" src/exec --include='*.ts' | grep -vE \"from [\\\"']node:\" | grep -vE \"from [\\\"']\\\\./[^/\\\"']+\\\\.ts[\\\"']\" || true",
       "expect": "empty",
-      "what": "src/exec/ 引入了 node: 内置模块之外的东西。",
+      "what": "src/exec/ 引入了 node: 内置模块与同目录 ./<name>.ts 之外的东西。",
       "why": "exec/ 与 fs/ 并列在最底层：它管子进程与用户级配置，不认识 todopi 的格式。一旦它 import 了 format/ 或 domain/，「以独立进程组执行一条命令」这件事就和 12 个字段绑死了，而它本该对任何要跑子进程的程序都一样。这条与 fs/ 的 ARCH-019 是同一条规则的两个实例。source: F07 建立 exec/ 时同批加入——边界要在第一个诱惑出现之前立起来。 2026-09-23：check 原先把**同目录**的相对 import 也算成违规（`./tail.ts`），而规则自己写的意图是「不得 import format/ 或 domain/」——同层拆成两个文件并不越界。收窄成只放行 `./<name>.ts`，`../` 仍然抓得到（两个方向都实测过）。这是这类误伤的第六次：**规则的措辞对，check 比措辞宽。**",
       "fix": "把需要格式知识的部分挪到 commands/，由它把已经算好的参数传进来。exec/ 只收原始的字符串与路径。"
     },

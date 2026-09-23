@@ -67,7 +67,7 @@ spec 定稿 ✅、doctor 能检出违规 ✅、五个命令 passing **5/5**
 关闭时记录 verify 输出的最后 512 字节「因为证据必须留在 diff 里看得见」；
 若 `--force` 连执行都跳过，那条规则永远走不到。方案由产品负责人选定。
 
-新增 `src/exec/` 层（与 `fs/` 同级，只 import `node:*`），**在同一提交里登记
+新增 `src/exec/` 层（与 `fs/` 同级，只 import `node:*` 与同目录的 `./<name>.ts`），**在同一提交里登记
 ARCHITECTURE.md 并加 ARCH-021**；信任记录另有 ARCH-022 钉死它不进 `.todopi/`。
 现在 22 条架构规则。
 

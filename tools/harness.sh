@@ -401,10 +401,35 @@ cmd_test() {
   elif ! have node; then
     emit unit-test blocked "测试本该运行，但环境缺少 node（见 .tool-versions）"
   else
-    if node --test; then
+    # 输出仍然直接流出来，同时留一份给下面数 skipped。
+    local _tlog; _tlog="$(mktemp)"
+    if node --test 2>&1 | tee "$_tlog"; then
       emit unit-test pass "node --test 通过"
     else
       emit unit-test fail "node --test 失败，输出见上"
+    fi
+
+    # **被跳过的测试，问运行器，不问源码。**
+    #
+    # 原先在 clean-check 里用 grep 找 `.skip(`，两轮评审找出四种绕法：单引号理由
+    # 被误报、`t.skip("")` 和 `test.skip (...)`（点或括号前有空格）被漏掉。根子
+    # 是在用字符形状近似一个需要真解析的判断——F04 的 plainKey 栽过同一个跟头，
+    # 那次的解法也是「去问真正的解析器」。
+    #
+    # node:test 自己报的 skipped 数是权威的：一条被停掉的测试必然进这个计数，
+    # 无论它写成什么样；而运行时的条件跳过（环境不具备）在正常机器上根本不触发。
+    #
+    # 状态用 blocked 而不是 fail：不是有东西坏了，是有东西**没跑**——这台机器上
+    # 少了一道把关，不能当成通过。
+    local _skipped
+    _skipped="$(sed -n 's/^# skipped \([0-9][0-9]*\)$/\1/p' "$_tlog" | tail -1)"
+    rm -f "$_tlog"
+    if [ -z "${_skipped:-}" ]; then
+      emit no-skipped-tests blocked "从 node --test 的输出里读不到 skipped 计数"
+    elif [ "$_skipped" -eq 0 ]; then
+      emit no-skipped-tests pass "没有测试被跳过"
+    else
+      emit no-skipped-tests blocked "${_skipped} 条测试被跳过 —— 这台机器上少了这几道把关，理由见上面的输出"
     fi
   fi
   local overall; overall="$(checks_overall)"; checks_done
@@ -644,19 +669,22 @@ cmd_clean_check() {
   # 比让用例因为环境而红要好（F07：量常驻内存要用 ps，ps 在受限沙箱里 EPERM）。
   # 只认前者，外加不给理由的 `.skip()`。
   #
-  # 「没给理由」的判据是**左括号后面紧跟的不是字符串字面量**。先前写成「括号里只有
-  # 空格」，评审指出 `t.skip(\t)` 和 `t.skip(/* c */)` 都能绕过去——凡是枚举「允许
-  # 出现什么」的判据，总有没枚举到的东西。反过来要求「必须紧跟一个引号」就没有这
-  # 个缺口。grep 逐行，所以 `(` 后直接换行也算。
+  # 这里**只认申明点**：`test.skip(` / `it.skip(` / `describe.skip(` / `suite.skip(`，
+  # 点和括号前允许空白（评审指出 `test.skip ("x")` 会绕过去）。
   #
-  # 代价：理由必须紧跟左括号，`t.skip( "why" )` 会被判为残留。那是一秒能满足的
-  # 约束，而漏掉一条被停掉的测试要很久以后才会被发现。宁可严。
+  # **不再试图从源码判断一次 `t.skip(...)` 有没有给理由。** 试过两版：先是「括号里
+  # 只有空格」（制表符、注释能绕），再是「紧跟必须是引号」（单引号理由被误报，
+  # `t.skip("")` 漏掉）。两轮评审四种绕法，说明这是在用字符形状近似一个需要真解析
+  # 的判断——F04 的 plainKey 栽过同一个跟头。
+  #
+  # 那件事交给权威：`make test` 读 node:test 自己报的 skipped 计数（no-skipped-tests）。
+  # 一条被停掉的测试必然进那个计数，无论写成什么样。这里留的是一道便宜的早期信号。
   #
   # 2026-09-23 收窄；这是同类误伤的第七次，形状照旧：措辞对，check 比措辞宽。
   local dbg="" d
   for d in src tests; do
     [ -d "$d" ] || continue
-    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\([^"`]|\.skip\($' "$d" \
+    if grep -rnE 'console\.(log|debug)|debugger;|\.only\(|(test|it|describe|suite)[[:space:]]*\.[[:space:]]*skip[[:space:]]*\(' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
@@ -664,7 +692,7 @@ cmd_clean_check() {
   done
   for d in tools scripts; do
     [ -d "$d" ] || continue
-    if grep -rnE 'debugger;|\.only\(|(test|it|describe|suite)\.skip\(|\.skip\([^"`]|\.skip\($' "$d" \
+    if grep -rnE 'debugger;|\.only\(|(test|it|describe|suite)[[:space:]]*\.[[:space:]]*skip[[:space:]]*\(' "$d" \
          --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
          2>/dev/null | head -1 | grep -q .; then
       dbg="$dbg $d"
