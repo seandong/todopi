@@ -2,6 +2,7 @@
 // spec §6.1 的门禁判定。纯函数：不 import node:fs，用例直接构造任务集合即可。
 
 import { parseAcceptance, unchecked, type Criterion } from "./acceptance.ts";
+import { leaseExpired } from "./claim.ts";
 import { statusOf, type TaskIndex } from "./derive.ts";
 import type { TaskFile } from "./types.ts";
 
@@ -18,6 +19,15 @@ export type GateInput = {
   actor: string;
   transition: Transition;
   lease: LeaseView;
+  /**
+   * 判断租约是否过期要的两个外部事实（spec §8）。
+   *
+   * 第一版只比对租约的 actor，不问它过没过期，于是**一份 2020 年的孤儿租约
+   * 会永远挡住这个任务**——而 §8 说陈旧的租约不该继续拦人（Codex 第二轮评审
+   * 实测复现）。注入而不是在这里取，是为了保持纯函数。
+   */
+  now: number;
+  leaseHours: number;
 };
 
 /**
@@ -57,9 +67,8 @@ export function evaluateGates(input: GateInput): Refusal[] {
     // 并删掉对方的活租约（Codex 评审用真实双 worktree 复现）。
     // 这正是 D019 那条边界的第四个入口——我又一次只想到了「已关闭没有持有者」，
     // 没想到租约是独立于任务文件的事实。
-    if (lease !== null && lease.actor !== actor) {
-      out.push({ gate: "ownership", code: 3, holder: lease.actor, heldSince: lease.heartbeat_at });
-    }
+    const heldElsewhere = liveLeaseHolder(input);
+    if (heldElsewhere !== null) out.push(heldElsewhere);
     return out;
   }
   if (status === "closed") {
@@ -68,7 +77,7 @@ export function evaluateGates(input: GateInput): Refusal[] {
 
   // 归属：这是唯一一道关于**权限**的门，其余都是关于**是否就绪**的。
   // spec §6.1 末段把它单独列出来，所以它的退出码是 3（冲突）而不是 2（门禁）。
-  const holder = ownershipConflict(task, actor, lease);
+  const holder = ownershipConflict(input);
   if (holder !== null) out.push(holder);
 
   // **验收标准只挡 done。** spec §6.1 表格里 done 那一行写了「require Acceptance
@@ -103,15 +112,28 @@ export function evaluateGates(input: GateInput): Refusal[] {
  * 另一个 worktree 里别人已经接管了它。这条边界在 F05 立了三次、漏了三次
  * （DECISIONS D019），这里一次用到全部迁移上。
  */
-function ownershipConflict(task: TaskFile, actor: string, lease: LeaseView): Refusal | null {
+function ownershipConflict(input: GateInput): Refusal | null {
+  const { task, actor } = input;
   const assignee = task.frontmatter["assignee"];
   if (typeof assignee === "string" && assignee !== "" && assignee !== actor) {
     return { gate: "ownership", code: 3, holder: assignee, heldSince: updatedOf(task) };
   }
-  if (lease !== null && lease.actor !== actor) {
-    return { gate: "ownership", code: 3, holder: lease.actor, heldSince: lease.heartbeat_at };
-  }
-  return null;
+  return liveLeaseHolder(input);
+}
+
+/**
+ * 共享租约**还活着**且属于别人时的冲突。过期的租约不算——spec §8 的 stale
+ * 语义就是为此存在的：一份崩溃留下的孤儿租约若永远拦人，任务就再也动不了，
+ * 而使用者除了 `doctor --fix`（F13）别无出路。
+ *
+ * 判据与 `claim` 的 `leaseExpired` 是同一个函数，不另写一套——F05 学到的：
+ * 「复用同一个纯函数不等于输入一致」，所以这里连 `now` 都是注入的同一份。
+ */
+function liveLeaseHolder(input: GateInput): Refusal | null {
+  const { lease, actor, now, leaseHours } = input;
+  if (lease === null || lease.actor === actor) return null;
+  if (leaseExpired(lease, now, leaseHours)) return null;
+  return { gate: "ownership", code: 3, holder: lease.actor, heldSince: lease.heartbeat_at };
 }
 
 function updatedOf(task: TaskFile): string {

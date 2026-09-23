@@ -133,14 +133,49 @@ test("--json 带上可直接执行的动作，不只是拒绝的事实", () => {
   }
 });
 
-test("文本与 --json 给出的是同一批命令", () => {
-  // 分头写的话，迟早只有一边被修。
-  const r = report([ownership, acceptance, children], 3);
-  const text = renderGateReport(r);
-  for (const a of r.actions) {
-    if (a.command !== undefined && !a.command.includes("<")) {
-      assert.ok(text.includes(a.command), `文本报告里缺少命令：${a.command}`);
+test("文本里出现的命令，恰好就是 actions 里的那些 —— 两边不能各有各的", () => {
+  // 第一版这条只检查「JSON 的命令出现在文本里」，是单向的：文本多写一条、
+  // 两边 detail 分叉、甚至文本压根不调用 gateActions，它都不会红
+  // （Codex 第二轮评审指出）。现在两边取集合比。
+  for (const [rs, code, transition] of [
+    [[ownership, acceptance, children], 3, "done"],
+    [[children], 2, "close"],
+    [[ownership], 3, "reopen"],
+    [[{ gate: "state", code: 2, status: "closed", transition: "done" } as Refusal], 2, "done"],
+  ] as const) {
+    const r = report([...rs], code, transition);
+    const text = renderGateReport(r);
+
+    const fromActions = new Set(r.actions.map((a) => a.command).filter((c): c is string => c !== undefined));
+    // 文本里所有形如 `todopi …` 的整行，就是它给出的命令
+    const inText = new Set(
+      text.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("todopi ")),
+    );
+    assert.deepEqual([...inText].sort(), [...fromActions].sort(),
+      `${transition} 的文本与 actions 给出的命令集合必须一致`);
+
+    // detail 也必须来自 actions，不能是文本那边另写的句子
+    for (const a of r.actions) {
+      assert.ok(text.includes(a.detail), `文本里缺少动作说明：${a.detail}`);
     }
+  }
+});
+
+test("reopen 遇归属冲突时不给 claim --steal —— 那条命令对 closed 任务必然失败", () => {
+  // claim 明确拒绝 closed 任务（退出 2），而 reopen 的对象按定义是 closed。
+  // 给一条注定失败的命令比不给更糟：agent 会照着跑然后卡住（Codex 第二轮评审）。
+  const r = report([ownership], 3, "reopen");
+  const text = renderGateReport(r);
+  assert.doesNotMatch(text, /claim .* --steal/, "不该建议 claim --steal");
+  assert.ok(r.actions.every((a) => a.command === undefined || !a.command.includes("--steal")),
+    "--json 里也不该有");
+  assert.match(text, /codex@mbp/, "但要说清是谁持有");
+  assert.match(text, /expire|release/i, "并给出真正可行的出路");
+});
+
+test("done / close 遇归属冲突时仍然给 claim --steal", () => {
+  for (const transition of ["done", "close"] as const) {
+    assert.match(renderGateReport(report([ownership], 3, transition)), /todopi claim tp-000001 --steal/);
   }
 });
 

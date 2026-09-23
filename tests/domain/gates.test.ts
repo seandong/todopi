@@ -4,6 +4,7 @@ import { evaluateGates, worstCode, type GateInput, type Refusal } from "../../sr
 import { indexTasks } from "../../src/domain/derive.ts";
 import type { TaskFile } from "../../src/domain/types.ts";
 
+const NOW = Date.parse("2026-09-14T12:00:00Z");
 const ME = "me@host";
 const OTHER = "other@host";
 
@@ -29,6 +30,8 @@ function input(over: Partial<GateInput> & { tasks?: TaskFile[] } = {}): GateInpu
     actor: ME,
     transition: "close",
     lease: null,
+    now: NOW,
+    leaseHours: 4,
     ...over,
   };
 }
@@ -207,4 +210,43 @@ test("子任务的子任务不算 —— 只看直接子任务", () => {
   const kid = task("tp-000002", { parent: "tp-000001", status: "closed", resolution: "done" });
   const grandkid = task("tp-000003", { parent: "tp-000002" });
   assert.deepEqual(evaluateGates(input({ task: parent, tasks: [parent, kid, grandkid] })), []);
+});
+
+
+// ---- 租约过期（Codex 第二轮评审：过期租约不该继续拦人，spec §8）----
+
+const LIVE = { actor: OTHER, claimed_at: "2026-09-14T10:00:00Z", heartbeat_at: "2026-09-14T11:00:00Z" };
+const EXPIRED = { actor: OTHER, claimed_at: "2020-01-01T00:00:00Z", heartbeat_at: "2020-01-01T00:00:00Z" };
+
+test("过期的租约不再拦人 —— 三条迁移一视同仁", () => {
+  // 第一版只比对租约的 actor，不问它过没过期，于是一份 2020 年的孤儿租约会
+  // **永远**挡住这个任务，而使用者除了 doctor --fix（F13）别无出路。
+  for (const transition of ["done", "close", "reopen"] as const) {
+    const t = transition === "reopen"
+      ? task("tp-000001", { status: "closed", resolution: "done" })
+      : task("tp-000001");
+    assert.deepEqual(evaluateGates(input({ task: t, transition, lease: EXPIRED })), [],
+      `${transition} 不该被过期租约挡住`);
+  }
+});
+
+test("还活着的租约照常拦人 —— 三条迁移一视同仁", () => {
+  for (const transition of ["done", "close", "reopen"] as const) {
+    const t = transition === "reopen"
+      ? task("tp-000001", { status: "closed", resolution: "done" })
+      : task("tp-000001");
+    const rs = evaluateGates(input({ task: t, transition, lease: LIVE }));
+    assert.deepEqual(rs.map((r) => r.gate), ["ownership"], `${transition} 该被活租约挡住`);
+    assert.equal(rs[0]!.code, 3);
+  }
+});
+
+test("恰好等于 lease_hours 时还算活着 —— 与 claim 的 leaseExpired 同一个判据", () => {
+  const at = new Date(NOW - 4 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const t = task("tp-000001", { status: "closed", resolution: "done" });
+  const exactly = { actor: OTHER, claimed_at: at, heartbeat_at: at };
+  assert.equal(evaluateGates(input({ task: t, transition: "reopen", lease: exactly })).length, 1,
+    "严格大于才算过期");
+  const justOver = { ...exactly, heartbeat_at: new Date(NOW - 4 * 3_600_000 - 1000).toISOString().replace(/\.\d{3}Z$/, "Z") };
+  assert.deepEqual(evaluateGates(input({ task: t, transition: "reopen", lease: justOver })), []);
 });

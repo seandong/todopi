@@ -166,7 +166,14 @@ export function prepareUpdate(
       `Task ${id} cannot be read: ${target.parseError}. Run "todopi doctor" to see what is wrong with it.`);
   }
 
-  const body = next.appendLog === undefined ? target.body : appendLogLine(target.body, next.appendLog);
+  // **写回时把正文规范化成 LF**（spec §5.1：行尾 LF，无 BOM）。
+  //
+  // 读取侧对 CRLF 是容错的（`sectionLines` 会去掉行尾的 \r），否则一份 CRLF
+  // 文件会让门禁静默失效。但容错读取不等于把不合规的行尾一路带回磁盘——
+  // 我一度以为「写回自然回到 LF」，实测并没有：原样带回的 body 里 \r 还在
+  // （Codex 第二轮评审）。写者 MUST 发 LF，所以在这里落实。
+  const rawBody = target.body.replace(/\r\n/g, "\n");
+  const body = next.appendLog === undefined ? rawBody : appendLogLine(rawBody, next.appendLog);
   const text = `---\n${emitFrontmatter({ ...next.frontmatter, updated: now })}---\n${body}`;
 
   // **校验在写入之前**，与 createTask 同样的理由（F03 第二轮评审的结论）：

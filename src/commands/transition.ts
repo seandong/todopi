@@ -81,6 +81,9 @@ export function runTransition(opts: TransitionOptions, shape: TransitionShape): 
       // **共享租约与任务文件一起查。** 租约跨 worktree 共享而任务文件不共享，
       // 本树说「是我的」完全可能是过期视图（D019）。
       lease: readLease(ledger, opts.id),
+      // 时钟用毫秒；秒级截断只用于序列化。F05 在这个边界上分叉过一次（D018）。
+      now: Date.now(),
+      leaseHours: ledger.config.lease_hours,
     });
 
     // **状态门禁越不过去。** spec §6.1：`--force` 覆盖的是对「是否就绪」的判断，

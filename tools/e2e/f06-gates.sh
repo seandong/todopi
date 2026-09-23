@@ -232,4 +232,67 @@ done < "$TMP/cmds"
 [ "$bad" -eq 0 ] && ok "报告给出的每条命令都能跑（没有用法错误）" || true
 grep -q 'todopi check ' "$TMP/cmds" && fail "建议了尚不存在的 todopi check" || ok "没有建议尚不存在的命令"
 
+
+# 21. 过期的租约不该继续拦人（spec §8 的 stale 语义）
+R=$(cli -C "$W" --json add "expired lease" | jfield id)
+cli -C "$W" done "$R" >/dev/null 2>&1
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+fs.writeFileSync(p, JSON.stringify({actor:"ghost@host",claimed_at:"2020-01-01T00:00:00Z",heartbeat_at:"2020-01-01T00:00:00Z"},null,2)+"\n");
+' "$LEASES/$R.json"
+cli -C "$W" reopen "$R" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "过期的孤儿租约不拦 reopen" || fail "过期租约把任务永远锁住了"
+
+# 22. reopen 遇活租约时不建议 claim --steal（那条命令对 closed 任务必然失败）
+S=$(cli -C "$W" --json add "reopen advice" | jfield id)
+cli -C "$W" done "$S" >/dev/null 2>&1
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+const now=new Date().toISOString().replace(/\.\d{3}Z$/,"Z");
+fs.writeFileSync(p, JSON.stringify({actor:"holder@host",claimed_at:now,heartbeat_at:now},null,2)+"\n");
+' "$LEASES/$S.json"
+out="$(cli -C "$W" reopen "$S" 2>&1)"
+# 检查的是「有没有一条 todopi … 命令带 --steal」，不是字符串出现过没有——
+# 解释里那句「claim --steal 在这里不适用」是**有用的**，它提前挡住了 agent 去试。
+if printf '%s' "$out" | grep -E '^\s*todopi .*--steal' >/dev/null; then
+  fail "reopen 给出了对 closed 任务必然失败的 claim --steal 命令"
+else
+  ok "reopen 不给出 claim --steal 这条命令"
+fi
+case "$out" in *"does not apply"*) ok "并且明说了它为什么不适用" ;; *) fail "没解释为什么不能 steal" ;; esac
+case "$out" in *holder@host*) ok "但说清了是谁持有" ;; *) fail "没说是谁持有" ;; esac
+
+# 23. CRLF 正文被改写后规范化成 LF（spec §5.1：行尾 LF）
+U=$(cli -C "$W" --json add "crlf normalize" | jfield id)
+node -e '
+const fs=require("node:fs"),p=process.argv[1];
+const raw=fs.readFileSync(p,"utf8"); const i=raw.indexOf("---",3)+4;
+fs.writeFileSync(p, raw.slice(0,i) + raw.slice(i).replace(/\n/g,"\r\n"));
+' "$W/.todopi/tasks/$U.md"
+cli -C "$W" done "$U" >/dev/null 2>&1
+if grep -q $'\r' "$W/.todopi/tasks/$U.md"; then
+  fail "改写之后正文仍是 CRLF —— 写者 MUST 发 LF（§5.1）"
+else
+  ok "改写之后正文规范化成 LF"
+fi
+
+# 24. 文本报告里出现的命令，恰好就是 --json actions 里的那些
+V=$(cli -C "$W" --json add "same commands" --ac "x" | jfield id)
+cli -C "$W" --json add "same child" --parent "$V" >/dev/null 2>&1
+cli -C "$W" --json done "$V" 2>/dev/null > "$TMP/j.json"
+cli -C "$W" done "$V" 2>/dev/null > "$TMP/t.txt"
+if node -e '
+const fs=require("node:fs");
+const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const text=fs.readFileSync(process.argv[2],"utf8");
+const fromJson=[...new Set(r.actions.map(a=>a.command).filter(Boolean))].sort();
+const inText=[...new Set(text.split("\n").map(l=>l.trim()).filter(l=>l.startsWith("todopi ")))].sort();
+if(JSON.stringify(fromJson)!==JSON.stringify(inText))
+  throw new Error("文本 "+JSON.stringify(inText)+" 与 JSON "+JSON.stringify(fromJson)+" 不一致");
+' "$TMP/j.json" "$TMP/t.txt" 2>/dev/null; then
+  ok "文本与 --json 给出的命令集合完全一致"
+else
+  fail "文本与 --json 的命令集合分叉了"
+fi
+
 [ "$FAILED" -eq 0 ] && { echo "f06-gates: pass"; exit 0; } || { echo "f06-gates: fail"; exit 1; }
