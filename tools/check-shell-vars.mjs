@@ -9,7 +9,7 @@
 //
 // heredoc 正文单独处理：里面的引号是数据，不改变 shell 的引号状态（第五轮评审：正文里一个孤立的 `'`
 // 让扫描器以为进了单引号，跳过了后面真正会展开的 `$x，`）。`<<'EOF'` / `<<"EOF"` / `<<\EOF` 的正文不展开，
-// 跳过；`<<EOF` 的正文展开，只认反斜杠转义。找不到结束行的 `<<` 不当 heredoc（`(( a<<b ))` 是移位）。
+// 跳过；`<<EOF` 的正文展开，只认反斜杠转义。没有结束行的正文照 bash 延伸到文末；`(( a<<b ))` 里的是移位。
 //
 // 已知多报（宁可多报——加花括号在那里无害）：双引号里 `$( ... '$x，' ... )` 这种嵌套命令替换中受单引号
 // 保护的。
@@ -44,50 +44,65 @@ export function findUnbracedVars(text) {
     return name === "" ? j : k;
   };
   const pending = [];             // 这一行上登记了、正文从下一行开始的 heredoc
-  // 从 j（正文第一个字符）起依次读完 pending 里每个 heredoc 的正文；有一个找不到结束行就整体放弃，返回 -1。
+  // 从 j（正文第一个字符）起依次读完 pending 里每个 heredoc 的正文，返回之后的位置。没有结束行的正文
+  // 按 bash 的做法一直延伸到文末（bash 只给一句警告）——那之后本来就没有 shell 代码了。
   const bodies = (j) => {
-    const found = [];
     for (const h of pending) {
-      let k = j, end = -1;
+      let k = j, end = text.length;
       while (k < text.length) {
         let nl = text.indexOf("\n", k);
         if (nl < 0) nl = text.length;
-        if ((h.strip ? text.slice(k, nl).replace(/^\t+/, "") : text.slice(k, nl)) === h.delim) { end = nl + 1; break; }
+        if ((h.strip ? text.slice(k, nl).replace(/^\t+/, "") : text.slice(k, nl)) === h.delim) { end = Math.min(nl + 1, text.length); break; }
         k = nl + 1;
       }
-      if (end < 0) return -1;
-      found.push([h, j, k]);      // 正文是 [j, k)
-      j = end;
-    }
-    for (const [h, from, to] of found) {
-      let line = ln;
-      for (let k = from; k < to; k++) {
-        if (text[k] === "\n") { line += 1; continue; }
+      const to = Math.min(k, text.length);                 // 正文是 [j, to)
+      for (let m = j; m < to; m++) {
+        if (text[m] === "\n") { ln += 1; continue; }
         if (!h.expand) continue;
-        if (text[k] === "\\") { if (text[k + 1] === "\n") line += 1; k += 1; continue; }
-        if (text[k] === "$") {
-          const e = variable(k + 1, line);
-          for (let m = k + 1; m < e; m++) if (text[m] === "\n") line += 1;
-          k = Math.max(k, e - 1);
+        if (text[m] === "\\") { if (text[m + 1] === "\n") ln += 1; m += 1; continue; }
+        if (text[m] === "$") {
+          const e = variable(m + 1, ln);
+          for (let q = m + 1; q < e; q++) if (text[q] === "\n") ln += 1;
+          m = Math.max(m, e - 1);
         }
       }
+      if (end > to) ln += 1;                               // 结束行本身
+      j = end;
     }
-    for (let k = pending.length ? found[0][1] : j; k < j; k++) if (text[k] === "\n") ln += 1;
+    pending.length = 0;
     return j;
+  };
+  // 读 `<<` 后面的定界符：一个 shell 词，到没被引住的元字符为止；引号去掉后拼起来（`'E''OF'` 是 EOF，
+  // `END-TAG` 是整个词——第六轮评审）。词里有任何引号或反斜杠，正文就不展开。
+  const delimiter = (j) => {
+    let word = "", quoted = false;
+    while (j < text.length && /[ \t]/.test(text[j])) j += 1;
+    while (j < text.length && !/[\s;&|<>()]/.test(text[j])) {
+      const c = text[j];
+      if (c === "'" || c === '"') {
+        const close = text.indexOf(c, j + 1);
+        if (close < 0) return null;
+        word += text.slice(j + 1, close); quoted = true; j = close + 1;
+      } else if (c === "\\") { word += text[j + 1] ?? ""; quoted = true; j += 2; }
+      else { word += c; j += 1; }
+    }
+    return word === "" ? null : { word, quoted, next: j };
   };
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (c === "\n") ln += 1;
     if (c === "\n" && !single && !double && pending.length > 0) {
-      const next = bodies(i + 1);
-      pending.length = 0;
-      if (next >= 0) { i = next - 1; atWordStart = true; continue; }
+      i = bodies(i + 1) - 1; atWordStart = true; continue;
     }
     if (!single && !double && c === "<" && text[i + 1] === "<" && text[i + 2] !== "<") {
-      const m = /^<<(-?)[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|\\([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))/.exec(text.slice(i, i + 200));
-      if (m !== null) {
-        pending.push({ strip: m[1] === "-", delim: m[2] ?? m[3] ?? m[4] ?? m[5], expand: m[5] !== undefined });
-        i += m[0].length - 1; atWordStart = false; continue;
+      // 算术里的 `<<` 是移位：同一行上前面有没关上的 `((`。
+      const before = text.slice(text.lastIndexOf("\n", i) + 1, i);
+      const arith = (before.match(/\(\(/g) ?? []).length > (before.match(/\)\)/g) ?? []).length;
+      const strip = text[i + 2] === "-";
+      const d = arith ? null : delimiter(i + 2 + (strip ? 1 : 0));
+      if (d !== null) {
+        pending.push({ strip, delim: d.word, expand: !d.quoted });
+        i = d.next - 1; atWordStart = false; continue;
       }
     }
     if (single) { if (c === "'") single = false; atWordStart = false; continue; }

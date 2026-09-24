@@ -58,7 +58,21 @@ test("heredoc：带引号的定界符不展开、不报；裸定界符展开、�
   assert.deepEqual(find("cat <<EOF\n\\$x，\nEOF"), [], "转义了的 $ 不展开");
 });
 
-test("一行上两个 heredoc 按顺序读；找不到结束行的 << 不是 heredoc（算术移位）", () => {
+test("一行上两个 heredoc 按顺序读，行号各自对（第六轮评审：第二段曾从第一段的起始行算）", () => {
   assert.deepEqual(find("cat <<A <<'B'\n$a，\nA\n$b，\nB\necho $c，"), [[2, "a"], [6, "c"]]);
+  assert.deepEqual(find("cat <<A <<B\nfirst\nA\n$x，\nB"), [[4, "x"]]);
+});
+
+test("定界符是一个完整的 shell 词：引号片段拼接、连字符都算（第六轮评审）", () => {
+  assert.deepEqual(find("cat <<'E''OF'\n'\nEOF\necho $x，"), [[4, "x"]]);
+  assert.deepEqual(find("cat <<END-TAG\n'\nEND-TAG\necho $x，"), [[4, "x"]]);
+  assert.deepEqual(find("cat <<E\"O\"F\n$y，\nEOF\necho $x，"), [[4, "x"]], "部分加引号也不展开");
+  assert.deepEqual(find("cat <<EOF>/dev/null\n$y，\nEOF"), [[2, "y"]], "定界符在重定向符号前结束");
+});
+
+test("没有结束行的 heredoc 照 bash 延伸到文末；算术里的 << 是移位", () => {
+  assert.deepEqual(find("cat <<EOF\n'\n$x，"), [[3, "x"]]);
+  assert.deepEqual(find("cat <<'EOF'\n$x，"), []);
   assert.deepEqual(find("echo $(( 1<<x ))\necho $y，"), [[2, "y"]]);
+  assert.deepEqual(find("(( a <<= b ))\necho $y，"), [[2, "y"]]);
 });
