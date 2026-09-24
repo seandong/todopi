@@ -3,8 +3,8 @@ import { hostname } from "node:os";
 import { currentActor } from "./actor.ts";
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
-import { readHeartbeats } from "../format/lease.ts";
-import { indexTasks, deriveState, isBlocked, isReady, statusOf, type StaleInput } from "../domain/derive.ts";
+import { indexTasks, deriveState, isBlocked, isReady, statusOf } from "../domain/derive.ts";
+import { isDisplayable, staleInputFor } from "./view.ts";
 import { validateFile } from "../domain/validate.ts";
 import { isMine } from "../domain/actor.ts";
 import { sortTasks } from "../domain/order.ts";
@@ -46,31 +46,9 @@ export function parseLimit(raw: string): number {
   return n;
 }
 
-/**
- * ls 能不能把这个文件当成一份正常任务来显示。
- *
- * 用的是 validateFile 已有的 rule 分类，不另起一个校验器——两个校验器一定会漂移。
- *
- * **名单反着列**：只写出 ls 可以容忍的那几条，其余一律排除并报告。
- * 正着列（「这几条要排除」）的话，将来新增的规则会默认从缝里漏过去，
- * 而漏过去的方向正是「把一个有问题的文件当成正常任务显示」——第一版就是
- * 这么让 `assignee: 123` 变成一条 ready 任务的（Codex 第二轮评审）。
- *
- * 容忍的三条都是「字段值本身合法、只是组合非法」：
- *   invariant-2  resolution 与 closed 不配套
- *   invariant-3  assignee 与 in_progress 不配套
- *   invariant-6  updated 早于 created
- * 这类任务照常渲染，按 spec §7 派生出的结果也是对的（§7.5 的 ready 只看状态
- * 与图，不看不变量），报告它们是 doctor 的职责。
- *
- * 其余都说明**字段值本身不对**——坏信封、id 对不上、字段取值非法、actor 语法
- * 非法、冲突标记。这样的文件没法渲染也没法派生：缺 title 就是一行空标题，
- * blocked_by 里的非法项会被读取侧丢掉而无人知晓。必须挡下并单独报告。
- */
-const TOLERATED: ReadonlySet<string> = new Set(["invariant-2", "invariant-3", "invariant-6"]);
-
-function isDisplayable(findings: ReturnType<typeof validateFile>): boolean {
-  return findings.every((f) => TOLERATED.has(f.rule));
+/** 容忍名单与 stale 输入在 view.ts，`show` 用的是同一份——两份实现迟早会漂。 */
+function displayable(t: Parameters<typeof validateFile>[0]): boolean {
+  return isDisplayable(validateFile(t));
 }
 
 export function runLs(opts: LsOptions): LsReport {
@@ -88,7 +66,7 @@ export function runLs(opts: LsOptions): LsReport {
   const read = readTasks(ledger);
   const invalid: string[] = [];
   const tasks = read.filter((t) => {
-    if (isDisplayable(validateFile(t))) return true;
+    if (displayable(t)) return true;
     invalid.push(t.idFromFilename);
     return false;
   });
@@ -106,12 +84,7 @@ export function runLs(opts: LsOptions): LsReport {
   // doctor 给出原因；但「为什么这个父任务忽然可以 claim 了」不会自动说清楚。
   const index = indexTasks(read);
 
-  const heartbeats = readHeartbeats(ledger);
-  const stale: StaleInput = {
-    now: Date.now(),
-    leaseHours: ledger.config.lease_hours,
-    heartbeatAt: (id) => heartbeats.get(id) ?? null,
-  };
+  const stale = staleInputFor(ledger);
   // FR-C4：查询身份也走完整解析链，不只是 --as
   const who = { actor: currentActor(ledger.root, opts.actor), host: hostname() };
 

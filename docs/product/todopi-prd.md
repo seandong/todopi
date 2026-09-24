@@ -324,6 +324,17 @@ todopi import <file.md> | import beads [path]
   （FR-Q5 写进 AGENTS.md 的那段）说「`.todopi/` 改动与工作同一 commit」，而 `done`
   必然在代码提交之后，要不要写明这个例外；(v) 拒绝报告该不该带上任务正文里的
   Repair 段——旧 harness 会在失败层当场打印它。这五条都未经产品决策，仅为记录。
+- **`show` 看不见未识别小节，而本仓库的任务都有一个。** 2026-09-24 实现 F08 时在真实账本上
+  dogfood 发现：自举迁移给每个任务写了 `## Repair` 段（失败时怎么修），而格式规格 §5.3 规定
+  未识别的小节「MUST be ignored by readers」，所以 `show` 不显示它。这里没有让 `show` 越过
+  规格——读 Repair 继续用 `cat .todopi/tasks/<id>.md`。开放的问题是：Repair 这类「失败时看
+  什么」的信息，该不该有一个被识别的位置（第五个 H2，或 `verify` 旁边的字段）。那是格式规格
+  的变更，要走 §9 的版本流程，不在这里定。未经产品决策，仅为记录。
+  同一次 dogfood 还发现了另一处并**已修**：自举任务的验收判据是散文（`check` 要等 F09），
+  而 `show` 起初只显示勾选项，于是整段判据消失了——恰恰是 AGENTS.md 要求 `done` 之前人工核对
+  的那段。Acceptance Criteria 是**已识别**的小节，里面的非勾选行 spec §5.3.2 只要求写入者
+  原样保留，显示它们不碰文件，所以现在 `show` 把它们作为 `acceptance_notes` 原样显示，不编号、
+  不参与门禁。
 - **`project_id`** —— 一个能在移动与克隆后保持稳定的标识，跨仓视图和将来任何同步都需要它。现在不加，是因为格式规格 §9 明确把「新增配置键」归类为不升版本的加性变更，所以它随时可以在有消费者时引入，并由 `doctor --fix` 回填。提前加等于发布一个没人读的字段。
 
 产品负责人的动作：续费 todopi.com（2026-11-20 到期）；注册 todopi.dev；在 npm 发布 `todopi` / `@todopi` 占位；创建 GitHub org；人工商标检索（USPTO、EUIPO）；为导入器测试准备两份真实 Beads Classic 导出。

@@ -140,6 +140,26 @@ lsOptions(program.command("ready").description("alias for `ls --ready`"))
   .action(async (cmdOpts: LsCmdOptions) => { await lsAction({ ...cmdOpts, ready: true }); });
 
 program
+  .command("show")
+  .description("print one task in detail")
+  .argument("<id>", "the task to show")
+  .option("--full", "show every Log entry, not just the last five")
+  .option("--tree", "show the parent chain and the children with their progress")
+  .action(async (id: string, cmdOpts: { full?: boolean; tree?: boolean }) => {
+    const { runShow } = await import("./commands/show.ts");
+    const { renderShow, renderShowJson } = await import("./output/render/show.ts");
+    const opts = program.opts();
+    const report = runShow({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      id,
+      full: cmdOpts.full,
+      tree: cmdOpts.tree,
+      actor: opts["as"] as string | undefined,
+    });
+    process.stdout.write(opts["json"] === true ? renderShowJson(report) + "\n" : renderShow(report));
+  });
+
+program
   .command("claim")
   .description("take ownership of a task and start working on it")
   .argument("<id>", "the task to claim")

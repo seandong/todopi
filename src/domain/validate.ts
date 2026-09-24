@@ -78,11 +78,16 @@ export function validateFile(t: TaskFile): Finding[] {
       at("invariant-8", `assignee ${JSON.stringify(assignee)} does not match spec §5.4 (1-64 characters, no whitespace or colon)`);
     }
   }
-  for (const line of logLines(t.body)) {
+  for (const { head: line, continuation } of logEntries(t.body)) {
     const parsed = parseLogLine(line);
     if (!parsed.ok) {
       at("field", `Log line does not match the spec §5.3.3 grammar: ${parsed.error}  --  ${line}`);
       continue;
+    }
+    // spec §5.3.3：续行是 <text> 的延续。头行没有 `: <text>`，续行就无所归属——
+    // 读者若照样拼上去，一条 `created` 就凭空带上了正文（F08 评审构造的伪造）。
+    if (parsed.text === undefined && continuation.length > 0) {
+      at("field", `Log line has continuation lines but no ": <text>" for them to continue (spec §5.3.3)  --  ${line}`);
     }
     if (!ACTOR_RE.test(parsed.actor)) {
       at("invariant-8", `Log line actor ${JSON.stringify(parsed.actor)} does not match spec §5.4`);
@@ -157,6 +162,39 @@ export function validateFile(t: TaskFile): Finding[] {
  */
 export function logLines(body: string): string[] {
   return sectionLines(body, "## Log").map((l) => l.text).filter((t) => t.startsWith("- "));
+}
+
+/** Log 的一条：第一行（含 `- `）加上紧随其后的续行（已去掉两格缩进）。 */
+export type LogEntry = { head: string; continuation: string[] };
+
+/**
+ * 取 `## Log` 小节的条目，**续行并进它上面那一条**。
+ *
+ * spec §5.3.3：「A multi-line text continues on following lines indented by two
+ * spaces; readers join them with `\n`」。`logLines` 只取 `- ` 开头的行，续行被
+ * 丢掉——F07 的 forced done 会把 verify 输出的最后 512 字节作为续行写进来，而
+ * `show` 要的是完整的那一条。
+ *
+ * **不改 `logLines`**：`isUnverified` 与 doctor 只关心每条的第一行，改它会牵连
+ * 那两处。两者在「有几条、每条第一行是什么」上必须一致，用例钉着这一点。
+ *
+ * 空行结束续行：写入端把输出里的空行写成两个空格（仍然是续行），真正的空行只会是
+ * 条目之间的分隔。续行只去掉**两格**，更深的缩进是原文的一部分。
+ */
+export function logEntries(body: string): LogEntry[] {
+  const out: LogEntry[] = [];
+  let current: LogEntry | null = null;
+  for (const { text } of sectionLines(body, "## Log")) {
+    if (text.startsWith("- ")) {
+      current = { head: text, continuation: [] };
+      out.push(current);
+    } else if (current !== null && text.startsWith("  ")) {
+      current.continuation.push(text.slice(2));
+    } else {
+      current = null;
+    }
+  }
+  return out;
 }
 
 export type ParsedLogLine =

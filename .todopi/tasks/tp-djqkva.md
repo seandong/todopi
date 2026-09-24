@@ -1,7 +1,9 @@
 ---
 id: "tp-djqkva"
 title: "todopi show 打印任务详情，--tree 显示父子链与子任务进度"
-status: "open"
+status: "closed"
+resolution: "done"
+assignee: "seandong"
 blocked_by: ["tp-oqgjt3"]
 rank: "i7"
 verify: "make check && make test && bash tools/e2e/f08-show.sh"
@@ -10,7 +12,7 @@ external:
   harness:
     legacy_id: "F08"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-23T09:40:27Z"
+updated: "2026-09-24T04:07:00Z"
 ---
 
 ## Description
@@ -43,3 +45,5 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 ## Log
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F08
+- 2026-09-24T03:43:12Z seandong claimed
+- 2026-09-24T04:07:00Z seandong done verify=pass commit=92baaf7 dirty=false
