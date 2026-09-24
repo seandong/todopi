@@ -7,8 +7,8 @@
 // 这是「规则的措辞对，check 比措辞宽」的第九次；grep 看不见引号状态，所以换成这个逐字符的扫描：
 // 跨行跟踪单引号（e2e 里大量跨行的 `node -e '...'`），跳过单引号内与注释。
 //
-// 已知不处理：`<<'EOF'` 这类不展开的 heredoc 正文里的 `$x，` 仍会被报。加花括号在那里无害，
-// 所以宁可多报。
+// 已知多报（宁可多报——加花括号在那里无害）：`<<'EOF'` 这类不展开的 heredoc 正文里的，以及双引号里
+// `$( ... '$x，' ... )` 这种嵌套命令替换中受单引号保护的。
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -27,13 +27,17 @@ export function findUnbracedVars(text) {
   let single = false, double = false;
   const lines = text.split("\n");
   lines.forEach((line, ln) => {
+    // 「上一个字符是没被转义的分隔符」——`#` 只在一个词的开头才开注释。`foo\ #$x` 里的空格被转义了，
+    // `#` 仍是同一个词的一部分，bash 会展开后面的 $x（F10 第二轮评审构造的漏报）。
+    let atWordStart = true;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
-      if (single) { if (c === "'") single = false; continue; }
-      if (c === "\\") { i += 1; continue; }
-      if (c === "'" && !double) { single = true; continue; }
-      if (c === '"') { double = !double; continue; }
-      if (c === "#" && !double && (i === 0 || /[\s;]/.test(line[i - 1]))) break;   // 注释
+      if (single) { if (c === "'") single = false; atWordStart = false; continue; }
+      if (c === "\\") { i += 1; atWordStart = false; continue; }
+      if (c === "'" && !double) { single = true; atWordStart = false; continue; }
+      if (c === '"') { double = !double; atWordStart = false; continue; }
+      if (c === "#" && !double && atWordStart) break;                               // 注释
+      atWordStart = !double && /[\s;|&()]/.test(c);
       if (c === "$") {
         const m = /^[A-Za-z_][A-Za-z0-9_]*/.exec(line.slice(i + 1));
         if (m !== null) {

@@ -246,10 +246,10 @@
       "id": "ARCH-025",
       "description": "markdown/ 什么都不 import",
       "applies_when": "test -d src/markdown",
-      "check": "grep -rnE \"^import \" src/markdown --include='*.ts' || true",
+      "check": "grep -rnE \"^[[:space:]]*(import|export)[[:space:]].*from[[:space:]]*['\\\"]|^[[:space:]]*import[[:space:]]*['\\\"]|import[[:space:]]*\\\\(|require[[:space:]]*\\\\(\" src/markdown --include='*.ts' || true",
       "expect": "empty",
       "what": "src/markdown/ 引入了别的模块。",
-      "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。",
+      "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。 2026-09-24 评审：第一版只匹配行首的 `import `，缩进的 import、`export … from`、动态 import 都能引入依赖而不触发。",
       "fix": "把依赖挪回调用方，markdown/ 只收字符串、只回字符串与行号。"
     }
   ]

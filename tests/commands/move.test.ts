@@ -66,6 +66,8 @@ test("只重写一个文件（FR-T5），并在它的 Log 里记 moved", () => {
   const before = inodes();
   runMove({ directory: d, id: ids["c"]!, before: ids["b"]!, actor: ME });
   const after = inodes();
+  // 先比文件名集合：只遍历操作前的文件名，会漏掉意外新建的文件（评审指出）。
+  assert.deepEqual([...after.keys()].sort(), [...before.keys()].sort(), "文件多了或少了");
   const changed = [...before.keys()].filter((f) => before.get(f) !== after.get(f));
   assert.deepEqual(changed, [`${ids["c"]}.md`], "写了被挪任务之外的文件");
   assert.match(read(d, ids["c"]!).trimEnd().split("\n").at(-1)!, /^- \S+Z me@host moved$/);

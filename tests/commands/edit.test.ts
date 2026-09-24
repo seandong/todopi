@@ -113,3 +113,29 @@ test("别人持有时拒绝（FR-C6：edit 在写入严格匹配名单里）", (
   runClaim({ directory: d, id: t, actor: OTHER });
   assert.throws(() => runEdit({ directory: d, id: t, title: "x", actor: ME }), code(EXIT.conflict));
 });
+
+test("评审的门禁绕过反例：不带 --force 的 done 必须被验收门禁拒绝", async () => {
+  const { runDone } = await import("../../src/commands/done.ts");
+  const { GateRefused } = await import("../../src/commands/transition.ts");
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  edit(d, t, (s) => s.replace("## Log", [
+    "## Plan", "", "  ```", "some code", "```", "",
+    "## Acceptance Criteria", "", "- [ ] must run checks", "",
+    "```", "example", "```", "", "## Log"].join("\n")));
+  runClaim({ directory: d, id: t, actor: ME });
+  assert.throws(() => runDone({ directory: d, id: t, actor: ME }), (e: unknown) => e instanceof GateRefused);
+  assert.match(read(d, t), /^status: "in_progress"$/m, "任务不该被关闭");
+});
+
+test("正文里有没闭合的围栏：edit -d 拒绝，而不是猜着删东西", () => {
+  // 读取端把没闭合的开头当普通文字（门禁必须看得见标准）；写入端不能据此去改写小节——
+  // 评审实测「## Plan 下没闭合的 ```md 后面跟 ## Description」会让围栏里的代码被删掉。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  edit(d, t, (s) => s.replace("## Log", "## Plan\n\n```md\n## Description\nsecret\n\n## Log"));
+  const before = read(d, t);
+  assert.throws(() => runEdit({ directory: d, id: t, description: "x", actor: ME }),
+    (e: unknown) => code(EXIT.usage)(e) && /unclosed code fence/.test((e as Error).message));
+  assert.equal(read(d, t), before);
+});

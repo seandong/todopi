@@ -238,10 +238,13 @@ export function rankBetween(lo: string | null, hi: string | null): string | null
 function libraryKeyAfter(lo: string): string | null {
   for (let c = 97; c <= 122; c++) {                          // "a".."z"
     const header = String.fromCharCode(c);
-    if (header <= lo[0]!) continue;
     for (let n = 0; n < MAX_RANK; n++) {
       const k = header + "0".repeat(n);
-      if (isLibraryKey(k)) return k;
+      if (!isLibraryKey(k)) continue;
+      // **按完整的键比较，不按首字符。** 第一版跳过了首字符不比 lo 大的头，于是从 "z" 出发找不到
+      // 任何候选——而 "z" 加 18 个 0 就是一个比 "z" 大的库键（F10 第二轮评审）。
+      if (k > lo) return k;
+      break;                                                 // 这个头最小的键都不够大，换下一个头
     }
   }
   return null;
@@ -275,8 +278,10 @@ function specBetween(lo: string, hi: string | null): string | null {
   if (lo === "") {
     const h = digit(hi[0]!);
     if (h > 0) return RANK_ALPHABET[Math.floor(h / 2)]!;
-    const rest = specBetween("", hi.slice(1));
-    return rest === null ? null : "0" + rest;
+    // hi 以 0 开头：只要 hi 不止一个字符，"0" 本身就比它小（前缀更短）。只有 hi === "0" 时，
+    // 它之前才真的没有非空串。第一版在这里递归下去，于是 (null, "00") 明明有 "0" 却说无解
+    // ——而属性测试的判据犯了同一个错（F10 第二轮评审）。
+    return hi.length > 1 ? "0" : null;
   }
   const l = digit(lo[0]!);
   const h = digit(hi[0]!);

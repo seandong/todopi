@@ -33,8 +33,12 @@ cli -C "$W" dep add "$A" --on "$B" >/dev/null 2>&1; rc=$?
 cli -C "$W" dep add "$B" --on "$C" >/dev/null 2>&1
 cli -C "$W" dep add "$C" --on "$A" >"$TMP/o" 2>"$TMP/e"; rc=$?
 [ "$rc" -eq 1 ] && ok "成环：退出 1" || fail "成环时退出 $rc"
-grep -q "cycle" "$TMP/e" && grep -q "$A" "$TMP/e" && grep -q "$B" "$TMP/e" && grep -q "$C" "$TMP/e" \
-  && ok "stderr 里有环的路径（三个 id 都在）" || fail "stderr 没有给出环：$(cat "$TMP/e")"
+# 断言一条连续、闭合的有向路径（A 等 B、B 等 C、C 等 A），而不只是三个 id 各自出现。
+path="$(grep -oE "cycle in the blocked_by graph: [a-z0-9 >-]+" "$TMP/e" | sed 's/^cycle in the blocked_by graph: //')"
+case " $path " in
+  *" $A -> $B -> $C -> $A "*|*" $B -> $C -> $A -> $B "*|*" $C -> $A -> $B -> $C "*) ok "stderr 里有连续闭合的环：${path}" ;;
+  *) fail "stderr 没有给出正确的环：$(cat "$TMP/e")" ;;
+esac
 # 否定式断言要有前提：先确认真的读到了 C 的 blocked_by，而不是空输出。被拒绝的是「C 等 A」，
 # 而 C 此前没有任何依赖（是 B 在等 C），所以它应当仍是空数组。
 bb="$(cli -C "$W" --json show "$C" 2>/dev/null | jget '.blocked_by')"
@@ -55,7 +59,9 @@ first="$(cli -C "$W" --json ls --all 2>/dev/null | jget '[0].id')"
 
 # 3. edit：记 edited fields=…，--label 的 -x 不被当成选项
 # 先把 nope 加上，删除才看得出效果——夹具里本来没有 nope 的话，忽略 -nope 的实现也能过（评审指出）。
-cli -C "$W" edit "$A" --label +nope >/dev/null 2>&1
+cli -C "$W" edit "$A" --label +nope >/dev/null 2>&1; rc=$?
+seeded="$(cli -C "$W" --json show "$A" 2>/dev/null | jget '.labels')"
+[ "$rc" -eq 0 ] && [ "$seeded" = '["nope"]' ] && ok "先种上 nope" || fail "种 nope 失败：rc=$rc labels=${seeded}"
 cli -C "$W" edit "$A" --title "a renamed" --label +x --label -nope >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 0 ] && ok "edit 退出 0（--label -nope 被当成值而不是选项）" || fail "edit 退出 $rc"
 lbl="$(cli -C "$W" --json show "$A" 2>/dev/null | jget '.labels')"

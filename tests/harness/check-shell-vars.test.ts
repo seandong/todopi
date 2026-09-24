@@ -21,6 +21,10 @@ test("跨行的单引号：node -e '...' 里面的都不算，出来之后的照
   assert.deepEqual(find(s), [[4, "y"]]);
 });
 
+test("转义空格后的 # 不开注释：`foo\\ #$x，` 里的 $x 会被展开（评审构造的漏报）", () => {
+  assert.deepEqual(find("echo foo\\ #$x，"), [[1, "x"]]);
+});
+
 test("加了花括号就不报；双引号里的 # 不是注释", () => {
   assert.deepEqual(find('echo "${x}，"'), []);
   assert.deepEqual(find('echo "#tag $x，"'), [[1, "x"]]);

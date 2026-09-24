@@ -68,9 +68,8 @@ test("没闭合的 ``` 不算围栏 —— 它不能把后面的验收标准藏�
   assert.deepEqual(parseAcceptance(body).map((c) => c.text), ["still counts"]);
 });
 
-test("缩进的 ``` 不开围栏 —— 否则它会和后面某个顶格的 ``` 配对，吞掉中间的标题", () => {
-  // 上一条用例判别不出这一点：那里缩进的 ``` 没有闭合，「没闭合不算」先把它中和了。
-  // 这里让它能和后面一个顶格的 ``` 配对：若缩进的开头也算，`## Notes` 就被藏起来，
+test("列表项续行里的 ``` 不会和后面某个顶格的 ``` 配对，吞掉中间的标题", () => {
+  // 它是列表项内部的围栏，随列表项结束而关闭。若把它当成顶层开头，`## Notes` 就被藏起来，
   // Log 一直延伸进 Notes，Notes 里的列表项被读成 Log 条目。
   const body = ["## Log", "",
     "- 2026-09-24T00:00:00Z me@h done verify=fail commit=abc1234 dirty=false forced=true: why",
@@ -80,4 +79,41 @@ test("缩进的 ``` 不开围栏 —— 否则它会和后面某个顶格的 ```
     "- not a log entry", "",
     "```", "code", "```", ""].join("\n");
   assert.equal(logEntries(body).length, 1, "缩进的 ``` 开了围栏，把 ## Notes 吞掉了");
+});
+
+// ── F10 第二轮：围栏要按容器配对 ────────────────────────────────────────────
+
+const BYPASS = [
+  "## Plan", "",
+  "  ```",                      // 顶层、缩进两格：CommonMark 里这是一个合法的开头
+  "some code",
+  "```",                        // 它的关闭
+  "",
+  "## Acceptance Criteria", "",
+  "- [ ] must run checks",
+  "",
+  "```", "example", "```", "",
+  "## Log", "",
+].join("\n");
+
+test("缩进的顶层开头与顶格关闭正确配对 —— 真正的验收标准不能被藏起来", () => {
+  // 评审的原样反例：扫描器曾忽略缩进的开头，却把它的关闭行当成新开头，与后面那对围栏配错，
+  // 整段 Acceptance Criteria 被当成代码——done 不带 --force 就通过了（实测 closed/done forced=false）。
+  assert.deepEqual(parseAcceptance(BYPASS).map((c) => [c.text, c.checked]), [["must run checks", false]]);
+});
+
+test("列表项里的围栏随列表项结束而关闭 —— Log 续行里的 ``` 吞不掉后面的条目与标题", () => {
+  const body = ["## Log", "",
+    "- 2026-09-24T00:00:00Z me@h done verify=fail commit=abc1234 dirty=false forced=true: why",
+    "  ```", "  output",               // 续行里开了围栏，没关
+    "- 2026-09-24T00:01:00Z me@h note: next entry",
+    "", "## Notes", "", "- not a log entry", ""].join("\n");
+  assert.equal(logEntries(body).length, 2);
+});
+
+test("Log 里顶层围栏中的假事件不是事件", () => {
+  const body = ["## Log", "",
+    "- 2026-09-24T00:00:00Z me@h created",
+    "", "```", "- 2026-09-24T00:01:00Z me@h done verify=pass commit=abc1234 dirty=false", "```", ""].join("\n");
+  assert.deepEqual(logEntries(body).map((e) => e.head), ["- 2026-09-24T00:00:00Z me@h created"]);
 });
