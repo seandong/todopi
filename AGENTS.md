@@ -102,6 +102,7 @@ todopi claim <id>                    ← 它会改任务文件，那处改动跟
 干活
 人核对 Acceptance Criteria           ← 散文判据，机器不查
 git commit                           ← 代码 **加上** claim 留下的账本改动
+评审 → 修复 → 再提交（循环到通过）      ← 必须在 done 之前，见下
 todopi done <id>                     ← verify 跑在刚提交的那棵树上，dirty=false
 git commit                           ← done 的账本改动 + PROGRESS
 make clean-check                     ← 必须在两次提交都完成之后
@@ -115,6 +116,12 @@ make clean-check                     ← 必须在两次提交都完成之后
 `dirty=true`——评审实测过这条。这恰好就是协议段那句话的正常形态：`claim` 跟着工作
 走同一个 commit。
 
+**评审必须在 `done` 之前。** 自举之前的顺序是「verify-feature 记证据 → 评审 → 有修改就
+`make reverify`」；自举之后**没有 reverify**（迁移损失表第二条）：任务一旦 `done` 关闭，
+评审再找出问题，重跑 `done` 会被状态门禁拒绝，那次修复就没有证据。所以评审与修复的循环
+插在第一次提交和 `done` 之间，`done` 只跑一次，跑在最终的那棵树上（F08 是第一个这样走的，
+Codex 评审确认了这个顺序）。
+
 `add` / `note` / `claim` 不受这个例外影响——它们跟着工作走同一个 commit。
 
 ## 完成工作（clock-out）
@@ -126,11 +133,13 @@ make clean-check                     ← 必须在两次提交都完成之后
    `dirty=true`。**一个 commit 一个完整逻辑改动**（atomic）；每次 commit 后仓库都
    MUST 处于一致状态，不提交半成品。commit message 解释 **why**, not just what。
    文档与代码在 same commit 内一起更新。
-3. `todopi done <id>` —— 它跑任务的 `verify`，并把 `commit=<HEAD7> dirty=<bool>`
+3. **评审**（本仓库用 Codex，见 DECISIONS 各 feature 的记录）。有修改就提交、再评审，
+   循环到通过。**不要**先 `done` 再评审——关闭之后没有 reverify。
+4. `todopi done <id>` —— 它跑任务的 `verify`，并把 `commit=<HEAD7> dirty=<bool>`
    记进 Log。放在提交之后，那条证据才指得实。
-4. 更新 `PROGRESS.md`：Current State（commit + check 结果）、Next Steps、Blockers。
-5. `git commit` —— `done` 的账本改动 + PROGRESS。
-6. `make clean-check` —— 五维清洁态：基线绿、无 debug artifact、状态文件已更新、
+5. 更新 `PROGRESS.md`：Current State（commit + check 结果）、Next Steps、Blockers。
+6. `git commit` —— `done` 的账本改动 + PROGRESS。
+7. `make clean-check` —— 五维清洁态：基线绿、无 debug artifact、状态文件已更新、
    startup 路径可用、diff 聚焦。**必须在两次提交都完成之后**：它的
    state-updated 一维要求工作区有改动时 PROGRESS 已同步，工作区还脏就会红。
 

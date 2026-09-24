@@ -78,11 +78,16 @@ export function validateFile(t: TaskFile): Finding[] {
       at("invariant-8", `assignee ${JSON.stringify(assignee)} does not match spec §5.4 (1-64 characters, no whitespace or colon)`);
     }
   }
-  for (const line of logLines(t.body)) {
+  for (const { head: line, continuation } of logEntries(t.body)) {
     const parsed = parseLogLine(line);
     if (!parsed.ok) {
       at("field", `Log line does not match the spec §5.3.3 grammar: ${parsed.error}  --  ${line}`);
       continue;
+    }
+    // spec §5.3.3：续行是 <text> 的延续。头行没有 `: <text>`，续行就无所归属——
+    // 读者若照样拼上去，一条 `created` 就凭空带上了正文（F08 评审构造的伪造）。
+    if (parsed.text === undefined && continuation.length > 0) {
+      at("field", `Log line has continuation lines but no ": <text>" for them to continue (spec §5.3.3)  --  ${line}`);
     }
     if (!ACTOR_RE.test(parsed.actor)) {
       at("invariant-8", `Log line actor ${JSON.stringify(parsed.actor)} does not match spec §5.4`);

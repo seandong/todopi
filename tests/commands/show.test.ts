@@ -235,12 +235,50 @@ test("Acceptance Criteria 里的非勾选行也显示 —— 自举任务的判�
   edit(d, t.id, (s) => s.replace("- [ ] a box", "Prose judgement: it must do X.\n\n- [ ] a box\n  - nested note"));
   const r = runShow({ directory: d, id: t.id });
   assert.deepEqual(r.acceptance.map((c) => c.text), ["a box"], "散文不该变成编号标准");
-  assert.equal(r.acceptance_notes, "Prose judgement: it must do X.\n\n  - nested note");
+  assert.deepEqual(r.acceptance_notes, [
+    { after: 0, text: "Prose judgement: it must do X." },
+    { after: 1, text: "  - nested note" },
+  ]);
   assert.match(renderShow(r), /Prose judgement: it must do X\./);
+});
+
+test("散文与标准交错时按原文顺序显示 —— 说明不能跑到别的标准底下", () => {
+  // 第一版把所有非勾选行抽出来统一放在编号项之后：第一条的说明被挪到第二条后面，
+  // 人工核对时会误读归属（评审在临时账本实测）。那版用例只查「内容出现」，没查顺序。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", acceptance: ["one", "two"], actor: ME });
+  edit(d, t.id, (s) => s.replace("- [ ] one\n", "- [ ] one\n  - NOTE-FOR-ONE\n"));
+  const out = renderShow(runShow({ directory: d, id: t.id }));
+  const one = out.indexOf("1. [ ] one"), note = out.indexOf("NOTE-FOR-ONE"), two = out.indexOf("2. [ ] two");
+  assert.ok(one >= 0 && note >= 0 && two >= 0, out);
+  assert.ok(one < note && note < two, `说明必须夹在第 1 条与第 2 条之间：\n${out}`);
 });
 
 test("没有非勾选内容时不出 acceptance_notes", () => {
   const d = repo();
   const t = runAdd({ directory: d, title: "T", acceptance: ["x"], actor: ME });
   assert.equal(runShow({ directory: d, id: t.id }).acceptance_notes, undefined);
+});
+
+test("Description 只剥首尾空行，不吃掉代码块的缩进", () => {
+  // 第一版对整段 .trim()，Markdown 缩进代码块首行的四格缩进会被吃掉（评审指出）。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME });
+  edit(d, t.id, (s) => s.replace("## Log", "## Description\n\n    indented code\n    more\n\n## Log"));
+  assert.equal(runShow({ directory: d, id: t.id }).description, "    indented code\n    more");
+});
+
+test("没有 : <text> 的头行挂着续行 —— 不能被显示成带正文的合法事件", async () => {
+  // spec §5.3.3：续行是 <text> 的延续。`created` 后面没有 `: text`，那一行续行就无所
+  // 归属；第一版把它显示成了一条带正文的 created（评审构造的伪造正文）。判定放在
+  // doctor 的 Log 语法检查里，show 与 ls 通过同一份容忍名单自动跟随。
+  const { runDoctor } = await import("../../src/commands/doctor.ts");
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME });
+  edit(d, t.id, (s) => s.trimEnd() + "\n  forged text\n");
+  assert.throws(() => runShow({ directory: d, id: t.id }),
+    (e: unknown) => e instanceof CliError && /doctor/.test(e.message));
+  const report = runDoctor({ directory: d });
+  assert.equal(report.ok, false);
+  assert.match(JSON.stringify(report), /continuation/);
 });

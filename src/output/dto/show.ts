@@ -22,8 +22,8 @@ export type TreeNode = {
 export type ShowProjection = {
   task: TaskProjection;
   acceptance: Criterion[];
-  /** Acceptance Criteria 小节里不是标准的那些行，已剥掉首尾空行 */
-  acceptanceNotes?: string;
+  /** Acceptance Criteria 小节里不是标准的内容，按位置切块 */
+  acceptanceNotes: { after: number; text: string }[];
   /** 已经截好的那几条（默认最近 5 条），各自带解析结果 */
   log: { entry: LogEntry; parsed: ParsedLogLine }[];
   logTotal: number;
@@ -57,10 +57,11 @@ export type ShowDto = TaskDto & {
   plan?: string;
   acceptance: { n: number; text: string; checked: boolean }[];
   /**
-   * Acceptance Criteria 小节里**不是**标准的内容（散文、嵌套项），原样。
-   * 不进 `acceptance`：它们不编号、不参与 done 的门禁（spec §5.3.2）。
+   * Acceptance Criteria 小节里**不是**标准的内容（散文、嵌套项），原样，按原文位置
+   * 切块：`after` 是它跟在第几条标准之后（0 = 第一条之前）。不进 `acceptance`：
+   * 它们不编号、不参与 done 的门禁（spec §5.3.2）。没有这类内容时省略。
    */
-  acceptance_notes?: string;
+  acceptance_notes?: { after: number; text: string }[];
   /** 显示出来的那几条，时间顺序 */
   log: LogEntryDto[];
   /** Log 一共有几条（续行不算单独一条） */
@@ -105,7 +106,7 @@ export function toShowDto(p: ShowProjection): ShowDto {
     log: p.log.map(logDto),
     log_total: p.logTotal,
   };
-  if (p.acceptanceNotes !== undefined) dto.acceptance_notes = p.acceptanceNotes;
+  if (p.acceptanceNotes.length > 0) dto.acceptance_notes = p.acceptanceNotes;
   if (typeof fm["verify"] === "string") dto.verify = fm["verify"];
   const ext = fm["external"];
   if (typeof ext === "object" && ext !== null && !Array.isArray(ext)) dto.external = ext as Record<string, unknown>;

@@ -438,6 +438,9 @@ cmd_test() {
     # 注意它在父运行器里**按文件**计：一个测试文件整体超过它也算失败（实测，5 秒
     # 时 claim、ls 等文件都红了）。实测全量在 30 秒超时下全过，120 秒留了 4 倍以上
     # 余量，只挡真挂死。
+    # 版本：--test-timeout 要 Node 20.11+。它不引入新约束——harness 直接跑 .ts，
+    # 靠的是 Node 22.6+ 的类型剥离（.tool-versions 钉 22.22.0），比它严格得多。
+    # package.json 的 engines ">=20" 管的是 npm 包的使用者，不是开发环境。
     node --test --test-timeout=120000 2>&1 | tee "$_tlog"
     _rc="${PIPESTATUS[0]}"
     if [ "$_rc" -eq 0 ]; then

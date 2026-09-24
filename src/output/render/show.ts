@@ -69,13 +69,17 @@ export function renderShow(d: ShowDto): string {
   if (d.description !== undefined) out.push("", "Description", indent(d.description, "  "));
   if (d.plan !== undefined) out.push("", "Plan", indent(d.plan, "  "));
 
-  if (d.acceptance.length > 0 || d.acceptance_notes !== undefined) {
+  const notes = d.acceptance_notes ?? [];
+  if (d.acceptance.length > 0 || notes.length > 0) {
     out.push("", "Acceptance Criteria");
-    for (const c of d.acceptance) out.push(`  ${c.n}. [${c.checked ? "x" : " "}] ${c.text}`);
-    // 不是标准的内容照原样跟在后面：不编号，也不参与 done 的门禁
-    if (d.acceptance_notes !== undefined) {
-      if (d.acceptance.length > 0) out.push("");
-      out.push(indent(d.acceptance_notes, "  "));
+    // 按原文位置交错：说明紧跟在它所属的那条标准后面，不编号、不参与门禁。
+    const noteAt = (n: number): void => {
+      for (const x of notes) if (x.after === n) out.push(indent(x.text, "  "));
+    };
+    noteAt(0);
+    for (const c of d.acceptance) {
+      out.push(`  ${c.n}. [${c.checked ? "x" : " "}] ${c.text}`);
+      noteAt(c.n);
     }
   }
 

@@ -35,27 +35,53 @@ const RECENT = 5;
  * 按 spec「MUST be ignored by readers」不显示。那是规格的边界，不是遗漏。
  */
 function section(body: string, heading: string): string | undefined {
-  const text = sectionLines(body, heading).map((l) => l.text).join("\n").trim();
+  const text = blankEdgesTrimmed(sectionLines(body, heading).map((l) => l.text)).join("\n");
   return text === "" ? undefined : text;
 }
 
 /**
- * Acceptance Criteria 小节里**不是**标准的那些行：散文、嵌套项、普通列表项。
+ * 只剥掉首尾的**空行**，不动任何一行的内容。
+ *
+ * 第一版对整段 `.trim()`，会吃掉 Markdown 代码块首行的四格缩进（评审指出）——
+ * 行内缩进是原文的一部分。
+ */
+function blankEdgesTrimmed(lines: string[]): string[] {
+  let a = 0;
+  let b = lines.length;
+  while (a < b && lines[a]!.trim() === "") a += 1;
+  while (b > a && lines[b - 1]!.trim() === "") b -= 1;
+  return lines.slice(a, b);
+}
+
+/**
+ * Acceptance Criteria 小节里**不是**标准的内容，按原文位置切成块：每块记下它跟在
+ * 第几条标准之后（0 = 第一条之前）。
  *
  * spec §5.3.2 说它们不是标准、MUST 原样保留——那是对写入者的约束。它们仍在一个
  * 已识别的小节里，显示出来不碰文件。本仓库自举时把判据写成了散文，不显示它们，
  * `show` 就看不见 AGENTS.md 要求 done 之前人工核对的那段话（真实账本上 dogfood
- * 才发现，tmp 里的 e2e 看不到）。
+ * 才发现）。
  *
- * 只剥掉首尾的空行，不 trim 行内缩进——嵌套项的缩进是它的一部分。
+ * **位置是这里的要点。** 第一版把所有非勾选行抽出来统一放在编号项之后：第一条
+ * 的说明被挪到第二条后面，人工核对时会误读归属（评审实测）。
  */
-function acceptanceNotes(body: string, criterionLines: Set<number>): string | undefined {
-  const lines = sectionLines(body, "## Acceptance Criteria")
-    .filter((l) => !criterionLines.has(l.index))
-    .map((l) => l.text);
-  while (lines.length > 0 && lines[0]!.trim() === "") lines.shift();
-  while (lines.length > 0 && lines.at(-1)!.trim() === "") lines.pop();
-  return lines.length === 0 ? undefined : lines.join("\n");
+function acceptanceNotes(body: string, criterionAt: Map<number, number>): { after: number; text: string }[] {
+  const out: { after: number; text: string }[] = [];
+  let after = 0;
+  let chunk: string[] = [];
+  const flush = (): void => {
+    const lines = blankEdgesTrimmed(chunk);
+    if (lines.length > 0) out.push({ after, text: lines.join("\n") });
+    chunk = [];
+  };
+  for (const l of sectionLines(body, "## Acceptance Criteria")) {
+    const n = criterionAt.get(l.index);
+    if (n === undefined) { chunk.push(l.text); continue; }
+    flush();
+    after = n;
+  }
+  flush();
+  return out;
 }
 
 function treeNode(index: TaskIndex, id: string): TreeNode {
@@ -128,7 +154,7 @@ export function runShow(opts: ShowOptions): ShowDto {
       mine: isMine(task.frontmatter["assignee"], who),
     },
     acceptance,
-    acceptanceNotes: acceptanceNotes(task.body, new Set(acceptance.map((c) => c.line))),
+    acceptanceNotes: acceptanceNotes(task.body, new Map(acceptance.map((c) => [c.line, c.n]))),
     log: shown.map((entry) => ({ entry, parsed: parseLogLine(entry.head) })),
     logTotal: entries.length,
     description: section(task.body, "## Description"),

@@ -55,18 +55,22 @@ else
 fi
 
 # 2. --full
-full="$(cli -C "$W" show "$T" --full 2>&1)"
+full="$(cli -C "$W" show "$T" --full 2>&1)"; rc=$?
+# 每条都断言退出 0：只查输出片段的话，打印完预期内容再失败也会报 pass（评审指出）。
+[ "$rc" -eq 0 ] && ok "--full 退出 0" || fail "--full 退出 $rc"
 printf '%s\n' "$full" | grep -q "^Log (7)$" && ok "--full 显示全部 7 条" || fail "--full 没展开"
 printf '%s\n' "$full" | grep -q "Z me@h created" && ok "--full 包含最早那条" || fail "--full 缺最早那条"
 
 # 3. --tree
-tree="$(cli -C "$W" show "$T" --tree 2>&1)"
+tree="$(cli -C "$W" show "$T" --tree 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && ok "--tree 退出 0" || fail "--tree 退出 $rc"
 printf '%s\n' "$tree" | grep -q "^  $P  \[open\] \[0/1\] parent task$" && ok "--tree 显示父任务及其进度" || fail "--tree 缺父任务"
 printf '%s\n' "$tree" | grep -q "^Children (0/1 closed)$" && ok "--tree 显示子任务进度" || fail "--tree 进度不对"
 printf '%s\n' "$tree" | grep -q "^  $C  \[open\] a child$" && ok "--tree 列出子任务" || fail "--tree 缺子任务"
 
 # 4. --json：单个对象，字段齐
-json="$(cli -C "$W" --json show "$T" --tree 2>/dev/null)"
+json="$(cli -C "$W" --json show "$T" --tree 2>/dev/null)"; rc=$?
+[ "$rc" -eq 0 ] && ok "--json 退出 0" || fail "--json 退出 $rc"
 [ "$(printf '%s' "$json" | jget '.id')" = "$T" ] && ok "--json 是单个对象" || fail "--json 不是单个对象"
 [ "$(printf '%s' "$json" | jget '.log_total')" = "7" ] && ok "--json 带 log_total" || fail "--json 缺 log_total"
 [ "$(printf '%s' "$json" | jget '.tree.ancestors[0].id')" = "$P" ] && ok "--json 带父链" || fail "--json 缺父链"
