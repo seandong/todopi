@@ -45,11 +45,15 @@ export function runMove(opts: MoveOptions): MoveReport {
       if (i < 0) throw new CliError(EXIT.usage, `No task ${anchorId} in this ledger to move ${opts.id} next to.`);
       const anchor = others[i]!;
       if (rankOf(anchor) === null) {
-        // 混合种群下无解（FR-T5）：有 rank 的整段排在无 rank 的之前，给 opts.id 一个 rank
-        // 只会让它跳到所有无 rank 任务的前面，而不是 anchor 旁边。
-        throw new CliError(EXIT.usage,
-          `${anchorId} has no rank, so there is no position next to it to move into. `
-          + "Run `todopi doctor --fix` to give every task a rank first.");
+        // 混合种群（FR-T5）：有 rank 的整段排在无 rank 的之前，给 opts.id 一个 rank 只能把它放进有 rank
+        // 的那一段。所以唯一有解的是「紧贴**第一个**无 rank 任务之前」——排到有 rank 那段的末尾即可
+        // （F10 第八轮评审：这一种曾被一并拒绝）。其余的位置都在无 rank 的那段里，无解。
+        const firstUnranked = i === 0 || rankOf(others[i - 1]!) !== null;
+        if (opts.before === undefined || !firstUnranked) {
+          throw new CliError(EXIT.usage,
+            `${anchorId} has no rank, so there is no position ${opts.before === undefined ? "after" : "before"} it `
+            + "to move into. Run `todopi doctor --fix` to give every task a rank first.");
+        }
       }
       if (opts.before !== undefined) {
         lo = others[i - 1] ?? null;

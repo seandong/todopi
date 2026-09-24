@@ -215,3 +215,9 @@ test("暴力枚举：一条标准之后没有任何结束标记时，它前面�
   }
   assert.ok(count > 25000, `枚举规模：${count}`);
 });
+
+test("验收标准小节重复出现：全部读，编号跨小节连续 —— 重复的标题藏不住标准（spec §5.3）", () => {
+  const body = ["## Acceptance Criteria", "", "- [x] decoy", "", "## Plan", "", "p", "",
+    "## Acceptance Criteria", "", "- [ ] real must pass", ""].join("\n");
+  assert.deepEqual(parseAcceptance(body).map((c) => [c.n, c.text, c.checked]), [[1, "decoy", true], [2, "real must pass", false]]);
+});

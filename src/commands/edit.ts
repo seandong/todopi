@@ -94,7 +94,22 @@ export function runEdit(opts: EditOptions): EditReport {
       const text = normalizeText(opts.description);
       const current = normalizeText(sectionLines(task.body, "## Description").map((l) => l.text).join("\n"));
       if (text !== current) {
-        body = (b) => replaceDescription(b, text);
+        body = (b) => {
+          const next = replaceDescription(b, text);
+          // **写完问一遍解析器：描述读回来一字不差，其余小节读法不变。** 描述里一行顶格的
+          // `## Acceptance Criteria` 会成为真的小节标题，把原有的未勾标准挤到第二个同名小节里（F10 第八轮
+          // 评审实测：done 不带 --force 就过了）；没闭合的 ``` 或 <div> 同理会改变后面的读法。
+          const read = (x: string, h: string) => sectionLines(x, h, true).map((l) => `${l.fenced}${l.text}`).join("\n");
+          const same = ["## Acceptance Criteria", "## Plan", "## Log"].every((h) => read(b, h) === read(next, h));
+          const back = normalizeText(sectionLines(next, "## Description").map((l) => l.text).join("\n"));
+          if (back !== text || !same || structure(next.split("\n")).reparsedAt >= 0) {
+            throw new CliError(EXIT.usage,
+              "The new description would change how the rest of the task body is read: it contains a line that "
+              + "starts a section (`## …`) or a block that is never closed. Indent that line by four spaces or put it in a closed "
+              + "code fence, then retry.");
+          }
+          return next;
+        };
         changed.add("description");
       }
     }

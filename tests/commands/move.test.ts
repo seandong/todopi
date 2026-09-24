@@ -96,6 +96,23 @@ test("相对一个没有 rank 的任务挪：拒绝并指向 doctor --fix", () =
     (e: unknown) => code(EXIT.usage)(e) && /doctor --fix/.test((e as Error).message));
 });
 
+test("紧贴第一个无 rank 任务之前：有解，排到有 rank 那段的末尾，只改一个文件（第八轮评审）", () => {
+  // b、c 没有 rank：顺序是 a、d（有 rank），然后 b、c（按 created）。「b 之前」就是有 rank 那段的末尾；
+  // 「c 之前」夹在两个无 rank 任务之间，给谁一个 rank 都到不了那儿——无解。
+  const d = repo();
+  const ids = abcd(d);
+  for (const t of ["b", "c"]) edit(d, ids[t]!, (s) => s.replace(/^rank: ".*"\n/m, ""));
+  assert.deepEqual(order(d), ["a", "d", "b", "c"]);
+  const before = snapshot(d);
+  runMove({ directory: d, id: ids["a"]!, before: ids["b"]!, actor: ME });
+  assert.deepEqual(order(d), ["d", "a", "b", "c"]);
+  const after = snapshot(d);
+  assert.deepEqual([...after.keys()].filter((f) => after.get(f) !== before.get(f)), [`${ids["a"]}.md`]);
+  assert.throws(() => runMove({ directory: d, id: ids["d"]!, before: ids["c"]!, actor: ME }),
+    (e: unknown) => code(EXIT.usage)(e) && /no position before/.test((e as Error).message));
+  assert.equal(runDoctor({ directory: d }).ok, true);
+});
+
 test("已经在目标位置：退出 0，不写文件", () => {
   const d = repo();
   const ids = abcd(d);

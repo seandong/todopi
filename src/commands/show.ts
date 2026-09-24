@@ -74,7 +74,7 @@ function acceptanceNotes(body: string, criterionAt: Map<number, number>): { afte
     if (lines.length > 0) out.push({ after, text: lines.join("\n") });
     chunk = [];
   };
-  for (const l of sectionLines(body, "## Acceptance Criteria")) {
+  for (const l of sectionLines(body, "## Acceptance Criteria", true)) {
     const n = criterionAt.get(l.index);
     if (n === undefined) { chunk.push(l.text); continue; }
     flush();

@@ -139,3 +139,23 @@ test("正文里有没闭合的围栏：edit -d 拒绝，而不是猜着删东西
     (e: unknown) => code(EXIT.usage)(e) && /never closed/.test((e as Error).message));
   assert.equal(read(d, t), before);
 });
+
+test("描述里一行顶格的 `## Acceptance Criteria`：拒绝，文件不动（第八轮评审：原有未勾标准曾被挤出门禁）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", acceptance: ["real must pass"], actor: ME }).id;
+  const before = read(d, t);
+  for (const description of [
+    "new\n\n## Acceptance Criteria\n\n- [x] decoy",
+    "new\n\n  ## Log",                         // 三格以内的缩进仍是 ATX 标题
+    "new\n\n<div>\n## Plan",                  // 被 <div> 吞掉、再被重解析出来的标题
+    "new\n\n```",                              // 没闭合的围栏：此刻读法不变，但之后的每次写入都会被拒
+  ]) {
+    assert.throws(() => runEdit({ directory: d, id: t, description, actor: ME }),
+      (e: unknown) => code(EXIT.usage)(e) && /change how the rest of the task body is read/.test((e as Error).message),
+      JSON.stringify(description));
+    assert.equal(read(d, t), before);
+  }
+  // 放进闭合的围栏或缩进四格：只是描述里的文字，允许。
+  runEdit({ directory: d, id: t, description: "new\n\n```\n## Acceptance Criteria\n```\n\n    ## Log", actor: ME });
+  assert.deepEqual(runShow({ directory: d, id: t }).acceptance.map((c) => c.text), ["real must pass"]);
+});
