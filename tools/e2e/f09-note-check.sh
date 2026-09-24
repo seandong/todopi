@@ -36,7 +36,7 @@ cli -C "$W" --as me@h note "$T" "line one
 line two" >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 0 ] && ok "note 退出 0" || fail "note 退出 $rc"
 n="$(cli -C "$W" --json show "$T" --full 2>/dev/null | jget '.log_total')"
-[ "$n" = "3" ] && ok "多行 note 是一条 Log（created, claimed, note）" || fail "Log 条数 $n，期望 3"
+[ "$n" = "3" ] && ok "多行 note 是一条 Log（created, claimed, note）" || fail "Log 条数 ${n}，期望 3"
 txt="$(cli -C "$W" --json show "$T" 2>/dev/null | jget '.log.at(-1).text')"
 [ "$txt" = "line one
 line two" ] && ok "show 读回的正文完整" || fail "正文读回来是 $(printf %q "$txt")"
@@ -56,7 +56,7 @@ U="$(cli -C "$W" --as me@h --json add "another" --ac "only" 2>/dev/null | jget '
 cli -C "$W" --as me@h check "$U" 1 >/dev/null 2>&1
 out="$(cli -C "$W" --as me@h --json check "$U" 1 2>/dev/null)"; rc=$?
 [ "$rc" -eq 0 ] && [ "$(printf '%s' "$out" | jget '.changed')" = "false" ] \
-  && ok "重复 check：退出 0 且 changed=false" || fail "重复 check 不是幂等的（rc=$rc）"
+  && ok "重复 check：退出 0 且 changed=false" || fail "重复 check 不是幂等的（rc=${rc}）"
 cli -C "$W" --as me@h check "$U" 2 >/dev/null 2>"$TMP/e"; rc=$?
 [ "$rc" -eq 1 ] && grep -q "there is no #2" "$TMP/e" && ok "越界：退出 1 并说明" || fail "越界 check 退出 $rc"
 cli -C "$W" --as me@h check "$U" 1.5 >/dev/null 2>&1; rc=$?

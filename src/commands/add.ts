@@ -21,13 +21,20 @@ export type AddOptions = {
   actor?: string;
 };
 
-export function runAdd(opts: AddOptions): AddReport {
-  const title = opts.title.trim();
-  // 校验在任何写入之前：一个被拒绝的命令不该有副作用（F02 立下的规矩）。
+/** add 与 edit 共用的标题校验：去掉首尾空白后非空、单行、不超过 200 字符（spec §5.2）。 */
+export function checkTitle(raw: string): string {
+  const title = raw.trim();
   if (title === "") throw new CliError(EXIT.usage, "A task needs a title.");
+  if (title.includes("\n")) throw new CliError(EXIT.usage, "A title must be a single line.");
   if (title.length > 200) {
     throw new CliError(EXIT.usage, `Title is ${title.length} characters; the limit is 200 (spec §5.2).`);
   }
+  return title;
+}
+
+export function runAdd(opts: AddOptions): AddReport {
+  // 校验在任何写入之前：一个被拒绝的命令不该有副作用（F02 立下的规矩）。
+  const title = checkTitle(opts.title);
 
   const ledger = discoverLedger(opts.directory);
 

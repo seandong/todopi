@@ -335,6 +335,10 @@ todopi import <file.md> | import beads [path]
   的那段。Acceptance Criteria 是**已识别**的小节，里面的非勾选行 spec §5.3.2 只要求写入者
   原样保留，显示它们不碰文件，所以现在 `show` 把它们作为 `acceptance_notes` 原样显示，不编号、
   不参与门禁。
+- **`edit --edit`（$EDITOR）与正文分节编辑未实现。** FR-T4 列了它们，F10 没做：前者是交互式的
+  （F07 立过的规矩：绝不阻塞在 TTY 上，agent 在管道里跑命令是常态），后者不在 F10 的验收判据里。
+  现在能改的是标题、Description、verify、标签、父任务。自举任务的 Acceptance Criteria 段里那句
+  「`check`（F09，尚未实现）」因此还没法用 CLI 改——它是迁移时生成的，F09 之后已经过时。
 - **`project_id`** —— 一个能在移动与克隆后保持稳定的标识，跨仓视图和将来任何同步都需要它。现在不加，是因为格式规格 §9 明确把「新增配置键」归类为不升版本的加性变更，所以它随时可以在有消费者时引入，并由 `doctor --fix` 回填。提前加等于发布一个没人读的字段。
 
 产品负责人的动作：续费 todopi.com（2026-11-20 到期）；注册 todopi.dev；在 npm 发布 `todopi` / `@todopi` 占位；创建 GitHub org；人工商标检索（USPTO、EUIPO）；为导入器测试准备两份真实 Beads Classic 导出。

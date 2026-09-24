@@ -183,3 +183,14 @@ export function emitTask(t: NewTask): string {
 export function nextRank(lastRank: string | null): string {
   return generateKeyBetween(lastRank, null, RANK_ALPHABET);
 }
+
+/**
+ * 两个 rank 之间的一个新 rank（`move`）。null 表示那一侧没有边界。
+ *
+ * 两侧相等或倒序时 fractional-indexing 会抛错——那是「两个任务的 rank 相同」（两个
+ * worktree 各自 add 就会撞），调用方要在这之前识别并拒绝，不在这里重编号：重编号要改
+ * 多个文件，而 FR-T5 要 move 只重写一个。
+ */
+export function rankBetween(lo: string | null, hi: string | null): string {
+  return generateKeyBetween(lo, hi, RANK_ALPHABET);
+}

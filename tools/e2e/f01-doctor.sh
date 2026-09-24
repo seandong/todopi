@@ -47,7 +47,7 @@ case "$out" in *invariant-2*) ok "输出点名 invariant-2" ;; *) fail "输出�
 # 3. 格式版本过高 → 4
 mk_ledger "$TMP/future" 2
 out="$(cli -C "$TMP/future" doctor 2>&1)"; code=$?
-[ "$code" -eq 4 ] && ok "未来版本退出 4" || fail "应退出 4，实际 $code：$out"
+[ "$code" -eq 4 ] && ok "未来版本退出 4" || fail "应退出 4，实际 ${code}：$out"
 
 # 4. 没有 .todopi/ → 1
 mkdir -p "$TMP/none"
@@ -66,7 +66,7 @@ fi
 mk_ledger "$TMP/fx"
 cp spec/fixtures/invalid/assignee-when-open.md "$TMP/fx/.todopi/tasks/tp-a1b2c3.md"
 out="$(cli -C "$TMP/fx" doctor 2>&1)"; code=$?
-[ "$code" -eq 1 ] && ok "语料的 invalid 样例被拒绝" || fail "应退出 1，实际 $code：$out"
+[ "$code" -eq 1 ] && ok "语料的 invalid 样例被拒绝" || fail "应退出 1，实际 ${code}：$out"
 
 # 7. 环被检出并打印出环的路径
 mk_ledger "$TMP/cycle"

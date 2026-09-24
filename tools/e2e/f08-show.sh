@@ -29,7 +29,7 @@ C="$(id_of "a child" --parent "$T")"
 # 相等式的断言（`.id` 等于 `$T`）：id 为空、输出为空时它们会**平白成立**。第一版
 # 就是这样——add 的参数写错，三个 id 全是空串，却有两条 pass（自己跑出来的假绿）。
 if [ -z "$P" ] || [ -z "$T" ] || [ -z "$C" ]; then
-  fail "夹具没建起来（P=$P T=$T C=$C），后面的断言没有意义"
+  fail "夹具没建起来（P=$P T=$T C=${C}），后面的断言没有意义"
   echo "f08-show: fail"; exit 1
 fi
 

@@ -192,6 +192,59 @@ program
     process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderCheck(report));
   });
 
+const dir = (): string => (program.opts()["directory"] as string | undefined) ?? process.cwd();
+const asActor = (): string | undefined => program.opts()["as"] as string | undefined;
+const collect = (v: string, prev: string[]): string[] => [...prev, v];
+
+program
+  .command("edit")
+  .description("change a task's title, description, verify command, labels or parent")
+  .argument("<id>", "the task to edit")
+  .option("--title <text>", "a new title")
+  .option("-d, --description <text>", "replace the Description section; an empty string removes it")
+  .option("--verify <command>", "a new verify command; an empty string removes it")
+  .option("--label <label>", "+name adds a label, -name removes it; repeat for several", collect, [])
+  .option("--parent <id>", "make it a child of another task; `none` detaches it")
+  .action(async (id: string, o: { title?: string; description?: string; verify?: string; label: string[]; parent?: string }) => {
+    const { runEdit } = await import("./commands/edit.ts");
+    const { renderEdit, renderPlanJson } = await import("./output/render/plan.ts");
+    const report = runEdit({
+      directory: dir(), id, actor: asActor(),
+      title: o.title, description: o.description, verify: o.verify,
+      labels: o.label.length > 0 ? o.label : undefined, parent: o.parent,
+    });
+    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderEdit(report));
+  });
+
+program
+  .command("move")
+  .description("change where a task sits in the queue; the only way to change its rank")
+  .argument("<id>", "the task to move")
+  .option("--top", "put it first")
+  .option("--before <id>", "put it right before another task")
+  .option("--after <id>", "put it right after another task")
+  .action(async (id: string, o: { top?: boolean; before?: string; after?: string }) => {
+    const { runMove } = await import("./commands/move.ts");
+    const { renderMove, renderPlanJson } = await import("./output/render/plan.ts");
+    const report = runMove({ directory: dir(), id, actor: asActor(), top: o.top, before: o.before, after: o.after });
+    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderMove(report));
+  });
+
+const dep = program.command("dep").description("add or remove a blocking dependency");
+for (const op of ["add", "rm"] as const) {
+  dep
+    .command(op)
+    .description(op === "add" ? "make <id> wait for another task" : "stop <id> waiting for another task")
+    .argument("<id>", "the task that waits")
+    .requiredOption("--on <id>", "the task it waits for")
+    .action(async (id: string, o: { on: string }) => {
+      const { runDep } = await import("./commands/dep.ts");
+      const { renderDep, renderPlanJson } = await import("./output/render/plan.ts");
+      const report = runDep({ directory: dir(), op, id, on: o.on, actor: asActor() });
+      process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderDep(report));
+    });
+}
+
 program
   .command("claim")
   .description("take ownership of a task and start working on it")

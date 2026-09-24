@@ -19,14 +19,27 @@ import { EXIT, CliError } from "../exit.ts";
 
 /** 调用方的决定：写一次（正文变换 + 一行 Log），或者什么都不写并说明为什么。 */
 export type WorkerWrite =
-  | { body?: (body: string) => string; appendLog: string }
+  | {
+    /** 新的完整 frontmatter（不是补丁，理由同 updateTask）；不给就原样带回 */
+    frontmatter?: Record<string, unknown>;
+    body?: (body: string) => string;
+    appendLog: string;
+  }
   | { noop: string };
 
 export type WorkerWriteResult = { task: TaskFile; actor: string; wrote: boolean; noop?: string };
 
 export function writeAsWorker(
-  opts: { directory: string; id: string; actor?: string },
-  decide: (task: TaskFile, ctx: { now: string; actor: string }) => WorkerWrite,
+  opts: {
+    directory: string; id: string; actor?: string;
+    /**
+     * 是否按 FR-C6 做写入严格匹配。默认要。`dep` 与 `move` 不要：PRD FR-C6 列出的严格匹配
+     * 写者是 note、check、edit、done、close、心跳与 handoff，这两个是规划操作，与
+     * `add --blocked-by` 同类（add 也不查归属）。
+     */
+    ownership?: boolean;
+  },
+  decide: (task: TaskFile, ctx: { now: string; actor: string; all: TaskFile[] }) => WorkerWrite,
 ): WorkerWriteResult {
   const ledger = discoverLedger(opts.directory);
   const actor = currentActor(ledger.root, opts.actor);
@@ -48,7 +61,7 @@ export function writeAsWorker(
     const held = otherHolder({
       task, actor, lease, now: Date.now(), leaseHours: ledger.config.lease_hours,
     });
-    if (held !== null) {
+    if (held !== null && opts.ownership !== false) {
       throw new CliError(EXIT.conflict,
         `Task ${opts.id} is held by ${held.holder} (since ${held.heldSince}). Writes are refused so two `
         + `workers do not interleave on one task. If it was abandoned, take it over with `
@@ -56,11 +69,11 @@ export function writeAsWorker(
     }
 
     const now = nowStamp();
-    const decision = decide(task, { now, actor });
+    const decision = decide(task, { now, actor, all: existing });
     if ("noop" in decision) return { task, actor, wrote: false, noop: decision.noop };
 
     const prepared = prepareUpdate(ledger, existing, opts.id, {
-      frontmatter: { ...task.frontmatter },
+      frontmatter: decision.frontmatter ?? { ...task.frontmatter },
       body: decision.body,
       appendLog: decision.appendLog,
     }, validateWrite, now);
