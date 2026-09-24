@@ -85,14 +85,14 @@ export function runEdit(opts: EditOptions): EditReport {
 
     let body: ((b: string) => string) | undefined;
     if (opts.description !== undefined) {
-      // 正文里有没闭合的代码围栏时不改写小节。读取端把那个开头当普通文字（门禁必须看得见后面的
+      // 正文里有没闭合的代码围栏（或 <pre>、<!-- 这类 HTML 块）时不改写小节。读取端把那个开头当普通文字（门禁必须看得见后面的
       // 标准），可写入端若据此改写，围栏里一行 `## Description` 就会被当成真小节、连同代码一起删掉
       // （F10 第二轮评审实测）。拒绝好过猜。
       const at = structure(task.body.replace(/\r\n/g, "\n").split("\n")).unclosedAt;
       if (at >= 0) {
         throw new CliError(EXIT.usage,
-          `The body of ${opts.id} has an unclosed code fence at body line ${at + 1}, so its sections cannot be `
-          + "located safely. Close the fence first, then edit the description.");
+          `The body of ${opts.id} has a code fence or HTML block opened at body line ${at + 1} that is never `
+          + "closed, so its sections cannot be located safely. Close it first, then edit the description.");
       }
       const text = normalizeText(opts.description);
       const current = normalizeText(sectionLines(task.body, "## Description").map((l) => l.text).join("\n"));

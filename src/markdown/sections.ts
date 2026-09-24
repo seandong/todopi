@@ -17,7 +17,7 @@ export type BodyStructure = {
   h2: Set<number>;
   /** 这一行属于一个**顶层**代码块或 HTML 块——它是示例或原样文字，不是标准、不是 Log 条目 */
   code: boolean[];
-  /** 第一个没闭合的顶层围栏开头的行号；没有为 -1（见下） */
+  /** 第一个没闭合、一直延伸到文末的顶层块（围栏代码块，或第 1–5 类 HTML 块）开头的行号；没有为 -1（见下） */
   unclosedAt: number;
 };
 
@@ -40,6 +40,28 @@ function isUnclosedFence(n: Node, lines: string[]): boolean {
   return !(close !== null && close[1]![0] === open[1]![0] && close[1]!.length >= open[1]!.length);
 }
 
+/**
+ * CommonMark 的 HTML 块分七类（规范 §4.6）。第 6、7 类在空行处结束，藏不住后面的标题；第 1–5 类只在
+ * 遇到各自的结束标记时结束，没有就延伸到文末——一行 `<pre>` 或 `<!--` 和一行没闭合的 ``` 效果相同
+ * （F10 第四轮评审：Log 末尾一个 `<pre>`，之后追加的事件读者看不见；同一个口子能藏验收标准）。
+ * 开头与结束标记照抄 commonmark 自己的表（reHtmlBlockOpen / reHtmlBlockClose）；它对**整行**找结束标记，
+ * 包括开头那一行（`<!-->` 在 0.31 里就是一个完整的注释），这里照做——判定要和解析器一致，而不是更「严」。
+ */
+const HTML_KINDS: [RegExp, RegExp][] = [
+  [/^ {0,3}<(?:pre|script|style|textarea)(?:\s|>|$)/i, /<\/(?:pre|script|style|textarea)>/i],
+  [/^ {0,3}<!--/, /-->/],
+  [/^ {0,3}<\?/, /\?>/],
+  [/^ {0,3}<![A-Za-z]/, />/],
+  [/^ {0,3}<!\[CDATA\[/, /\]\]>/],
+];
+
+function isUnclosedHtml(n: Node, lines: string[]): boolean {
+  const [[start], [end]] = n.sourcepos;
+  const kind = HTML_KINDS.find(([open]) => open.test(lines[start - 1] ?? ""));
+  if (kind === undefined) return false;                      // 第 6、7 类：空行处结束
+  return !kind[1].test(lines[end - 1] ?? "");
+}
+
 function analyse(lines: string[]): BodyStructure {
   const work = [...lines];
   let unclosedAt = -1;
@@ -53,10 +75,11 @@ function analyse(lines: string[]): BodyStructure {
       const [[start], [end]] = n.sourcepos;
       if (n.type === "heading" && n.level === 2) h2.add(start - 1);
       if (n.type !== "code_block" && n.type !== "html_block") continue;
-      // **一处刻意偏离 CommonMark。** 没闭合的围栏，CommonMark 让它延伸到文末；那样一行孤零零的 ```
-      // 就能把后面的 Acceptance Criteria 整段变成代码，done 的门禁于是看不见未勾的标准。这里把那个开头
-      // 当普通文字重新解析，并记下位置：读取端因此总能看见后面的内容，改写小节的写入端据此拒绝。
-      if (n.type === "code_block" && isUnclosedFence(n, work)) {
+      // **一处刻意偏离 CommonMark。** 没闭合的围栏（或第 1–5 类 HTML 块），CommonMark 让它延伸到文末；
+      // 那样一行孤零零的 ``` 或 <pre> 就能把后面的 Acceptance Criteria 整段变成代码，done 的门禁于是看不见
+      // 未勾的标准。这里把那个开头当普通文字重新解析，并记下位置：读取端因此总能看见后面的内容，
+      // 改写正文的写入端据此拒绝。
+      if ((n.type === "code_block" && isUnclosedFence(n, work)) || (n.type === "html_block" && isUnclosedHtml(n, work))) {
         if (unclosedAt < 0) unclosedAt = start - 1;
         work[start - 1] = "";
         neutralised = true;

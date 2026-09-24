@@ -34,3 +34,12 @@ test("加了花括号就不报；双引号里的 # 不是注释", () => {
   assert.deepEqual(find('echo "${x}，"'), []);
   assert.deepEqual(find('echo "#tag $x，"'), [[1, "x"]]);
 });
+
+test("续行之后紧跟变量名的非 ASCII 字符：bash 先拼接再分词，照报（第四轮评审的漏报）", () => {
+  assert.deepEqual(find("echo $x\\\n，"), [[1, "x"]]);
+  assert.deepEqual(find("echo $fo\\\no，"), [[1, "foo"]], "变量名本身被续行切开");
+  assert.deepEqual(find("echo '$x\\\n，'"), [], "单引号里反斜杠不续行，也不展开");
+  assert.deepEqual(find("# 注释 $x\\\n，"), [], "注释里的反斜杠不续行");
+  assert.deepEqual(find('echo $\\\n\necho "$y，"'), [[3, "y"]], "被删掉的续行照样计入行号");
+  assert.deepEqual(find('echo $fo\\\no\necho "$y，"'), [[3, "y"]], "变量名中间被删掉的续行也计入行号");
+});

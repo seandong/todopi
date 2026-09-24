@@ -239,7 +239,7 @@
       "check": "node tools/check-shell-vars.mjs",
       "expect": "empty",
       "what": "某个 .sh 里写了 `$var，` 或 `$var（` 这样的东西：变量名后面直接跟着一个中文标点或其他非 ASCII 字符。",
-      "why": "bash 会把紧跟的多字节字符的字节吞进变量名，于是 `$bb，` 引用的是一个名叫 `bb\\xef\\xbc` 的变量；在 set -u 下直接 `unbound variable` 崩掉。它几乎只出现在失败分支的报错信息里——平时走不到，真失败时脚本崩在报错那一行，原本要说的原因丢了。F07 撞过一次，F10 又撞一次，随后扫出 f01/f04/f05/f06/f08/f09 里还潜伏着 8 处。字符形状精确、零误报，所以落成规则（F08 时评估过的那几类都不行，这一类行）。 2026-09-24 评审：第一版是一条 grep，连注释里与单引号里的 `$x，` 也报——shell 并不展开它们。这是「规则的措辞对，check 比措辞宽」的第九次；grep 看不见引号状态，改成 tools/check-shell-vars.mjs 逐字符扫描，跨行跟踪单引号、跳过注释。已知仍会报 `<<'EOF'` heredoc 正文里的，加花括号在那里无害。",
+      "why": "bash 会把紧跟的多字节字符的字节吞进变量名，于是 `$bb，` 引用的是一个名叫 `bb\\xef\\xbc` 的变量；在 set -u 下直接 `unbound variable` 崩掉。它几乎只出现在失败分支的报错信息里——平时走不到，真失败时脚本崩在报错那一行，原本要说的原因丢了。F07 撞过一次，F10 又撞一次，随后扫出 f01/f04/f05/f06/f08/f09 里还潜伏着 8 处。字符形状精确、零误报，所以落成规则（F08 时评估过的那几类都不行，这一类行）。 2026-09-24 评审：第一版是一条 grep，连注释里与单引号里的 `$x，` 也报——shell 并不展开它们。这是「规则的措辞对，check 比措辞宽」的第九次；grep 看不见引号状态，改成 tools/check-shell-vars.mjs 逐字符扫描，跨行跟踪单引号、跳过注释。已知仍会报 `<<'EOF'` heredoc 正文里的，加花括号在那里无害。 2026-09-25 第四轮评审：`echo $x\\` 换行接 `，` 不报——bash 先删「反斜杠 + 换行」再分词；扫描改为按字符流，续行在任何位置都先删掉。",
       "fix": "给变量加花括号：`${bb}，`。"
     },
     {
@@ -248,8 +248,8 @@
       "applies_when": "test -d src/markdown",
       "check": "node tools/check-leaf-imports.mjs src/markdown",
       "expect": "empty",
-      "what": "src/markdown/ 在运行时依赖了 commonmark 之外的模块，或出现了动态的 import(…) / require(…)。",
-      "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。 2026-09-24 评审：第一版只匹配行首的 `import `，缩进的 import、`export … from`、动态 import 都能引入依赖而不触发。 2026-09-25：这一层改用 commonmark 判定正文结构（D031），允许依赖它；检查器改成问 Node 自己的模块加载器——grep 版本连着两轮被合法语法绕过（`import{join}from\"node:path\"` 等）。",
+      "what": "src/markdown/（含子目录）在运行时依赖了 commonmark 之外的模块，或出现了动态加载（import(…)、require、createRequire、getBuiltinModule）。",
+      "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。 2026-09-24 评审：第一版只匹配行首的 `import `，缩进的 import、`export … from`、动态 import 都能引入依赖而不触发。 2026-09-25：这一层改用 commonmark 判定正文结构（D031），允许依赖它；检查器改成问 Node 自己的模块加载器——grep 版本连着两轮被合法语法绕过（`import{join}from\"node:path\"` 等）。 第四轮评审：子目录不扫、`import /* c */ (…)` 不报——改为递归，动态加载的判据允许中间夹注释，并加上 createRequire / getBuiltinModule。不防刻意混淆：这条规则防的是分层被无意打破。",
       "fix": "把依赖挪回调用方，markdown/ 只收字符串、只回字符串与行号。"
     }
   ]

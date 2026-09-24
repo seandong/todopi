@@ -136,6 +136,6 @@ test("正文里有没闭合的围栏：edit -d 拒绝，而不是猜着删东西
   edit(d, t, (s) => s.replace("## Log", "## Plan\n\n```md\n## Description\nsecret\n\n## Log"));
   const before = read(d, t);
   assert.throws(() => runEdit({ directory: d, id: t, description: "x", actor: ME }),
-    (e: unknown) => code(EXIT.usage)(e) && /unclosed code fence/.test((e as Error).message));
+    (e: unknown) => code(EXIT.usage)(e) && /never closed/.test((e as Error).message));
   assert.equal(read(d, t), before);
 });

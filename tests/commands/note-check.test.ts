@@ -266,3 +266,25 @@ test("新建 Log 小节时，原正文逐字节保留 —— 末尾未识别小�
     assert.equal(runShow({ directory: d, id: t.id }).log_total, 1, "新建的 Log 读不回来");
   }
 });
+
+test("Log 末尾没闭合的 <pre> 或 ```：note 拒绝（退出 1），文件不动（第四轮）", () => {
+  // 读取端把没闭合的开头当普通文字，此刻追加的事件看得见；可一旦有人补上结束标记，事件就落进块里、
+  // 从 Log 里消失。spec §5.3：这样的正文，写入端不改写小节。
+  for (const tail of ["<pre>", "```", "<!-- todo"]) {
+    const d = repo();
+    const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+    edit(d, t, (s) => `${s}\n${tail}\n`);
+    const before = read(d, t);
+    assert.throws(() => runNote({ directory: d, id: t, text: "hello", actor: ME }),
+      (e: unknown) => code(EXIT.usage)(e) && /never closed/.test((e as Error).message), tail);
+    assert.equal(read(d, t), before, tail);
+  }
+});
+
+test("Log 末尾一个 <div>：事件隔一个空行追加，读得到（紧贴着会被并进 HTML 块）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  edit(d, t, (s) => `${s}\n<div>\n`);
+  runNote({ directory: d, id: t, text: "hello", actor: ME });
+  assert.deepEqual(entries(d, t).map((e) => e.head.replace(/^- \S+ \S+ /, "")), ["created", "note: hello"]);
+});

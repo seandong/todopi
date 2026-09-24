@@ -265,22 +265,49 @@ function appendLogLine(body: string, line: string): string {
   // doctor 通过、show 一条都没有（F09 评审实测）。找不到真正的小节就在末尾新建一节，
   // 那段缩进的文字按 spec §5.3 原样保留。
   const st = structure(lines);
+  // 正文里有没闭合、一直延伸到文末的块（围栏或 <pre>、<!-- 这类 HTML 块）时不写。读取端把它的开头当
+  // 普通文字，所以此刻追加的事件看得见；可一旦有人补上那个关闭标记，事件就落进了块里、从 Log 里消失
+  // （F10 第四轮评审）。spec §5.3：这样的正文，写入端不改写任何小节。
+  if (st.unclosedAt >= 0) {
+    throw new CliError(EXIT.usage,
+      `Refusing to append to the Log: the task body has a code fence or HTML block opened at body line `
+      + `${st.unclosedAt + 1} that is never closed (spec §5.3). Close or remove it, then retry.`);
+  }
   const start = headingIndex(lines, st, "## Log");
   // 多行文本按 §5.3.3 的续行规则：第一行是列表项，后面每行缩进两格。
   // FR-D4a 的「强制关闭时记录输出尾部」就走这条路。
   const [first, ...rest] = line.split("\n");
   const item = [`- ${first}`, ...rest.map((l) => `  ${l}`)].join("\n");
+  let out: string;
+  let at: number;
   if (start < 0) {
     // **原正文一个字节都不动，只补分隔所需的换行。** 曾先 `replace(/\s*$/, "")` 再拼，
     // 于是末尾那段未识别小节的尾随空格与空行被削掉了（spec §5.3：writers MUST
     // preserve；F09 第二轮评审实测）。
     const sep = body === "" || body.endsWith("\n\n") ? "" : body.endsWith("\n") ? "\n" : "\n\n";
-    return `${body}${sep}## Log\n\n${item}\n`;
+    out = `${body}${sep}## Log\n\n${item}\n`;
+    at = `${body}${sep}## Log\n\n`.split("\n").length - 1;
+  } else {
+    let end = start + 1;
+    for (let i = start + 1; i < sectionEnd(lines, st, start); i++) {
+      if (lines[i]!.trim() !== "") end = i + 1;
+    }
+    // 紧贴在一个顶层 HTML 块（如 `<div>`）下面的行属于那个块，只有空行才结束它——事件得隔一个空行。
+    const glue = st.code[end - 1] === true ? ["", item] : [item];
+    lines.splice(end, 0, ...glue);
+    out = lines.join("\n");
+    at = end + glue.length - 1;
   }
-  let end = start + 1;
-  for (let i = start + 1; i < sectionEnd(lines, st, start); i++) {
-    if (lines[i]!.trim() !== "") end = i + 1;
+  // **写完问一遍解析器：新事件的每一行都不在代码块或 HTML 块里。** 上面两条是已知的情形；这一条兜住
+  // 没想到的——判定者是同一个解析器，而不是再写一份「什么会吞掉下一行」的近似。
+  const after = structure(out.split("\n"));
+  const span = item.split("\n").length;
+  for (let k = at; k < at + span; k++) {
+    if (after.code[k] === true || after.unclosedAt >= 0) {
+      throw new CliError(EXIT.usage,
+        "Refusing to append to the Log: the new entry would land inside a code or HTML block, where readers "
+        + "cannot see it. Check the end of the ## Log section, then retry.");
+    }
   }
-  lines.splice(end, 0, item);
-  return lines.join("\n");
+  return out;
 }

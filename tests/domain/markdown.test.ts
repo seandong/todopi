@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { sectionLines, parseAcceptance } from "../../src/domain/acceptance.ts";
 import { logEntries } from "../../src/domain/validate.ts";
 import { replaceDescription } from "../../src/domain/sections.ts";
+import { structure } from "../../src/markdown/sections.ts";
 
 // 代码围栏里的 `## X` 不是标题（Markdown 的语义）。读取端与写入端必须用**同一个**判据——
 // F09 刚在「写入端 trim、读取端不 trim」上栽过。F10 评审构造的反例：Plan 围栏里一行
@@ -139,6 +140,7 @@ test("对抗性正文：各种结构之后的一条顶层未勾标准，永远�
     ["- item", "  ```", "  x"], ["1. item", "   ```"], ["-\t```"], ["```js `x`", "y"],
     ["````", "```", "````"], ["~~~", "```", "~~~"], ["<!--", "```", "-->"], ["```", "## Acceptance Criteria", "- [x] fake", "```"],
     ["* a", "  * b", "    ```"], ["- [x] done", "  ```", "  - [ ] nested in code"], ["\\```", "x"], ["`` ``` ``"],
+    ["<pre>"], ["<script>"], ["<!--"], ["<?x"], ["<!DOCTYPE"], ["<![CDATA["], ["<STYLE type=x>"], ["  <textarea"],
   ];
   for (const pre of prefixes) {
     const body = ["## Plan", "", ...pre, "", "## Acceptance Criteria", "", "- [ ] must run checks", "",
@@ -146,4 +148,26 @@ test("对抗性正文：各种结构之后的一条顶层未勾标准，永远�
     const got = parseAcceptance(body).filter((c) => !c.checked).map((c) => c.text);
     assert.ok(got.includes("must run checks"), `这段前缀之后的未勾标准没被认出来：${JSON.stringify(pre)}\n→ ${JSON.stringify(got)}`);
   }
+});
+
+test("没闭合的 <pre>、<!-- 等（CommonMark 第 1–5 类 HTML 块）同样藏不住后面的标准（第四轮）", () => {
+  // 这几类 HTML 块只在各自的结束标记处结束，没有就延伸到文末——和没闭合的 ``` 是同一个口子。
+  for (const opener of ["<pre>", "<script>", "<style>", "<textarea>", "<!-- x", "<?php", "<!DOCTYPE html", "<![CDATA["]) {
+    const lines = ["## Plan", "", opener, "", "## Acceptance Criteria", "", "- [ ] must run checks", ""];
+    assert.deepEqual(parseAcceptance(lines.join("\n")).map((c) => c.text), ["must run checks"], opener);
+    assert.equal(structure(lines).unclosedAt, 2, `${opener} 应当记为没闭合`);
+  }
+});
+
+test("闭合了的 HTML 块照 CommonMark 处理：里面的假标准不算，也不记为没闭合", () => {
+  // 包括结束标记与开头在同一行的——`<!-->` 在 commonmark 0.31 里就是一个完整的注释。
+  for (const block of [["<pre>", "- [ ] fake", "</pre>"], ["<!-- c -->"], ["<!-->"], ["<!--", "- [ ] fake", "-->"], ["<?x ?>"]]) {
+    const lines = ["## Acceptance Criteria", "", ...block, "", "- [ ] real", ""];
+    assert.deepEqual(parseAcceptance(lines.join("\n")).map((c) => c.text), ["real"], JSON.stringify(block));
+    assert.equal(structure(lines).unclosedAt, -1, JSON.stringify(block));
+  }
+});
+
+test("第 6 类（<div>）在空行处结束，本来就藏不住后面的标题：不算没闭合", () => {
+  assert.equal(structure(["<div>", "", "## Log", ""]).unclosedAt, -1);
 });
