@@ -246,3 +246,23 @@ test("`- [ ]x`（方括号后没有空白）不是标准：不占编号，check 
   assert.equal(r.text, "real", "第 1 条应当是真正的那条标准");
   assert.match(read(d, t.id), /^- \[ \]x not a task item$/m, "非标准行被改写了");
 });
+
+test("新建 Log 小节时，原正文逐字节保留 —— 末尾未识别小节的尾随空白也不能削", () => {
+  // 找不到真正的 `## Log` 时要在末尾新建一节。第一版先 `replace(/\s*$/, "")` 再拼，
+  // 于是末尾 `## Repair` 里的两个尾随空格和空行都没了（评审实测）；doctor 照样通过。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME });
+  const tails = ["## Repair\nkeep  \n\n", "## Repair\nno trailing newline", "## Repair\nkeep\n"];
+  for (const tail of tails) {
+    edit(d, t.id, (s) => {
+      const [, fm] = s.split(/^---$/m);
+      return `---${fm}---\n\n${tail}`;
+    });
+    const before = bodyOf(d, t.id);
+    runNote({ directory: d, id: t.id, text: "x", actor: ME });
+    const after = bodyOf(d, t.id);
+    assert.ok(after.startsWith(before), `原正文没有逐字节保留：\n${JSON.stringify(before)}\n→\n${JSON.stringify(after)}`);
+    assert.match(after.slice(before.length), /(^|\n)## Log\n/, "新的小节没有落成顶格标题");
+    assert.equal(runShow({ directory: d, id: t.id }).log_total, 1, "新建的 Log 读不回来");
+  }
+});

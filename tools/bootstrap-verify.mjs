@@ -7,7 +7,7 @@
 //
 // 迁移完成后仍然可重跑：原始 JSON 已被删除，就从删掉它的那个 commit 取父提交。
 
-import { readFileSync, mkdtempSync } from "node:fs";
+import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -32,16 +32,30 @@ const git = (...a) =>
  * F09 一认领，对账就「失败」了，而我在三份文档里都写了它「随时可重跑」（F09 时自己
  * 撞见）。它要验的是迁移做得对不对，不是账本后来有没有变。
  */
+/**
+ * 迁移提交，钉死。「当前历史里最近一次删除 feature_list.json 的 commit」只在历史没被
+ * 改写时等于它；改写之后脚本会悄悄对上另一个提交并报「通过」（F09 第二轮评审指出）。
+ * 钉住之后，找到的不是它就响亮地失败——那正是需要人去看的时候。
+ */
+const MIGRATION_COMMIT = "3e204adb40b3f0df9b05dc64d9d657afe798ea92";
+
 function sides() {
-  try {
+  // 先问**有没有**，再解析。曾用一个 catch 同时吞掉「HEAD 上没有」与「有但 JSON 坏了」，
+  // 后者会退回旧的迁移提交并报「通过」（评审在临时克隆里复现）。
+  let onHead = true;
+  try { git("cat-file", "-e", "HEAD:feature_list.json"); } catch { onHead = false; }
+  if (onHead) {
     return { json: JSON.parse(git("show", "HEAD:feature_list.json")), root: ROOT, at: "工作区（迁移提交之前）" };
-  } catch {
-    const sha = git("log", "--diff-filter=D", "--format=%H", "-1", "--", "feature_list.json").trim();
-    if (sha === "") throw new Error("既不在 HEAD 上，也找不到删除 feature_list.json 的 commit");
-    const snap = mkdtempSync(join(tmpdir(), "bootstrap-verify-"));
-    execFileSync("sh", ["-c", `git -C "$1" archive "$2" .todopi PROGRESS.md | tar -x -C "$3"`, "sh", ROOT, sha, snap]);
-    return { json: JSON.parse(git("show", `${sha}^:feature_list.json`)), root: snap, at: `迁移提交 ${sha.slice(0, 7)}` };
   }
+  const sha = git("log", "--diff-filter=D", "--format=%H", "-1", "--", "feature_list.json").trim();
+  if (sha !== MIGRATION_COMMIT) {
+    throw new Error(`删除 feature_list.json 的 commit 是 ${sha || "（找不到）"}，不是钉住的迁移提交 `
+      + `${MIGRATION_COMMIT.slice(0, 7)}——历史被改写过，这次对账证明不了原来那次迁移。`);
+  }
+  const snap = mkdtempSync(join(tmpdir(), "bootstrap-verify-"));
+  process.on("exit", () => rmSync(snap, { recursive: true, force: true }));
+  execFileSync("sh", ["-c", `git -C "$1" archive "$2" .todopi PROGRESS.md | tar -x -C "$3"`, "sh", ROOT, sha, snap]);
+  return { json: JSON.parse(git("show", `${sha}^:feature_list.json`)), root: snap, at: `迁移提交 ${sha.slice(0, 7)}` };
 }
 
 const problems = [];

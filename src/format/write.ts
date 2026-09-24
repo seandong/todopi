@@ -269,7 +269,11 @@ function appendLogLine(body: string, line: string): string {
   const [first, ...rest] = line.split("\n");
   const item = [`- ${first}`, ...rest.map((l) => `  ${l}`)].join("\n");
   if (start < 0) {
-    return `${body.replace(/\s*$/, "")}\n\n## Log\n\n${item}\n`;
+    // **原正文一个字节都不动，只补分隔所需的换行。** 曾先 `replace(/\s*$/, "")` 再拼，
+    // 于是末尾那段未识别小节的尾随空格与空行被削掉了（spec §5.3：writers MUST
+    // preserve；F09 第二轮评审实测）。
+    const sep = body === "" || body.endsWith("\n\n") ? "" : body.endsWith("\n") ? "\n" : "\n\n";
+    return `${body}${sep}## Log\n\n${item}\n`;
   }
   let end = start + 1;
   for (let i = start + 1; i < lines.length; i++) {
