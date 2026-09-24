@@ -23,7 +23,13 @@ cli -C "$W" init >/dev/null 2>&1
 T="$(cli -C "$W" --as me@h --json add "the task" --ac "first box" --ac "second box" 2>/dev/null | jget '.id')"
 # 夹具没建起来时，下面的否定式断言会平白成立（F08 的 e2e 栽过一次）
 [ -n "$T" ] || { fail "夹具没建起来"; echo "f09-note-check: fail"; exit 1; }
-cli -C "$W" --as me@h claim "$T" >/dev/null 2>&1
+cli -C "$W" --as me@h claim "$T" >/dev/null 2>&1; rc=$?
+# note / check / done 在 open 状态也能跑，所以认领失败时下面照样可能全绿——那就证明不了
+# 「持有者」这条路径（评审指出）。断言它真的成了 in_progress 且归我。
+st="$(cli -C "$W" --json show "$T" 2>/dev/null | jget '.status')"
+who="$(cli -C "$W" --json show "$T" 2>/dev/null | jget '.assignee')"
+[ "$rc" -eq 0 ] && [ "$st" = "in_progress" ] && [ "$who" = "me@h" ] \
+  && ok "认领成功（in_progress，assignee=me@h）" || fail "认领没成功：rc=$rc status=$st assignee=$who"
 
 # 1. note：多行参数穿过 shell 之后仍是一条 Log
 cli -C "$W" --as me@h note "$T" "line one

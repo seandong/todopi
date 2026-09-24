@@ -7,7 +7,8 @@
 //
 // 迁移完成后仍然可重跑：原始 JSON 已被删除，就从删掉它的那个 commit 取父提交。
 
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { discoverLedger } from "../src/format/discover.ts";
@@ -20,14 +21,26 @@ const ROOT = process.argv[2] ?? process.cwd();
 const git = (...a) =>
   execFileSync("git", ["-C", ROOT, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 
-/** 原始 JSON：HEAD 上还有就读它；没有了就从删除它的 commit 取父提交。 */
-function originalJson() {
+/**
+ * 对账的两边：原始 JSON，与**迁移那一刻**的账本。
+ *
+ * - 迁移提交之前（彩排时）：JSON 在 HEAD 上，账本就是工作区。
+ * - 迁移提交之后：JSON 取删除它的那个 commit 的父提交；账本取**那个 commit 本身**的
+ *   `.todopi/` 与 PROGRESS.md，解到一个临时目录里再对。
+ *
+ * 第一版在迁移之后对的是**工作区**的账本。那只在没人动账本之前成立——F08 一关闭、
+ * F09 一认领，对账就「失败」了，而我在三份文档里都写了它「随时可重跑」（F09 时自己
+ * 撞见）。它要验的是迁移做得对不对，不是账本后来有没有变。
+ */
+function sides() {
   try {
-    return JSON.parse(git("show", "HEAD:feature_list.json"));
+    return { json: JSON.parse(git("show", "HEAD:feature_list.json")), root: ROOT, at: "工作区（迁移提交之前）" };
   } catch {
     const sha = git("log", "--diff-filter=D", "--format=%H", "-1", "--", "feature_list.json").trim();
     if (sha === "") throw new Error("既不在 HEAD 上，也找不到删除 feature_list.json 的 commit");
-    return JSON.parse(git("show", `${sha}^:feature_list.json`));
+    const snap = mkdtempSync(join(tmpdir(), "bootstrap-verify-"));
+    execFileSync("sh", ["-c", `git -C "$1" archive "$2" .todopi PROGRESS.md | tar -x -C "$3"`, "sh", ROOT, sha, snap]);
+    return { json: JSON.parse(git("show", `${sha}^:feature_list.json`)), root: snap, at: `迁移提交 ${sha.slice(0, 7)}` };
   }
 }
 
@@ -62,10 +75,11 @@ function sectionOr(w, body, heading) {
   return sec;
 }
 
-const src = originalJson();
+const side = sides();
+const src = side.json;
 // 用仓库自己的读取器。解析失败要吵——不能让坏文件被读成空字段后从计数里消失。
 const tasks = [];
-for (const t of readTasks(discoverLedger(ROOT))) {
+for (const t of readTasks(discoverLedger(side.root))) {
   if (t.parseError !== undefined) { bad(`${t.path}: 解析失败 —— ${t.parseError}`); continue; }
   tasks.push({ file: t.path, fm: t.frontmatter, body: t.body });
 }
@@ -193,7 +207,7 @@ for (let i = 1; i < ranked.length; i += 1) {
 }
 
 // 4. milestones[].done_when 进了 PROGRESS.md
-const progress = readFileSync(join(ROOT, "PROGRESS.md"), "utf8");
+const progress = readFileSync(join(side.root, "PROGRESS.md"), "utf8");
 for (const [name, m] of Object.entries(src.milestones ?? {})) {
   if (!progress.includes(m.done_when)) bad(`${name} 的 done_when 原文没有出现在 PROGRESS.md`);
 }
@@ -203,4 +217,4 @@ if (problems.length > 0) {
   for (const p of problems) console.error(`  ✗ ${p}`);
   process.exit(1);
 }
-console.log(`对账通过：${tasks.length} 条，字段逐项对得上原始 feature_list.json`);
+console.log(`对账通过（${side.at}）：${tasks.length} 条，字段逐项对得上原始 feature_list.json`);

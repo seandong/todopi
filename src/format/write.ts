@@ -259,7 +259,11 @@ export function nowStamp(): string {
  */
 function appendLogLine(body: string, line: string): string {
   const lines = body.split("\n");
-  const start = lines.findIndex((l) => l.trim() === "## Log");
+  // **顶格精确匹配，与读取端（sectionLines）同一个判据。** 曾用 .trim()：一段缩进
+  // 的 `   ## Log`（合法的未识别正文）被当成 Log 往里追加，读者却看不见——note 成功、
+  // doctor 通过、show 一条都没有（F09 评审实测）。找不到真正的小节就在末尾新建一节，
+  // 那段缩进的文字按 spec §5.3 原样保留。
+  const start = lines.findIndex((l) => l === "## Log");
   // 多行文本按 §5.3.3 的续行规则：第一行是列表项，后面每行缩进两格。
   // FR-D4a 的「强制关闭时记录输出尾部」就走这条路。
   const [first, ...rest] = line.split("\n");

@@ -220,3 +220,29 @@ test("parseCriterionNumber 从字符串出发：拒绝 0、1.5、0x2、空串", 
     assert.throws(() => parseCriterionNumber(bad), code(EXIT.usage), bad);
   }
 });
+
+// ── 评审第一轮：写入端与读取端对「哪一段是 Log」「哪一行是标准」必须一致 ──────
+
+test("缩进的 `   ## Log` 不是 Log 标题 —— note 不能把事件写进读者看不见的地方", () => {
+  // 写入端曾用 .trim() 找标题，读取端要求顶格精确匹配（spec §5.3：exactly）。
+  // 于是事件被追加进一段未识别正文里：note 成功、doctor 通过，show 却一条都看不见。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME });
+  edit(d, t.id, (s) => s.replace(/^## Log$/m, "   ## Log"));
+  runNote({ directory: d, id: t.id, text: "must be visible", actor: ME });
+  const r = runShow({ directory: d, id: t.id, full: true });
+  assert.ok(r.log.some((e) => "text" in e && e.text === "must be visible"), "写进去的事件读不回来");
+  assert.ok(read(d, t.id).includes("   ## Log"), "那段未识别正文必须原样保留");
+  assert.equal(runDoctor({ directory: d }).ok, true);
+});
+
+test("`- [ ]x`（方括号后没有空白）不是标准：不占编号，check 也不会改写它", () => {
+  // GFM 任务项的标记后必须跟空白。旧的解析把空格当可选，于是这行成了第 1 条标准——
+  // 改变编号、挡住 done，而 F09 的 check 会真的去改写它。
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", acceptance: ["real"], actor: ME });
+  edit(d, t.id, (s) => s.replace("- [ ] real", "- [ ]x not a task item\n- [ ] real"));
+  const r = runCheck({ directory: d, id: t.id, n: 1, actor: ME });
+  assert.equal(r.text, "real", "第 1 条应当是真正的那条标准");
+  assert.match(read(d, t.id), /^- \[ \]x not a task item$/m, "非标准行被改写了");
+});
