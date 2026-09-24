@@ -155,7 +155,7 @@ test("没闭合的 <pre>、<!-- 等（CommonMark 第 1–5 类 HTML 块）同样
   for (const opener of ["<pre>", "<script>", "<style>", "<textarea>", "<!-- x", "<?php", "<!DOCTYPE html", "<![CDATA["]) {
     const lines = ["## Plan", "", opener, "", "## Acceptance Criteria", "", "- [ ] must run checks", ""];
     assert.deepEqual(parseAcceptance(lines.join("\n")).map((c) => c.text), ["must run checks"], opener);
-    assert.equal(structure(lines).unclosedAt, 2, `${opener} 应当记为没闭合`);
+    assert.equal(structure(lines).reparsedAt, 2, `${opener} 应当记为没闭合`);
   }
 });
 
@@ -164,10 +164,54 @@ test("闭合了的 HTML 块照 CommonMark 处理：里面的假标准不算，�
   for (const block of [["<pre>", "- [ ] fake", "</pre>"], ["<!-- c -->"], ["<!-->"], ["<!--", "- [ ] fake", "-->"], ["<?x ?>"]]) {
     const lines = ["## Acceptance Criteria", "", ...block, "", "- [ ] real", ""];
     assert.deepEqual(parseAcceptance(lines.join("\n")).map((c) => c.text), ["real"], JSON.stringify(block));
-    assert.equal(structure(lines).unclosedAt, -1, JSON.stringify(block));
+    assert.equal(structure(lines).reparsedAt, -1, JSON.stringify(block));
   }
 });
 
-test("第 6 类（<div>）在空行处结束，本来就藏不住后面的标题：不算没闭合", () => {
-  assert.equal(structure(["<div>", "", "## Log", ""]).unclosedAt, -1);
+test("第 6、7 类（<div>、任意标签）在空行处结束：隔了空行不算没闭合，里面的普通文字照样是 HTML", () => {
+  assert.equal(structure(["<div>", "", "## Log", ""]).reparsedAt, -1);
+  assert.equal(structure(["<div>", "just text", "</div>", "", "## Log", ""]).reparsedAt, -1);
+  assert.equal(structure(["<custom>", "text", "", "- [ ] x"]).reparsedAt, -1);
+});
+
+test("第 6、7 类紧贴着一个会开始块的行：吞掉了它，当没闭合处理（第五轮评审）", () => {
+  // 标题前、标准前、两者都紧贴——三种都要看得见。
+  for (const body of [
+    ["## Plan", "<div>", "## Acceptance Criteria", "- [ ] must check"],
+    ["## Acceptance Criteria", "<div>", "- [ ] must check"],
+    ["## Acceptance Criteria", "<table>", "<tr>", "- [ ] must check"],
+    ["## Plan", "<custom>", "## Acceptance Criteria", "- [ ] must check"],
+    ["## Plan", "</pre>", "## Acceptance Criteria", "- [ ] must check"],
+  ]) assert.deepEqual(parseAcceptance(body.join("\n")).map((c) => c.text), ["must check"], JSON.stringify(body));
+  // 后果：`<div>` 里一行 `## inside` 成了真的小节边界。这是有意的——判据是「作者没写结束标记」，
+  // 不是「看起来像示例」。
+  const st = structure(["<div>", "## inside", "</div>"]);
+  assert.equal(st.reparsedAt, 0);
+  assert.ok(st.h2.has(1));
+});
+
+test("暴力枚举：一条标准之后没有任何结束标记时，它前面无论是什么，它都看得见", () => {
+  // 独立于实现的判据：藏住一行的唯一合法方式是它后面有作者写下的结束标记（```、~~~、</pre>、--> 之类）。
+  // 目标标准是正文最后一行，后面什么都没有；标题与它之间也没有能关闭前缀里的块的行——所以它必须被认出来。前缀与夹在中间的行取自下面的字母表，
+  // 覆盖三类会吞行的块、容器、缩进、段落与 setext。
+  const ALPHA = ["<div>", "<pre>", "</pre>", "<!--", "-->", "```", "~~~", "\t```", "> x", "- x", "  x", "x", "",
+    "<table>", "<custom>", "</div>", "    code", "---", "<?x"];
+  const seqs = (n: number): string[][] => n === 0 ? [[]] : seqs(n - 1).flatMap((s) => ALPHA.map((a) => [...s, a]));
+  let count = 0;
+  for (let total = 0; total <= 3; total++) {
+    for (const seq of seqs(total)) {
+      for (let cut = 0; cut <= total; cut++) {
+        const [pre, mid] = [seq.slice(0, cut), seq.slice(cut)];
+        // 标题与目标之间若有一行能关闭前缀里打开的块，标题本身就被作者合法地包住了——那不在判据之内。
+        const closes = (a: string) => (["```", "~~~"].includes(a) && pre.includes(a))
+          || (a === "</pre>" && pre.includes("<pre>")) || (a === "-->" && pre.includes("<!--"));
+        if (mid.some(closes)) continue;
+        const body = [...pre, "## Acceptance Criteria", ...mid, "- [ ] target"].join("\n");
+        const got = parseAcceptance(body).filter((c) => c.text === "target" && !c.checked);
+        assert.equal(got.length, 1, `标准被藏起来了：${JSON.stringify(body)}`);
+        count++;
+      }
+    }
+  }
+  assert.ok(count > 25000, `枚举规模：${count}`);
 });

@@ -43,3 +43,22 @@ test("续行之后紧跟变量名的非 ASCII 字符：bash 先拼接再分词�
   assert.deepEqual(find('echo $\\\n\necho "$y，"'), [[3, "y"]], "被删掉的续行照样计入行号");
   assert.deepEqual(find('echo $fo\\\no\necho "$y，"'), [[3, "y"]], "变量名中间被删掉的续行也计入行号");
 });
+
+test("heredoc 正文里的引号是数据：不改变之后的引号状态（第五轮评审的漏报）", () => {
+  assert.deepEqual(find("cat <<EOF2\n'\nEOF2\necho $x，"), [[4, "x"]]);
+});
+
+test("heredoc：带引号的定界符不展开、不报；裸定界符展开、照报；<<- 去掉行首 Tab", () => {
+  assert.deepEqual(find("cat <<'EOF'\n$x，\nEOF"), []);
+  assert.deepEqual(find('cat <<"EOF"\n$x，\nEOF'), []);
+  assert.deepEqual(find("cat <<\\EOF\n$x，\nEOF"), []);
+  assert.deepEqual(find("cat <<EOF\n值 $x，\nEOF"), [[2, "x"]]);
+  assert.deepEqual(find("cat <<-EOF\n\t$x，\n\tEOF\necho $y，"), [[2, "x"], [4, "y"]]);
+  assert.deepEqual(find("cat <<-EOF\n\t'\n\tEOF\necho $y，"), [[4, "y"]], "<<- 的结束行可以有行首 Tab");
+  assert.deepEqual(find("cat <<EOF\n\\$x，\nEOF"), [], "转义了的 $ 不展开");
+});
+
+test("一行上两个 heredoc 按顺序读；找不到结束行的 << 不是 heredoc（算术移位）", () => {
+  assert.deepEqual(find("cat <<A <<'B'\n$a，\nA\n$b，\nB\necho $c，"), [[2, "a"], [6, "c"]]);
+  assert.deepEqual(find("echo $(( 1<<x ))\necho $y，"), [[2, "y"]]);
+});
