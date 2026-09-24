@@ -6,8 +6,9 @@
 |---|---|---|
 | `commands/` | 编排一条命令：读取 → 计算 → 组装报告 | 全部 |
 | `output/` | DTO 与渲染。`dto/` 是对外契约的唯一定义处 | `domain/`（仅 `dto/`）、`format/` 的类型 |
-| `domain/` | 派生态、校验、图算法。**纯函数，不 import `node:fs`** | 仅 `domain/` 内部 |
-| `format/` | 磁盘 ↔ 内存。`.todopi/` 的解析、发射、发现、id 生成 | `node:*`、`yaml`、`fs/`、`domain/types.ts`（仅类型与常量） |
+| `domain/` | 派生态、校验、图算法。**纯函数，不 import `node:fs`** | `domain/` 内部、`markdown/` |
+| `format/` | 磁盘 ↔ 内存。`.todopi/` 的解析、发射、发现、id 生成 | `node:*`、`yaml`、`fs/`、`domain/types.ts`（仅类型与常量）、`markdown/` |
+| `markdown/` | Markdown 正文的结构：哪一行是标题、一节从哪到哪、哪些行在代码围栏里。**纯函数，不认识 todopi 的格式** | 什么都不 import |
 | `fs/` | 文件系统原语：原子替换、锁。**不认识 todopi 的格式** | 仅 `node:*` |
 | `exec/` | 子进程与用户级配置：以独立进程组执行 `verify`、按仓库路径的信任记录。**不认识 todopi 的格式** | 仅 `node:*`，以及同目录的 `./<name>.ts` |
 
@@ -80,3 +81,10 @@ Node 的异步 spawn 支持。
   `allowImportingTsExtensions` 与之对应。
 - **不直接调用 `process.exit()`**。抛 `CliError`，由 `src/cli.ts` 的顶层 catch
   统一映射到 `process.exitCode`——`process.exit()` 会截断尚未 flush 的 stdout。
+
+
+**`markdown/` 为什么单独一层。** 读取端（`domain/`）与写入端（`format/`）都要回答「这一节从哪到哪」。
+分层规定 `domain/` 只引用 `domain/`、`format/` 只引用 `domain/types.ts`，于是这个判断曾在两边各写了一份
+——写入端 `trim()`、读取端不 `trim()`，一个缩进的 `   ## Log` 就让事件写进了读者看不见的地方（F09，
+DECISIONS D029）；F10 又发现两边都不认识代码围栏。同一个判断只能有一份，所以把它放到两边都能依赖的
+叶子层。由 ARCH-025 钉住它什么都不 import。

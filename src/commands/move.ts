@@ -24,9 +24,9 @@ export function runMove(opts: MoveOptions): MoveReport {
   const anchorId = opts.before ?? opts.after;
   if (anchorId === opts.id) throw new CliError(EXIT.usage, `A task cannot be moved relative to itself (${opts.id}).`);
 
-  // 归属不查：PRD FR-C6 的严格匹配名单里没有 move，它是规划操作。已关闭任务也可以挪：
-  // 重排显示顺序不改写任何证据。
-  const r = writeAsWorker({ ...opts, ownership: false }, (task, { now, actor, all }) => {
+  // 归属照查（FR-C6），理由同 dep：move 改写的是被挪那个任务的文件与 Log。已关闭任务也可以挪
+  // ——它没有活着的持有者（文件里的 assignee 是历史记录），重排显示顺序不改写任何证据。
+  const r = writeAsWorker(opts, (task, { now, actor, all }) => {
     // 邻居在 §7.4 的**真实顺序**上算，不在 rank 字符串上算：rank 相同按 id 破，
     // `--after Y` 必须落在 Y 与它真正的下一个之间。
     const others = sortTasks(all.filter((t) => t.parseError === undefined && t.idFromFilename !== opts.id));
@@ -67,15 +67,18 @@ export function runMove(opts: MoveOptions): MoveReport {
     // 下界之外的那一侧若没有 rank，就当成没有边界：新 rank 仍在有 rank 的那一段里。
     const loRank = lo === null ? null : rankOf(lo);
     const hiRank = hi === null ? null : rankOf(hi);
-    if (loRank !== null && hiRank !== null && loRank >= hiRank) {
-      // 两个邻居的 rank 相同：没有字符串能插进去。spec 允许重编号，但那要改多个文件并各记
-      // 一条 moved，而 FR-T5 要只重写一个。拒绝，点名这两个，让人先把其中一个挪开。
-      throw new CliError(EXIT.usage,
-        `${lo!.idFromFilename} and ${hi!.idFromFilename} share the rank "${loRank}", so nothing fits between them. `
-        + `Move one of them somewhere else first.`);
+    const rank = rankBetween(loRank, hiRank);
+    if (rank === null) {
+      // 真的无解。spec 允许重编号，但那要改多个文件并各记一条 moved，而 FR-T5 要只重写一个。
+      // 拒绝，点名，让人先把其中一个挪开。
+      const names = [lo, hi].filter((t): t is TaskFile => t !== null).map((t) => t.idFromFilename).join(" and ");
+      throw new CliError(EXIT.usage, loRank !== null && loRank === hiRank
+        ? `${names} share the rank "${loRank}", so nothing fits between them. Move one of them somewhere else first.`
+        : `There is no rank of at most 32 characters (spec §5.2) that fits next to ${names}. `
+          + "Move one of them somewhere else first, or renumber ranks with `todopi doctor --fix`.");
     }
     return {
-      frontmatter: { ...task.frontmatter, rank: rankBetween(loRank, hiRank) },
+      frontmatter: { ...task.frontmatter, rank },
       appendLog: `${now} ${actor} moved`,
     };
   });

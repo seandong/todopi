@@ -94,7 +94,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-C2** `release <id>` 清空 assignee、删除租约、记录 `released`。
 - **FR-C3** 持有者的每次写入都刷新租约心跳和 `updated`。
 - **FR-C4** actor 解析：`--as` > `TODOPI_ACTOR` > agent 环境推断（`claude-code@<host>`、`codex@<host>` 等）> `git config user.name`。actor 标识的是**工作者而非会话**，因此同一机器上同一工具跨会话保持不变——否则续做自己昨天的任务都要先抢占。取自 `git config` 的值按格式规格 §5.4 规范化（这类值常含空格，而 actor 语法禁止空格）。`--as` 同时覆盖写入身份与查询身份，人不必做任何配置就能查看另一个 actor 的工作。
-- **FR-C6** 身份有两种匹配方式，由命令是否写入决定。**写入严格匹配**：`note`、`check`、`edit`、`done`、`close`、心跳刷新，以及 `handoff` 追加的笔记，在任务 `assignee` 是另一个 actor 时拒绝（退出码 3），两个工作者因此不会在同一个任务上交错写入。**展示宽松匹配**：`ls --mine`、`prime` 和 `handoff` 打印的报告把 assignee 等于当前解析出的 actor **或**以 `@<本机 host>` 结尾的任务都算作「我的」。人在终端上因此能看到自己的 agent 在做什么——这正是这三个命令存在的意义；不需要任何配置，也不需要保存一份 actor 清单。
+- **FR-C6** 身份有两种匹配方式，由命令是否写入决定。**写入严格匹配**：`note`、`check`、`edit`、`dep`、`move`、`done`、`close`、心跳刷新，以及 `handoff` 追加的笔记，在任务 `assignee` 是另一个 actor 时拒绝（退出码 3），两个工作者因此不会在同一个任务上交错写入。`dep` 与 `move` 是 2026-09-24 补进名单的：它们改写的是被阻塞 / 被挪动的那个任务的文件与 Log，若它正被别人持有就是交错写入。F10 起初按字面名单把它们当规划操作放行，理由是「与 `add --blocked-by` 同类」——这个类比是错的，`add` 写的是一个新任务（见 DECISIONS D030）。**展示宽松匹配**：`ls --mine`、`prime` 和 `handoff` 打印的报告把 assignee 等于当前解析出的 actor **或**以 `@<本机 host>` 结尾的任务都算作「我的」。人在终端上因此能看到自己的 agent 在做什么——这正是这三个命令存在的意义；不需要任何配置，也不需要保存一份 actor 清单。
 - **FR-C5** 租约放在 `.git/todopi/leases/`（worktree 间共享）；无 git 时回退到 `.todopi/.cache/leases/`。同一目录承载其余机器本地运行时状态，包括每个会话上次 `prime` 的时间（FR-P1）。会话身份留在这里，永不进入任务文件。
 
 ### 7.4 完成定义
@@ -339,6 +339,11 @@ todopi import <file.md> | import beads [path]
   （F07 立过的规矩：绝不阻塞在 TTY 上，agent 在管道里跑命令是常态），后者不在 F10 的验收判据里。
   现在能改的是标题、Description、verify、标签、父任务。自举任务的 Acceptance Criteria 段里那句
   「`check`（F09，尚未实现）」因此还没法用 CLI 改——它是迁移时生成的，F09 之后已经过时。
+- **rank 的规格空间比生成器宽。** spec §5.2 允许任何 `[0-9a-z]{1,32}`，而 fractional-indexing 只认它
+  自己形状的键。2026-09-24 起 `add` / `move` 都能处理规格合法的任意 rank（先用库，不行就在规格空间上取中点），
+  只在真的无解时拒绝。但手写的非库形状 rank 会让之后的插入走效率较差的中点算法；F13 `doctor --fix` 回填或
+  规范化 rank 时，应当生成库形状的键。另外 spec §7.4 说「新值总能通过追加字符插进两个已有值之间」，这句
+  不完全成立（`"a"` 与 `"a0"` 之间没有任何字符串），下一次规格修订时应当改准。
 - **`project_id`** —— 一个能在移动与克隆后保持稳定的标识，跨仓视图和将来任何同步都需要它。现在不加，是因为格式规格 §9 明确把「新增配置键」归类为不升版本的加性变更，所以它随时可以在有消费者时引入，并由 `doctor --fix` 回填。提前加等于发布一个没人读的字段。
 
 产品负责人的动作：续费 todopi.com（2026-11-20 到期）；注册 todopi.dev；在 npm 发布 `todopi` / `@todopi` 占位；创建 GitHub org；人工商标检索（USPTO、EUIPO）；为导入器测试准备两份真实 Beads Classic 导出。

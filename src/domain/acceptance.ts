@@ -1,8 +1,10 @@
 // src/domain/acceptance.ts
 // spec §5.3.2 的验收标准。纯函数：不 import node:fs，用例直接给正文字符串即可。
 
-/** 正文里的一行，带它在原文中的行号。 */
-export type BodyLine = { index: number; text: string };
+import { fenceMask, headingIndex, sectionEnd } from "../markdown/sections.ts";
+
+/** 正文里的一行，带它在原文中的行号，以及它是否在代码围栏里。 */
+export type BodyLine = { index: number; text: string; fenced: boolean };
 
 /**
  * 取某个 H2 小节下的所有行（不含标题行本身），到下一个 `## ` 为止。
@@ -19,13 +21,13 @@ export function sectionLines(body: string, heading: string): BodyLine[] {
   // 验收标准被解析成空集，于是 `done` 悄悄越过门禁而 doctor 还报一切正常
   // （Codex 评审复现）。这里按容错读取处理，写回时自然回到 LF。
   const lines = body.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
-  const start = lines.findIndex((l) => l === heading);
+  // 标题与小节边界都只认围栏外的 `## `（markdown/sections.ts，写入端用的是同一份）。
+  const mask = fenceMask(lines);
+  const start = headingIndex(lines, mask, heading);
   if (start < 0) return [];
   const out: BodyLine[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    const text = lines[i]!;
-    if (text.startsWith("## ")) break;
-    out.push({ index: i, text });
+  for (let i = start + 1; i < sectionEnd(lines, mask, start); i++) {
+    out.push({ index: i, text: lines[i]!, fenced: mask[i]! });
   }
   return out;
 }
@@ -61,7 +63,9 @@ const ITEM_RE = /^- \[([ xX])\](?:[ \t]+(.*))?$/;
  */
 export function parseAcceptance(body: string): Criterion[] {
   const out: Criterion[] = [];
-  for (const { index, text } of sectionLines(body, "## Acceptance Criteria")) {
+  for (const { index, text, fenced } of sectionLines(body, "## Acceptance Criteria")) {
+    // 围栏里的 `- [ ] x` 是示例代码，不是标准，也不占编号。
+    if (fenced) continue;
     const m = ITEM_RE.exec(text);
     if (m === null) continue;
     out.push({

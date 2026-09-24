@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
 import { runAdd } from "../../src/commands/add.ts";
 import { runLs } from "../../src/commands/ls.ts";
 import { runMove } from "../../src/commands/move.ts";
+import { runClaim } from "../../src/commands/claim.ts";
 import { runDoctor } from "../../src/commands/doctor.ts";
 import { EXIT, CliError } from "../../src/exit.ts";
 
@@ -55,11 +56,18 @@ test("--top / --before / --after 把任务放到该在的位置", () => {
 test("只重写一个文件（FR-T5），并在它的 Log 里记 moved", () => {
   const d = repo();
   const ids = abcd(d);
-  const before = snapshot(d);
+  // 比 inode 与 mtime，不比内容：只比内容的话，一个把邻居原样重写一遍的实现也能通过（评审指出）。
+  const dir = join(d, ".todopi", "tasks");
+  // inode 抓原子写（每次换一个），mtime 抓原地写（writeFileSync 不换 inode）。
+  const inodes = () => new Map(readdirSync(dir).map((f) => {
+    const st = statSync(join(dir, f));
+    return [f, `${st.ino}:${st.mtimeMs}`];
+  }));
+  const before = inodes();
   runMove({ directory: d, id: ids["c"]!, before: ids["b"]!, actor: ME });
-  const after = snapshot(d);
+  const after = inodes();
   const changed = [...before.keys()].filter((f) => before.get(f) !== after.get(f));
-  assert.deepEqual(changed, [`${ids["c"]}.md`], "改动了被挪任务之外的文件");
+  assert.deepEqual(changed, [`${ids["c"]}.md`], "写了被挪任务之外的文件");
   assert.match(read(d, ids["c"]!).trimEnd().split("\n").at(-1)!, /^- \S+Z me@host moved$/);
 });
 
@@ -125,7 +133,7 @@ test("新 rank 严格落在两个邻居之间 —— 邻居的 rank 贴得再近
   const setRank = (id: string, r: string) => edit(d, id, (s) => s.replace(/^rank: ".*"$/m, `rank: "${r}"`));
 
   // --before b，前驱 a 的 rank 紧贴 b
-  setRank(ids["a"]!, rankBetween(null, rankOf(ids["b"]!)));
+  setRank(ids["a"]!, rankBetween(null, rankOf(ids["b"]!))!);
   runMove({ directory: d, id: ids["d"]!, before: ids["b"]!, actor: ME });
   assert.ok(rankOf(ids["a"]!) < rankOf(ids["d"]!) && rankOf(ids["d"]!) < rankOf(ids["b"]!),
     `--before 的新 rank 没有严格落在前驱与目标之间：${rankOf(ids["a"]!)} / ${rankOf(ids["d"]!)} / ${rankOf(ids["b"]!)}`);
@@ -133,9 +141,47 @@ test("新 rank 严格落在两个邻居之间 —— 邻居的 rank 贴得再近
   // --after b，后继的 rank 紧贴 b
   const next = runLs({ directory: d, all: true }).tasks.map((t) => t.id);
   const after = next[next.indexOf(ids["b"]!) + 1]!;
-  setRank(after, rankBetween(rankOf(ids["b"]!), null));
+  setRank(after, rankBetween(rankOf(ids["b"]!), null)!);
   const mover = next.find((id) => id !== ids["b"] && id !== after)!;
   runMove({ directory: d, id: mover, after: ids["b"]!, actor: ME });
   assert.ok(rankOf(ids["b"]!) < rankOf(mover) && rankOf(mover) < rankOf(after),
     `--after 的新 rank 没有严格落在目标与后继之间：${rankOf(ids["b"]!)} / ${rankOf(mover)} / ${rankOf(after)}`);
+});
+
+
+test("手写的、规格合法但库不认的 rank：add 与 move 都照常工作，不抛 invalid order key", () => {
+  // spec §5.2 允许 rank: "a"，doctor 判为干净；fractional-indexing 却不认它。曾经 add 与
+  // move --top 都在这样的合法账本上直接崩（F10 评审找出 move 那半，add 那半是顺手查出来的）。
+  const d = repo();
+  const ids = abcd(d);
+  edit(d, ids["a"]!, (s) => s.replace(/^rank: ".*"$/m, 'rank: "a"'));
+  edit(d, ids["d"]!, (s) => s.replace(/^rank: ".*"$/m, 'rank: "zz"'));
+  assert.equal(runDoctor({ directory: d }).ok, true, "夹具本身应当是合法账本");
+  runMove({ directory: d, id: ids["c"]!, top: true, actor: ME });
+  assert.equal(order(d)[0], "c");
+  const e = runAdd({ directory: d, title: "e", actor: ME });
+  assert.equal(order(d).at(-1), "e", "新任务应当排在最后");
+  assert.ok(e.id);
+  assert.equal(runDoctor({ directory: d }).ok, true);
+});
+
+test("两个邻居之间真的放不下（32 位、只差末位）：拒绝并点名，什么都不写", () => {
+  const d = repo();
+  const ids = abcd(d);
+  edit(d, ids["a"]!, (s) => s.replace(/^rank: ".*"$/m, `rank: "${"a".repeat(31)}0"`));
+  edit(d, ids["b"]!, (s) => s.replace(/^rank: ".*"$/m, `rank: "${"a".repeat(31)}1"`));
+  const before = snapshot(d);
+  assert.throws(() => runMove({ directory: d, id: ids["d"]!, after: ids["a"]!, actor: ME }),
+    (e: unknown) => code(EXIT.usage)(e) && /32 characters/.test((e as Error).message)
+      && (e as Error).message.includes(ids["a"]!) && (e as Error).message.includes(ids["b"]!));
+  assert.deepEqual(snapshot(d), before);
+});
+
+test("被挪的任务在别人手里：退出 3，什么都不写（FR-C6）", () => {
+  const d = repo();
+  const ids = abcd(d);
+  runClaim({ directory: d, id: ids["c"]!, actor: "other@host" });
+  const before = snapshot(d);
+  assert.throws(() => runMove({ directory: d, id: ids["c"]!, top: true, actor: ME }), code(EXIT.conflict));
+  assert.deepEqual(snapshot(d), before);
 });

@@ -32,12 +32,6 @@ export type WorkerWriteResult = { task: TaskFile; actor: string; wrote: boolean;
 export function writeAsWorker(
   opts: {
     directory: string; id: string; actor?: string;
-    /**
-     * 是否按 FR-C6 做写入严格匹配。默认要。`dep` 与 `move` 不要：PRD FR-C6 列出的严格匹配
-     * 写者是 note、check、edit、done、close、心跳与 handoff，这两个是规划操作，与
-     * `add --blocked-by` 同类（add 也不查归属）。
-     */
-    ownership?: boolean;
   },
   decide: (task: TaskFile, ctx: { now: string; actor: string; all: TaskFile[] }) => WorkerWrite,
 ): WorkerWriteResult {
@@ -61,7 +55,7 @@ export function writeAsWorker(
     const held = otherHolder({
       task, actor, lease, now: Date.now(), leaseHours: ledger.config.lease_hours,
     });
-    if (held !== null && opts.ownership !== false) {
+    if (held !== null) {
       throw new CliError(EXIT.conflict,
         `Task ${opts.id} is held by ${held.holder} (since ${held.heldSince}). Writes are refused so two `
         + `workers do not interleave on one task. If it was abandoned, take it over with `

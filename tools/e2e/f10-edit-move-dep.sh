@@ -48,13 +48,18 @@ cli -C "$W" move "$C" --top >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 0 ] && ok "move --top 退出 0" || fail "move --top 退出 $rc"
 n="$(git -C "$W" status --porcelain | wc -l | tr -d ' ')"
 changed="$(git -C "$W" status --porcelain | awk '{print $2}')"
-[ "$n" = "1" ] && [ "$changed" = ".todopi/tasks/$C.md" ] && ok "move 只改了被挪的那个文件" || fail "move 改了 $n 个文件：$changed"
+# git 比的是内容：原样重写的邻居看不出来。「只写了一个文件」的判据（比 inode）在单元用例里。
+[ "$n" = "1" ] && [ "$changed" = ".todopi/tasks/$C.md" ] && ok "只有被挪的那个文件内容变了" || fail "move 改了 $n 个文件：$changed"
 first="$(cli -C "$W" --json ls --all 2>/dev/null | jget '[0].id')"
 [ "$first" = "$C" ] && ok "它现在排第一" || fail "排第一的是 $first"
 
 # 3. edit：记 edited fields=…，--label 的 -x 不被当成选项
+# 先把 nope 加上，删除才看得出效果——夹具里本来没有 nope 的话，忽略 -nope 的实现也能过（评审指出）。
+cli -C "$W" edit "$A" --label +nope >/dev/null 2>&1
 cli -C "$W" edit "$A" --title "a renamed" --label +x --label -nope >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 0 ] && ok "edit 退出 0（--label -nope 被当成值而不是选项）" || fail "edit 退出 $rc"
+lbl="$(cli -C "$W" --json show "$A" 2>/dev/null | jget '.labels')"
+[ "$lbl" = '["x"]' ] && ok "标签是 [x]：nope 真的删掉了" || fail "标签是 ${lbl}，期望 [\"x\"]"
 tail -1 "$W/.todopi/tasks/$A.md" | grep -q "edited fields=labels,title$" && ok "Log 记 edited fields=labels,title" || fail "Log 行是 $(tail -1 "$W/.todopi/tasks/$A.md")"
 cli -C "$W" edit "$A" >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 1 ] && ok "什么都不给：退出 1" || fail "什么都不给时退出 $rc"

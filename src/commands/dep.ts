@@ -16,8 +16,10 @@ export function runDep(opts: DepOptions): DepReport {
   if (opts.id === opts.on) {
     throw new CliError(EXIT.usage, `A task cannot be blocked by itself (${opts.id}).`);
   }
-  // 归属不查：PRD FR-C6 的严格匹配名单里没有 dep。它是规划操作，与 add --blocked-by 同类。
-  const r = writeAsWorker({ ...opts, ownership: false }, (task, { now, actor, all }) => {
+  // 归属照查（FR-C6）：dep 改写的是**被阻塞那个任务**的文件并往它的 Log 里追加——若它正被
+  // 别人持有，就是两个工作者在同一个任务上交错写入。第一版以为它和 add --blocked-by 同类而不查，
+  // 那个类比是错的：add 写的是一个新任务，dep 写的是别人正在做的任务（F10 评审）。
+  const r = writeAsWorker(opts, (task, { now, actor, all }) => {
     if (statusOf(task) === "closed") {
       throw new CliError(EXIT.gate,
         `Task ${opts.id} is closed; its dependencies are the record of what it waited on. `

@@ -1,6 +1,7 @@
 // src/format/emit.ts
 import YAML from "yaml";
 import { generateKeyBetween } from "fractional-indexing";
+import { EXIT, CliError } from "../exit.ts";
 
 /** base36，与 spec §5.2 的 rank 正则 ^[0-9a-z]{1,32}$ 对齐。 */
 const RANK_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -181,16 +182,109 @@ export function emitTask(t: NewTask): string {
  * 在两个键之间插入是 move 的事（F10），本 feature 用不到。
  */
 export function nextRank(lastRank: string | null): string {
-  return generateKeyBetween(lastRank, null, RANK_ALPHABET);
+  const k = rankBetween(lastRank, null);
+  if (k === null) {
+    // 追加到末尾只有在最后一个 rank 已经是 32 个 z 这类极端值时才无解。
+    throw new CliError(EXIT.usage,
+      `The last task's rank ${JSON.stringify(lastRank)} leaves no room after it within 32 characters (spec §5.2). `
+      + "Move it earlier, or renumber ranks with `todopi doctor --fix`.");
+  }
+  return k;
+}
+
+/** spec §5.2：`^[0-9a-z]{1,32}$`。 */
+const MAX_RANK = 32;
+
+/**
+ * 两个 rank 之间的一个新 rank；null 表示那一侧没有边界。**真的无解时返回 null**，由调用方
+ * 给出点名的拒绝。
+ *
+ * 三级，顺序有讲究：
+ *
+ * 1. **先用 fractional-indexing。** 它的键把「整数部分的长度」编进首字母，能在末尾追加极多次
+ *    而长度几乎不涨——这是 add 天天走的路。
+ * 2. **邻居不是库认识的形状、且是追加到末尾**：跳回库的键空间。spec 允许任何
+ *    `[0-9a-z]{1,32}`，手写的 `rank: "a"` 规格合法、doctor 判为干净，库却抛
+ *    `invalid order key: a`——add 与 move 曾在这样的合法账本上直接崩（F10 评审）。比 "a" 大的
+ *    最小库键是 "b00"，之后的 add 又回到第 1 级。
+ * 3. **其余情形用覆盖整个规格空间的中点。** 只在末尾追加时它的效率差（每一位只有几十个空位），
+ *    所以它是最后一级，不是第一级。
+ *
+ * 无解只有两种：两者之间根本没有字符串（hi 恰好是 lo 后面补若干个 0，比如 "a" 与 "a0"；两个
+ * rank 相同也算），或者能放进去的串都超过 32 个字符。spec §7.4 允许这时重编号，但那要改多个
+ * 文件，而 FR-T5 要 move 只重写一个——所以交给调用方拒绝。
+ */
+export function rankBetween(lo: string | null, hi: string | null): string | null {
+  try {
+    const k = generateKeyBetween(lo, hi, RANK_ALPHABET);
+    if (k.length <= MAX_RANK) return k;
+  } catch {
+    // 邻居不是库的形状，或者 lo >= hi。往下走，由后两级判断。
+  }
+  if (hi === null && lo !== null) {
+    const k = libraryKeyAfter(lo);
+    if (k !== null) return k;
+  }
+  const k = specBetween(lo ?? "", hi);
+  return k !== null && k.length <= MAX_RANK ? k : null;
 }
 
 /**
- * 两个 rank 之间的一个新 rank（`move`）。null 表示那一侧没有边界。
+ * 比 lo 大的、库认识的最短整数键：首字母比 lo 的首字母大，其后补该首字母要求的那么多个 0。
  *
- * 两侧相等或倒序时 fractional-indexing 会抛错——那是「两个任务的 rank 相同」（两个
- * worktree 各自 add 就会撞），调用方要在这之前识别并拒绝，不在这里重编号：重编号要改
- * 多个文件，而 FR-T5 要 move 只重写一个。
+ * **不写死键的形状，问库。** 我第一版按 base62 的直觉写了 "a0"、"b00"——而在本仓库的字母表
+ * （数字在前）下，库的整数头以 "i" 为零点向两边变长，"b00" 根本不是它的键（实测）。
  */
-export function rankBetween(lo: string | null, hi: string | null): string {
-  return generateKeyBetween(lo, hi, RANK_ALPHABET);
+function libraryKeyAfter(lo: string): string | null {
+  for (let c = 97; c <= 122; c++) {                          // "a".."z"
+    const header = String.fromCharCode(c);
+    if (header <= lo[0]!) continue;
+    for (let n = 0; n < MAX_RANK; n++) {
+      const k = header + "0".repeat(n);
+      if (isLibraryKey(k)) return k;
+    }
+  }
+  return null;
+}
+
+function isLibraryKey(k: string): boolean {
+  try {
+    generateKeyBetween(k, null, RANK_ALPHABET);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const digit = (ch: string): number => RANK_ALPHABET.indexOf(ch);
+
+/**
+ * 规格空间上的中点：lo < k < hi，按码点比较（spec §7.4）。lo 为 "" 表示负无穷，hi 为 null 表示
+ * 正无穷。逐位决定：首位不同且隔得开就取中间那一位；紧挨着就保留 lo 的首位、在它后面找一个比
+ * lo 余下部分大的串；首位相同就递归。
+ */
+function specBetween(lo: string, hi: string | null): string | null {
+  if (hi !== null && lo >= hi) return null;
+  if (hi === null) {
+    if (lo === "") return "i";
+    const c = digit(lo[0]!);
+    if (c < 35) return RANK_ALPHABET[Math.ceil((c + 36) / 2)]!;
+    const rest = specBetween(lo.slice(1), null);
+    return rest === null ? null : "z" + rest;
+  }
+  if (lo === "") {
+    const h = digit(hi[0]!);
+    if (h > 0) return RANK_ALPHABET[Math.floor(h / 2)]!;
+    const rest = specBetween("", hi.slice(1));
+    return rest === null ? null : "0" + rest;
+  }
+  const l = digit(lo[0]!);
+  const h = digit(hi[0]!);
+  if (l === h) {
+    const rest = specBetween(lo.slice(1), hi.slice(1));
+    return rest === null ? null : lo[0]! + rest;
+  }
+  if (h - l > 1) return RANK_ALPHABET[Math.floor((l + h) / 2)]!;
+  const rest = specBetween(lo.slice(1), null);
+  return rest === null ? null : lo[0]! + rest;
 }

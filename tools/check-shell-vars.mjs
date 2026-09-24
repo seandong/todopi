@@ -1,0 +1,60 @@
+// tools/check-shell-vars.mjs —— ARCH-024 的检查器。
+//
+// 找 shell 脚本里**会被展开的** `$变量` 紧挨着一个非 ASCII 字符的地方：bash 会把那个多字节
+// 字符的字节吞进变量名，set -u 下直接 unbound variable。
+//
+// 第一版是一条 grep，它连注释里和单引号里的 `$x，` 也报——shell 并不展开它们（F10 评审）。
+// 这是「规则的措辞对，check 比措辞宽」的第九次；grep 看不见引号状态，所以换成这个逐字符的扫描：
+// 跨行跟踪单引号（e2e 里大量跨行的 `node -e '...'`），跳过单引号内与注释。
+//
+// 已知不处理：`<<'EOF'` 这类不展开的 heredoc 正文里的 `$x，` 仍会被报。加花括号在那里无害，
+// 所以宁可多报。
+
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+function* shellFiles(dir) {
+  for (const e of readdirSync(dir)) {
+    const p = join(dir, e);
+    if (statSync(p).isDirectory()) yield* shellFiles(p);
+    else if (p.endsWith(".sh")) yield p;
+  }
+}
+
+/** 返回违规的 [行号, 变量名]。纯函数，便于用例直接喂字符串。 */
+export function findUnbracedVars(text) {
+  const out = [];
+  let single = false, double = false;
+  const lines = text.split("\n");
+  lines.forEach((line, ln) => {
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (single) { if (c === "'") single = false; continue; }
+      if (c === "\\") { i += 1; continue; }
+      if (c === "'" && !double) { single = true; continue; }
+      if (c === '"') { double = !double; continue; }
+      if (c === "#" && !double && (i === 0 || /[\s;]/.test(line[i - 1]))) break;   // 注释
+      if (c === "$") {
+        const m = /^[A-Za-z_][A-Za-z0-9_]*/.exec(line.slice(i + 1));
+        if (m !== null) {
+          const next = line.charCodeAt(i + 1 + m[0].length);
+          if (next > 127) out.push([ln + 1, m[0]]);
+          i += m[0].length;
+        }
+      }
+    }
+  });
+  return out;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const roots = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["tools", "init.sh"];
+  for (const root of roots) {
+    const files = statSync(root).isDirectory() ? [...shellFiles(root)] : [root];
+    for (const f of files) {
+      for (const [ln, name] of findUnbracedVars(readFileSync(f, "utf8"))) {
+        console.log(`${f}:${ln}: $${name} 紧挨着一个非 ASCII 字符——写成 \${${name}}`);
+      }
+    }
+  }
+}

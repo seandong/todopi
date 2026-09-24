@@ -60,8 +60,15 @@ test("成环拒绝：退出 1，报错里有环的路径，文件不动", () => 
   runDep({ directory: d, op: "add", id: b, on: c, actor: ME });
   const before = read(d, c);
   assert.throws(() => runDep({ directory: d, op: "add", id: c, on: a, actor: ME }),
-    (e: unknown) => code(EXIT.usage)(e) && /cycle/.test((e as Error).message)
-      && [a, b, c].every((id) => (e as Error).message.includes(id)));
+    (e: unknown) => {
+      // 断言一条**连续、闭合**的有向路径，而不只是三个 id 各自出现（`cycle: a,b,c` 也能过那种断言）。
+      const m = /cycle in the blocked_by graph: ((?:tp-[0-9a-z]+ -> )+tp-[0-9a-z]+)/.exec((e as Error).message);
+      if (!code(EXIT.usage)(e) || m === null) return false;
+      const path = m[1]!.split(" -> ");
+      const edges: Record<string, string> = { [a]: b, [b]: c, [c]: a };   // x 被 edges[x] 挡着
+      return path.length === 4 && path[0] === path[3] && new Set(path.slice(0, 3)).size === 3
+        && path.slice(0, 3).every((x, i) => edges[x] === path[i + 1]);
+    });
   assert.equal(read(d, c), before);
 });
 
@@ -100,12 +107,14 @@ test("已关闭任务的依赖不能改：退出 2", () => {
   assert.throws(() => runDep({ directory: d, op: "add", id: a, on: b, actor: ME }), code(EXIT.gate));
 });
 
-test("dep 不查归属（PRD FR-C6 的严格匹配名单里没有它）", () => {
-  // 规划操作，与 add --blocked-by 同类。
+test("被阻塞的任务在别人手里：退出 3，文件不动（FR-C6）", () => {
+  // dep 改写的是被阻塞那个任务的文件与 Log。第一版以为它和 add --blocked-by 同类而不查——
+  // 那个类比是错的：add 写的是新任务，dep 写的是别人正在做的任务（F10 评审）。
   const d = repo();
   const a = runAdd({ directory: d, title: "a", actor: ME }).id;
   const b = runAdd({ directory: d, title: "b", actor: ME }).id;
   runClaim({ directory: d, id: a, actor: OTHER });
-  runDep({ directory: d, op: "add", id: a, on: b, actor: ME });
-  assert.deepEqual(blockedBy(d, a), [b]);
+  const before = read(d, a);
+  assert.throws(() => runDep({ directory: d, op: "add", id: a, on: b, actor: ME }), code(EXIT.conflict));
+  assert.equal(read(d, a), before);
 });

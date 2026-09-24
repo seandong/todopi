@@ -234,13 +234,23 @@
     },
     {
       "id": "ARCH-024",
-      "description": "shell 脚本里 $变量 不得紧挨非 ASCII 字符",
+      "description": "shell 脚本里会被展开的 $变量 不得紧挨非 ASCII 字符",
       "applies_when": "true",
-      "check": "LC_ALL=C grep -rnE '\\$[A-Za-z_][A-Za-z0-9_]*[^[:print:][:space:]]' tools init.sh --include='*.sh' || true",
+      "check": "node tools/check-shell-vars.mjs",
       "expect": "empty",
       "what": "某个 .sh 里写了 `$var，` 或 `$var（` 这样的东西：变量名后面直接跟着一个中文标点或其他非 ASCII 字符。",
-      "why": "bash 会把紧跟的多字节字符的字节吞进变量名，于是 `$bb，` 引用的是一个名叫 `bb\\xef\\xbc` 的变量；在 set -u 下直接 `unbound variable` 崩掉。它几乎只出现在失败分支的报错信息里——平时走不到，真失败时脚本崩在报错那一行，原本要说的原因丢了。F07 撞过一次，F10 又撞一次，随后扫出 f01/f04/f05/f06/f08/f09 里还潜伏着 8 处。字符形状精确、零误报，所以落成规则（F08 时评估过的那几类都不行，这一类行）。",
+      "why": "bash 会把紧跟的多字节字符的字节吞进变量名，于是 `$bb，` 引用的是一个名叫 `bb\\xef\\xbc` 的变量；在 set -u 下直接 `unbound variable` 崩掉。它几乎只出现在失败分支的报错信息里——平时走不到，真失败时脚本崩在报错那一行，原本要说的原因丢了。F07 撞过一次，F10 又撞一次，随后扫出 f01/f04/f05/f06/f08/f09 里还潜伏着 8 处。字符形状精确、零误报，所以落成规则（F08 时评估过的那几类都不行，这一类行）。 2026-09-24 评审：第一版是一条 grep，连注释里与单引号里的 `$x，` 也报——shell 并不展开它们。这是「规则的措辞对，check 比措辞宽」的第九次；grep 看不见引号状态，改成 tools/check-shell-vars.mjs 逐字符扫描，跨行跟踪单引号、跳过注释。已知仍会报 `<<'EOF'` heredoc 正文里的，加花括号在那里无害。",
       "fix": "给变量加花括号：`${bb}，`。"
+    },
+    {
+      "id": "ARCH-025",
+      "description": "markdown/ 什么都不 import",
+      "applies_when": "test -d src/markdown",
+      "check": "grep -rnE \"^import \" src/markdown --include='*.ts' || true",
+      "expect": "empty",
+      "what": "src/markdown/ 引入了别的模块。",
+      "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。",
+      "fix": "把依赖挪回调用方，markdown/ 只收字符串、只回字符串与行号。"
     }
   ]
 }
