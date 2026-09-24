@@ -97,3 +97,46 @@ test("sectionLines 与既有的 logLines 行为一致", async () => {
     .map((l) => l.text).filter((t) => t.startsWith("- "));
   assert.deepEqual(logLines(body), viaSection);
 });
+
+// ── F09：翻转与 Log 文本 ─────────────────────────────────────────────────
+
+import { flipCriterion, criterionLogText } from "../../src/domain/acceptance.ts";
+
+const AC = [
+  "## Acceptance Criteria", "",
+  "Prose that is not a criterion.",
+  "- [ ] one",
+  "  - [ ] nested, not a criterion",
+  "- [X] two",
+  "- [ ] three",
+  "", "## Log", "",
+].join("\n");
+
+test("flipCriterion 只动那一行的方括号，嵌套项不占编号也不被动", () => {
+  const cs = parseAcceptance(AC);
+  assert.deepEqual(cs.map((c) => c.text), ["one", "two", "three"]);
+  const after = flipCriterion(AC, cs[2]!, true);          // 第 3 条
+  const diff = AC.split("\n").map((l, i) => [l, after.split("\n")[i]]).filter(([a, b]) => a !== b);
+  assert.deepEqual(diff, [["- [ ] three", "- [x] three"]], "只该改动恰好一行");
+});
+
+test("flipCriterion：--undo 能清掉大写 X；写入端发小写 x", () => {
+  const cs = parseAcceptance(AC);
+  assert.match(flipCriterion(AC, cs[1]!, false), /^- \[ \] two$/m);
+  assert.match(flipCriterion(AC, cs[0]!, true), /^- \[x\] one$/m);
+});
+
+test("flipCriterion：行号对不上标准时报错，而不是翻错一行", () => {
+  const cs = parseAcceptance(AC);
+  const stale = { ...cs[0]!, line: 2 };                     // 指向那行散文
+  assert.throws(() => flipCriterion(AC, stale, true), /not the criterion/);
+});
+
+test("criterionLogText：按码点截到 80，不在代理对中间切开", () => {
+  assert.equal(criterionLogText("a".repeat(80)), "a".repeat(80));
+  assert.equal(criterionLogText("a".repeat(81)), "a".repeat(80), "第 81 个字符没被截掉");
+  const emoji = "😀".repeat(81);                             // 每个都是两个 UTF-16 码元
+  const t = criterionLogText(emoji);
+  assert.equal([...t].length, 80);
+  assert.ok(!/[\uD800-\uDBFF]$/.test(t), "切在了代理对中间");
+});

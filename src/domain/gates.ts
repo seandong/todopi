@@ -2,15 +2,14 @@
 // spec §6.1 的门禁判定。纯函数：不 import node:fs，用例直接构造任务集合即可。
 
 import { parseAcceptance, unchecked, type Criterion } from "./acceptance.ts";
-import { leaseExpired } from "./claim.ts";
 import { statusOf, type TaskIndex } from "./derive.ts";
 import type { TaskFile } from "./types.ts";
 
 /** 门禁作用的三种迁移（spec §6.1 的表格）。 */
 export type Transition = "done" | "close" | "reopen";
 
-/** 本机看到的租约。null 表示没有——不等于没人持有（见 ownership 那一条）。 */
-export type LeaseView = { actor: string; claimed_at: string; heartbeat_at: string } | null;
+import { liveLeaseHolder as leaseHolderOf, otherHolder, type LeaseView } from "./ownership.ts";
+export type { LeaseView } from "./ownership.ts";
 
 export type GateInput = {
   task: TaskFile;
@@ -162,41 +161,15 @@ export function evaluateGates(input: GateInput): Refusal[] {
   return out;
 }
 
-/**
- * 归属冲突：任务的 assignee 是别人，**或者**共享租约属于别人。
- *
- * 两者都要查。租约跨 worktree 共享（`.git/todopi/leases/`）而每个 worktree 有
- * 自己的 `.todopi/tasks/`，所以本树文件说「是我的」完全可能是过期视图——
- * 另一个 worktree 里别人已经接管了它。这条边界在 F05 立了三次、漏了三次
- * （DECISIONS D019），这里一次用到全部迁移上。
- */
+/** 归属冲突。判定在 ownership.ts，所有写命令共用（note / check 是第四、第五个写者）。 */
 function ownershipConflict(input: GateInput): Refusal | null {
-  const { task, actor } = input;
-  const assignee = task.frontmatter["assignee"];
-  if (typeof assignee === "string" && assignee !== "" && assignee !== actor) {
-    return { gate: "ownership", code: 3, holder: assignee, heldSince: updatedOf(task) };
-  }
-  return liveLeaseHolder(input);
+  const h = otherHolder(input);
+  return h === null ? null : { gate: "ownership", code: 3, holder: h.holder, heldSince: h.heldSince };
 }
 
-/**
- * 共享租约**还活着**且属于别人时的冲突。过期的租约不算——spec §8 的 stale
- * 语义就是为此存在的：一份崩溃留下的孤儿租约若永远拦人，任务就再也动不了，
- * 而使用者除了 `doctor --fix`（F13）别无出路。
- *
- * 判据与 `claim` 的 `leaseExpired` 是同一个函数，不另写一套——F05 学到的：
- * 「复用同一个纯函数不等于输入一致」，所以这里连 `now` 都是注入的同一份。
- */
 function liveLeaseHolder(input: GateInput): Refusal | null {
-  const { lease, actor, now, leaseHours } = input;
-  if (lease === null || lease.actor === actor) return null;
-  if (leaseExpired(lease, now, leaseHours)) return null;
-  return { gate: "ownership", code: 3, holder: lease.actor, heldSince: lease.heartbeat_at };
-}
-
-function updatedOf(task: TaskFile): string {
-  const v = task.frontmatter["updated"];
-  return typeof v === "string" ? v : "";
+  const h = leaseHolderOf(input);
+  return h === null ? null : { gate: "ownership", code: 3, holder: h.holder, heldSince: h.heldSince };
 }
 
 /** 退出码取最严重的一条：3（权限）比 2（就绪）重。没有拒绝就是 0。 */

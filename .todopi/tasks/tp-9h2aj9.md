@@ -1,7 +1,8 @@
 ---
 id: "tp-9h2aj9"
 title: "todopi note / check 追加 Log 并勾选验收标准，且每次写入都刷新 updated"
-status: "open"
+status: "in_progress"
+assignee: "seandong"
 blocked_by: ["tp-1lwice"]
 rank: "i8"
 verify: "make check && make test && bash tools/e2e/f09-note-check.sh"
@@ -10,7 +11,7 @@ external:
   harness:
     legacy_id: "F09"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-23T09:40:27Z"
+updated: "2026-09-24T04:16:22Z"
 ---
 
 ## Description
@@ -43,3 +44,6 @@ note 支持多行文本（续行缩进两格）；check <n> / --undo 切换第 n
 ## Log
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F09
+- 2026-09-24T04:08:47Z seandong claimed
+- 2026-09-24T04:16:22Z seandong note: 实现中发现 touchLease 自 F05 起没有任何调用方，而它不看租约是谁的。
+  note / check 是第一批调用方，只在租约属于当前 actor 时刷新。

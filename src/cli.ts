@@ -160,6 +160,39 @@ program
   });
 
 program
+  .command("note")
+  .description("append a line to a task's log; the text may span several lines")
+  .argument("<id>", "the task to note on")
+  .argument("<text>", "what happened and why")
+  .action(async (id: string, text: string) => {
+    const { runNote } = await import("./commands/note.ts");
+    const { renderNote, renderWorklogJson } = await import("./output/render/worklog.ts");
+    const opts = program.opts();
+    const report = runNote({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      id, text, actor: opts["as"] as string | undefined,
+    });
+    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderNote(report));
+  });
+
+program
+  .command("check")
+  .description("tick acceptance criterion <n> of a task, or untick it with --undo")
+  .argument("<id>", "the task")
+  .argument("<n>", "the criterion number, as shown by todopi show")
+  .option("--undo", "untick it instead")
+  .action(async (id: string, n: string, cmdOpts: { undo?: boolean }) => {
+    const { runCheck, parseCriterionNumber } = await import("./commands/check.ts");
+    const { renderCheck, renderWorklogJson } = await import("./output/render/worklog.ts");
+    const opts = program.opts();
+    const report = runCheck({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      id, n: parseCriterionNumber(n), undo: cmdOpts.undo, actor: opts["as"] as string | undefined,
+    });
+    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderCheck(report));
+  });
+
+program
   .command("claim")
   .description("take ownership of a task and start working on it")
   .argument("<id>", "the task to claim")

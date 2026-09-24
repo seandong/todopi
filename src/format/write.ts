@@ -153,7 +153,16 @@ export function prepareUpdate(
   ledger: Ledger,
   existing: TaskFile[],
   id: string,
-  next: { frontmatter: Record<string, unknown>; appendLog?: string },
+  next: {
+    frontmatter: Record<string, unknown>;
+    appendLog?: string;
+    /**
+     * 对正文的变换，在追加 Log **之前**应用。`check` 翻转一个方括号并记一行
+     * `check ac=n`，两者必须落在同一次写入里——分两次写，中间崩了就是一个勾了却
+     * 没记录的标准，或者记了却没勾。
+     */
+    body?: (body: string) => string;
+  },
   validate: Validate,
   now: string,
 ): PreparedUpdate {
@@ -173,7 +182,8 @@ export function prepareUpdate(
   // 我一度以为「写回自然回到 LF」，实测并没有：原样带回的 body 里 \r 还在
   // （Codex 第二轮评审）。写者 MUST 发 LF，所以在这里落实。
   const rawBody = target.body.replace(/\r\n/g, "\n");
-  const body = next.appendLog === undefined ? rawBody : appendLogLine(rawBody, next.appendLog);
+  const edited = next.body === undefined ? rawBody : next.body(rawBody);
+  const body = next.appendLog === undefined ? edited : appendLogLine(edited, next.appendLog);
   const text = `---\n${emitFrontmatter({ ...next.frontmatter, updated: now })}---\n${body}`;
 
   // **校验在写入之前**，与 createTask 同样的理由（F03 第二轮评审的结论）：
@@ -215,7 +225,7 @@ export function prepareUpdate(
 export function updateTask(
   ledger: Ledger,
   id: string,
-  mutate: (t: TaskFile, now: string) => { frontmatter: Record<string, unknown>; appendLog?: string },
+  mutate: (t: TaskFile, now: string) => Parameters<typeof prepareUpdate>[3],
   validate: Validate,
 ): TaskFile {
   return withLedgerLock(ledger, () => {

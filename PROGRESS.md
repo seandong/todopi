@@ -133,8 +133,11 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     claim → 提交 → Codex 两轮评审 → `todopi done`（`verify=pass commit=92baaf7
     dirty=false`）。流程上定下「评审必须在 done 之前」（自举后没有 reverify）；
     在真实账本上 dogfood 发现散文验收判据在 `show` 里看不见，已修。见 D028。
-29. **下一步：`todopi ls --ready` 看队列。** F09 `note / check` 会让验收判据可以勾选，
-    自举任务那段散文就有了去处。
+29. **F09 `note` / `check`**（进行中，`feat/f09-note-check`）。它给了勾选的**机制**；
+    但自举任务的散文判据**不会因此自动有去处**——见下一条。
+30. **待决：要不要把 13 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
+    谁来写、写多细、改完之后验收门禁开始对它们生效（`done` 会被没勾完的挡下）。
+    不在 F09 里做。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
     门禁骨架在 `commands/transition.ts`，`verify` 那道门加进 `domain/gates.ts` 即可，
     报告与动作走 `gateActions()`（`command` 无占位符、`template` 需填空）。
