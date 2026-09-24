@@ -1,7 +1,7 @@
 // src/domain/sections.ts
 // 改写正文里某个已识别小节的内容。纯函数。
 
-import { fenceMask, headingIndex, isH2, sectionEnd } from "../markdown/sections.ts";
+import { headingIndex, isH2, sectionEnd, structure } from "../markdown/sections.ts";
 
 /**
  * 把 `## Description` 的内容换成 `text`；`text` 为空就连标题一起去掉。
@@ -14,15 +14,15 @@ export function replaceDescription(body: string, text: string): string {
   const lines = body.split("\n");
   // 代码围栏里的 `## Description` 不是标题（F10 评审：Plan 围栏里一行这样的文字，曾让围栏
   // 连同内容一起被删掉）。判据与读取端同一份。
-  const mask = fenceMask(lines);
+  const st = structure(lines);
   const block = text === "" ? [] : ["## Description", "", ...text.split("\n"), ""];
-  const start = headingIndex(lines, mask, "## Description");
+  const start = headingIndex(lines, st, "## Description");
   if (start >= 0) {
-    lines.splice(start, sectionEnd(lines, mask, start) - start, ...block);
+    lines.splice(start, sectionEnd(lines, st, start) - start, ...block);
     return lines.join("\n");
   }
   if (block.length === 0) return body;
-  const firstHeading = lines.findIndex((_, i) => isH2(lines, mask, i));
+  const firstHeading = lines.findIndex((_, i) => isH2(st, i));
   if (firstHeading >= 0) {
     lines.splice(firstHeading, 0, ...block);
     return lines.join("\n");

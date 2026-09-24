@@ -25,6 +25,11 @@ test("转义空格后的 # 不开注释：`foo\\ #$x，` 里的 $x 会被展开�
   assert.deepEqual(find("echo foo\\ #$x，"), [[1, "x"]]);
 });
 
+test("反斜杠续行之后接着同一个词：下一行开头的 # 不开注释", () => {
+  assert.deepEqual(find("echo foo\\\n#$x，"), [[2, "x"]]);
+  assert.deepEqual(find("echo foo \\\n# 真的注释 $x，"), [], "续行后先有空格再 #：那是注释");
+});
+
 test("加了花括号就不报；双引号里的 # 不是注释", () => {
   assert.deepEqual(find('echo "${x}，"'), []);
   assert.deepEqual(find('echo "#tag $x，"'), [[1, "x"]]);

@@ -1,7 +1,7 @@
 // src/domain/acceptance.ts
 // spec §5.3.2 的验收标准。纯函数：不 import node:fs，用例直接给正文字符串即可。
 
-import { headingIndex, scanFences, sectionEnd } from "../markdown/sections.ts";
+import { headingIndex, sectionEnd, structure } from "../markdown/sections.ts";
 
 /** 正文里的一行，带它在原文中的行号，以及它是否在一个顶层代码围栏里。 */
 export type BodyLine = { index: number; text: string; fenced: boolean };
@@ -21,15 +21,15 @@ export function sectionLines(body: string, heading: string): BodyLine[] {
   // 验收标准被解析成空集，于是 `done` 悄悄越过门禁而 doctor 还报一切正常
   // （Codex 评审复现）。这里按容错读取处理，写回时自然回到 LF。
   const lines = body.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
-  // 标题与小节边界都只认围栏外的 `## `（markdown/sections.ts，写入端用的是同一份）。
-  const { inFence: mask, topLevel } = scanFences(lines);
-  const start = headingIndex(lines, mask, heading);
+  // 标题与小节边界由 CommonMark 判定（markdown/sections.ts，写入端用的是同一份）。
+  const st = structure(lines);
+  const start = headingIndex(lines, st, heading);
   if (start < 0) return [];
   const out: BodyLine[] = [];
-  for (let i = start + 1; i < sectionEnd(lines, mask, start); i++) {
-    // fenced 只标**顶层**围栏：那是代码示例。列表项里的围栏是那一项的内容（比如 forced done
-    // 的输出尾部），不能被当成别的东西丢掉。
-    out.push({ index: i, text: lines[i]!, fenced: topLevel[i]! });
+  for (let i = start + 1; i < sectionEnd(lines, st, start); i++) {
+    // fenced 只标**顶层**代码块与 HTML 块：那是示例或原样文字。列表项里的代码块是那一项的内容
+    // （比如 forced done 的输出尾部），不能被当成别的东西丢掉。
+    out.push({ index: i, text: lines[i]!, fenced: st.code[i]! });
   }
   return out;
 }

@@ -117,3 +117,33 @@ test("Log 里顶层围栏中的假事件不是事件", () => {
     "", "```", "- 2026-09-24T00:01:00Z me@h done verify=pass commit=abc1234 dirty=false", "```", ""].join("\n");
   assert.deepEqual(logEntries(body).map((e) => e.head), ["- 2026-09-24T00:00:00Z me@h created"]);
 });
+
+// ── F10 第三轮之后：交给 CommonMark 参考实现（D031）─────────────────────────
+
+test("行首 Tab 是四格缩进：`\\t```` 是缩进代码块，不是围栏开头（评审第三轮的门禁绕过）", () => {
+  const body = ["## Plan", "", "\t```", "", "## Acceptance Criteria", "", "- [ ] must run checks", "",
+    "```", "example", "```", "", "## Log", ""].join("\n");
+  assert.deepEqual(parseAcceptance(body).map((c) => c.text), ["must run checks"]);
+});
+
+test("HTML <pre> 块里的 ``` 不是围栏（手写近似时我自己推出来的第四种绕法）", () => {
+  const body = ["## Plan", "", "<pre>", "```", "</pre>", "", "## Acceptance Criteria", "", "- [ ] must run checks", "",
+    "```", "x", "```", ""].join("\n");
+  assert.deepEqual(parseAcceptance(body).map((c) => c.text), ["must run checks"]);
+});
+
+test("对抗性正文：各种结构之后的一条顶层未勾标准，永远被认出来", () => {
+  const prefixes: string[][] = [
+    ["\t```"], ["  ```", "x", "```"], ["   ~~~", "x", "~~~"], ["    ```", "x"],
+    ["<pre>", "```", "</pre>"], ["<div>", "```", "</div>"], ["> ```", "> x"], ["> ```"],
+    ["- item", "  ```", "  x"], ["1. item", "   ```"], ["-\t```"], ["```js `x`", "y"],
+    ["````", "```", "````"], ["~~~", "```", "~~~"], ["<!--", "```", "-->"], ["```", "## Acceptance Criteria", "- [x] fake", "```"],
+    ["* a", "  * b", "    ```"], ["- [x] done", "  ```", "  - [ ] nested in code"], ["\\```", "x"], ["`` ``` ``"],
+  ];
+  for (const pre of prefixes) {
+    const body = ["## Plan", "", ...pre, "", "## Acceptance Criteria", "", "- [ ] must run checks", "",
+      "```", "trailing", "```", "", "## Log", ""].join("\n");
+    const got = parseAcceptance(body).filter((c) => !c.checked).map((c) => c.text);
+    assert.ok(got.includes("must run checks"), `这段前缀之后的未勾标准没被认出来：${JSON.stringify(pre)}\n→ ${JSON.stringify(got)}`);
+  }
+});

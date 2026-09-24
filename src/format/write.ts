@@ -1,5 +1,5 @@
 // src/format/write.ts
-import { fenceMask, headingIndex, sectionEnd } from "../markdown/sections.ts";
+import { headingIndex, sectionEnd, structure } from "../markdown/sections.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { withLock } from "../fs/lock.ts";
@@ -264,8 +264,8 @@ function appendLogLine(body: string, line: string): string {
   // 的 `   ## Log`（合法的未识别正文）被当成 Log 往里追加，读者却看不见——note 成功、
   // doctor 通过、show 一条都没有（F09 评审实测）。找不到真正的小节就在末尾新建一节，
   // 那段缩进的文字按 spec §5.3 原样保留。
-  const mask = fenceMask(lines);
-  const start = headingIndex(lines, mask, "## Log");
+  const st = structure(lines);
+  const start = headingIndex(lines, st, "## Log");
   // 多行文本按 §5.3.3 的续行规则：第一行是列表项，后面每行缩进两格。
   // FR-D4a 的「强制关闭时记录输出尾部」就走这条路。
   const [first, ...rest] = line.split("\n");
@@ -278,7 +278,7 @@ function appendLogLine(body: string, line: string): string {
     return `${body}${sep}## Log\n\n${item}\n`;
   }
   let end = start + 1;
-  for (let i = start + 1; i < sectionEnd(lines, mask, start); i++) {
+  for (let i = start + 1; i < sectionEnd(lines, st, start); i++) {
     if (lines[i]!.trim() !== "") end = i + 1;
   }
   lines.splice(end, 0, item);

@@ -26,14 +26,22 @@ export function findUnbracedVars(text) {
   const out = [];
   let single = false, double = false;
   const lines = text.split("\n");
+  // 上一行以反斜杠结尾（续行）时，这一行接着上一行的那个词，而不是从新词开始——
+  // `echo foo\` 换行接 `#$x，` 里的 # 不开注释（F10 第三轮评审构造的漏报）。
+  let continued = null;           // 上一行以续行结尾时，那一刻「是否处在词首」；否则 null
   lines.forEach((line, ln) => {
     // 「上一个字符是没被转义的分隔符」——`#` 只在一个词的开头才开注释。`foo\ #$x` 里的空格被转义了，
     // `#` 仍是同一个词的一部分，bash 会展开后面的 $x（F10 第二轮评审构造的漏报）。
-    let atWordStart = true;
+    // bash 把「反斜杠 + 换行」直接删掉、两行拼接，所以这一行开头是不是新词，取决于反斜杠**之前**。
+    let atWordStart = continued === null ? true : continued;
+    continued = null;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
       if (single) { if (c === "'") single = false; atWordStart = false; continue; }
-      if (c === "\\") { i += 1; atWordStart = false; continue; }
+      if (c === "\\") {
+        if (i === line.length - 1 && !single) continued = atWordStart;  // 行尾的反斜杠：续行
+        i += 1; atWordStart = false; continue;
+      }
       if (c === "'" && !double) { single = true; atWordStart = false; continue; }
       if (c === '"') { double = !double; atWordStart = false; continue; }
       if (c === "#" && !double && atWordStart) break;                               // 注释

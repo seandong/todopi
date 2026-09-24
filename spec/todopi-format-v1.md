@@ -130,6 +130,12 @@ Fields intentionally absent, and why:
 
 The body is Markdown. Four H2 headings are recognized, exactly and case-sensitively. Writers SHOULD emit them in this order. Any other content (other headings, paragraphs before the first heading) MUST be preserved by writers and ignored by readers.
 
+What counts as one of those headings is determined by [CommonMark](https://spec.commonmark.org/): a section heading is an ATX level-2 heading at the **top level** of the document — not inside a list item, block quote, code block or HTML block — whose source line is exactly `## <name>`. A line such as `## Log` inside a fenced code block is text, not a heading. Likewise, only top-level list items are acceptance criteria (§5.3.2) or Log entries (§5.3.3); a `- [ ] …` or `- <timestamp> …` line inside a top-level code block or HTML block is neither.
+
+One deliberate exception to CommonMark: a fenced code block that is **never closed** would, under CommonMark, run to the end of the body and could hide every section after it. Readers MUST instead treat its opening fence line as plain text when locating sections, so that later sections stay visible. Writers MUST NOT rewrite the content of a section in such a body.
+
+(Clarification, 2026-09-25. Earlier text said only "exactly and case-sensitively", which left headings inside code blocks undefined. For a body with no code blocks, HTML blocks, block quotes or nested headings, nothing changes; per §9 this does not change the version.)
+
 ```
 ## Description
 ## Acceptance Criteria

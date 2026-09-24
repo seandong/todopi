@@ -94,12 +94,12 @@
     },
     {
       "id": "ARCH-010",
-      "description": "运行时依赖限定在已论证的三个包内",
+      "description": "运行时依赖限定在已论证的四个包内",
       "applies_when": "test -f package.json",
-      "check": "jq -r '(.dependencies // {}) | keys[]' package.json 2>/dev/null | grep -vxE 'yaml|commander|fractional-indexing' || true",
+      "check": "jq -r '(.dependencies // {}) | keys[]' package.json 2>/dev/null | grep -vxE 'yaml|commander|fractional-indexing|commonmark' || true",
       "expect": "empty",
       "what": "package.json 的 dependencies 里出现了白名单之外的包。",
-      "why": "三个依赖都经过论证且都零传递依赖，这是「npm 装完 1.5 MB」这个分发优势的来源（DECISIONS D008）。更要紧的是有两个包是被**明确拒绝**过的：proper-lockfile（核心是 setInterval 心跳，撞 ARCH-002，且我们能用 pid 精确判活）与 lexorank（带 bucket 与后台重平衡，那是给中心化数据库设计的）。一个 fresh context 的实现者最自然的动作就是装上它们——这条规则就是为此存在。devDependencies 不受限制。",
+      "why": "三个依赖都经过论证且都零传递依赖，这是「npm 装完 1.5 MB」这个分发优势的来源（DECISIONS D008）。更要紧的是有两个包是被**明确拒绝**过的：proper-lockfile（核心是 setInterval 心跳，撞 ARCH-002，且我们能用 pid 精确判活）与 lexorank（带 bucket 与后台重平衡，那是给中心化数据库设计的）。一个 fresh context 的实现者最自然的动作就是装上它们——这条规则就是为此存在。devDependencies 不受限制。 2026-09-25 加入 commonmark（DECISIONS D031）：它是第一个带传递依赖的（entities、mdurl、minimist），这条「零传递依赖」的优势因此被削弱，论证在 D031。",
       "fix": "删除该依赖，改用 node: 内置模块或白名单内的包。确有必要新增时，先在 DECISIONS.md 论证它、说明为什么现有手段不够，再改本规则——顺序不能反。"
     },
     {
@@ -244,12 +244,12 @@
     },
     {
       "id": "ARCH-025",
-      "description": "markdown/ 什么都不 import",
+      "description": "markdown/ 在运行时只依赖 commonmark",
       "applies_when": "test -d src/markdown",
-      "check": "grep -rnE \"^[[:space:]]*(import|export)[[:space:]].*from[[:space:]]*['\\\"]|^[[:space:]]*import[[:space:]]*['\\\"]|import[[:space:]]*\\\\(|require[[:space:]]*\\\\(\" src/markdown --include='*.ts' || true",
+      "check": "node tools/check-leaf-imports.mjs src/markdown",
       "expect": "empty",
-      "what": "src/markdown/ 引入了别的模块。",
-      "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。 2026-09-24 评审：第一版只匹配行首的 `import `，缩进的 import、`export … from`、动态 import 都能引入依赖而不触发。",
+      "what": "src/markdown/ 在运行时依赖了 commonmark 之外的模块，或出现了动态的 import(…) / require(…)。",
+      "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。 2026-09-24 评审：第一版只匹配行首的 `import `，缩进的 import、`export … from`、动态 import 都能引入依赖而不触发。 2026-09-25：这一层改用 commonmark 判定正文结构（D031），允许依赖它；检查器改成问 Node 自己的模块加载器——grep 版本连着两轮被合法语法绕过（`import{join}from\"node:path\"` 等）。",
       "fix": "把依赖挪回调用方，markdown/ 只收字符串、只回字符串与行号。"
     }
   ]

@@ -9,7 +9,7 @@ import { checkTitle } from "./add.ts";
 import { statusOf } from "../domain/derive.ts";
 import { sectionLines } from "../domain/acceptance.ts";
 import { replaceDescription } from "../domain/sections.ts";
-import { scanFences } from "../markdown/sections.ts";
+import { structure } from "../markdown/sections.ts";
 import type { EditReport } from "../output/dto/plan.ts";
 import { EXIT, CliError } from "../exit.ts";
 
@@ -88,7 +88,7 @@ export function runEdit(opts: EditOptions): EditReport {
       // 正文里有没闭合的代码围栏时不改写小节。读取端把那个开头当普通文字（门禁必须看得见后面的
       // 标准），可写入端若据此改写，围栏里一行 `## Description` 就会被当成真小节、连同代码一起删掉
       // （F10 第二轮评审实测）。拒绝好过猜。
-      const at = scanFences(task.body.replace(/\r\n/g, "\n").split("\n")).unclosedAt;
+      const at = structure(task.body.replace(/\r\n/g, "\n").split("\n")).unclosedAt;
       if (at >= 0) {
         throw new CliError(EXIT.usage,
           `The body of ${opts.id} has an unclosed code fence at body line ${at + 1}, so its sections cannot be `
