@@ -39,8 +39,13 @@ export type Criterion = {
   line: number;
 };
 
-/** 顶层的 GitHub 任务项：行首就是 `- [ ] ` 或 `- [x] `，不能有缩进。 */
-const ITEM_RE = /^- \[([ xX])\] ?(.*)$/;
+/**
+ * 顶层的 GitHub 任务项：行首就是 `- [ ] ` 或 `- [x] `，不能有缩进。
+ *
+ * **标记后必须是空白或行尾**（GFM 任务列表的定义）。曾把空格当可选，`- [ ]x` 于是
+ * 成了一条标准——改变编号、挡住 done，而 F09 的 check 会真的去改写它（评审实测）。
+ */
+const ITEM_RE = /^- \[([ xX])\](?:[ \t]+(.*))?$/;
 
 /**
  * 解析 `## Acceptance Criteria` 小节。
@@ -77,4 +82,37 @@ export function allChecked(criteria: Criterion[]): boolean {
 /** 未勾的那些，报告要逐条列出（FR-D2a）。 */
 export function unchecked(criteria: Criterion[]): Criterion[] {
   return criteria.filter((c) => !c.checked);
+}
+
+/**
+ * 把第 `c.line` 行的方括号翻成 `checked`，**只动那一行的那一处**（F09 `check`）。
+ *
+ * spec §5.3.2：嵌套项与非复选框行 MUST 原样保留。所以不重排整段、不重新发射列表，
+ * 按 `parseAcceptance` 记下的行号定位——这正是 `Criterion.line` 存在的理由。
+ *
+ * 行号对不上一条标准（正文在读与写之间变了，或者调用方拿错了对象）时抛错，
+ * 而不是翻掉别的行：翻错一行比不翻更糟，它会让另一条标准悄悄变成已满足。
+ * 写入端发小写 `x`（spec §5.3.2）；`--undo` 同样认大写 `X`。
+ */
+export function flipCriterion(body: string, c: Criterion, checked: boolean): string {
+  const lines = body.split("\n");
+  const line = lines[c.line];
+  const m = line === undefined ? null : /^- \[[ xX]\]/.exec(line.endsWith("\r") ? line.slice(0, -1) : line);
+  if (line === undefined || m === null) {
+    throw new Error(`Line ${c.line} is not the criterion "${c.text}"; the body changed underneath.`);
+  }
+  lines[c.line] = `- [${checked ? "x" : " "}]${line.slice(m[0].length)}`;
+  return lines.join("\n");
+}
+
+/** spec §5.3.3：`check` 记录的是「当时的标准文本、截断到 80 字符」。 */
+const LOG_TEXT_MAX = 80;
+
+/**
+ * 按**码点**截断。`String.prototype.slice` 按 UTF-16 码元数，会把一个 emoji 从
+ * 代理对中间切开，写进 Log 就是一个孤立的代理项。
+ */
+export function criterionLogText(text: string): string {
+  const points = [...text];
+  return points.length <= LOG_TEXT_MAX ? text : points.slice(0, LOG_TEXT_MAX).join("");
 }

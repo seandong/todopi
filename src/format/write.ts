@@ -153,7 +153,16 @@ export function prepareUpdate(
   ledger: Ledger,
   existing: TaskFile[],
   id: string,
-  next: { frontmatter: Record<string, unknown>; appendLog?: string },
+  next: {
+    frontmatter: Record<string, unknown>;
+    appendLog?: string;
+    /**
+     * 对正文的变换，在追加 Log **之前**应用。`check` 翻转一个方括号并记一行
+     * `check ac=n`，两者必须落在同一次写入里——分两次写，中间崩了就是一个勾了却
+     * 没记录的标准，或者记了却没勾。
+     */
+    body?: (body: string) => string;
+  },
   validate: Validate,
   now: string,
 ): PreparedUpdate {
@@ -173,7 +182,8 @@ export function prepareUpdate(
   // 我一度以为「写回自然回到 LF」，实测并没有：原样带回的 body 里 \r 还在
   // （Codex 第二轮评审）。写者 MUST 发 LF，所以在这里落实。
   const rawBody = target.body.replace(/\r\n/g, "\n");
-  const body = next.appendLog === undefined ? rawBody : appendLogLine(rawBody, next.appendLog);
+  const edited = next.body === undefined ? rawBody : next.body(rawBody);
+  const body = next.appendLog === undefined ? edited : appendLogLine(edited, next.appendLog);
   const text = `---\n${emitFrontmatter({ ...next.frontmatter, updated: now })}---\n${body}`;
 
   // **校验在写入之前**，与 createTask 同样的理由（F03 第二轮评审的结论）：
@@ -215,7 +225,7 @@ export function prepareUpdate(
 export function updateTask(
   ledger: Ledger,
   id: string,
-  mutate: (t: TaskFile, now: string) => { frontmatter: Record<string, unknown>; appendLog?: string },
+  mutate: (t: TaskFile, now: string) => Parameters<typeof prepareUpdate>[3],
   validate: Validate,
 ): TaskFile {
   return withLedgerLock(ledger, () => {
@@ -249,13 +259,21 @@ export function nowStamp(): string {
  */
 function appendLogLine(body: string, line: string): string {
   const lines = body.split("\n");
-  const start = lines.findIndex((l) => l.trim() === "## Log");
+  // **顶格精确匹配，与读取端（sectionLines）同一个判据。** 曾用 .trim()：一段缩进
+  // 的 `   ## Log`（合法的未识别正文）被当成 Log 往里追加，读者却看不见——note 成功、
+  // doctor 通过、show 一条都没有（F09 评审实测）。找不到真正的小节就在末尾新建一节，
+  // 那段缩进的文字按 spec §5.3 原样保留。
+  const start = lines.findIndex((l) => l === "## Log");
   // 多行文本按 §5.3.3 的续行规则：第一行是列表项，后面每行缩进两格。
   // FR-D4a 的「强制关闭时记录输出尾部」就走这条路。
   const [first, ...rest] = line.split("\n");
   const item = [`- ${first}`, ...rest.map((l) => `  ${l}`)].join("\n");
   if (start < 0) {
-    return `${body.replace(/\s*$/, "")}\n\n## Log\n\n${item}\n`;
+    // **原正文一个字节都不动，只补分隔所需的换行。** 曾先 `replace(/\s*$/, "")` 再拼，
+    // 于是末尾那段未识别小节的尾随空格与空行被削掉了（spec §5.3：writers MUST
+    // preserve；F09 第二轮评审实测）。
+    const sep = body === "" || body.endsWith("\n\n") ? "" : body.endsWith("\n") ? "\n" : "\n\n";
+    return `${body}${sep}## Log\n\n${item}\n`;
   }
   let end = start + 1;
   for (let i = start + 1; i < lines.length; i++) {

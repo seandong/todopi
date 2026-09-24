@@ -126,9 +126,9 @@ Codex 评审确认了这个顺序）。
 
 ## 完成工作（clock-out）
 
-1. **人对着任务正文的「Acceptance Criteria」段逐条核对。** 那一段是散文不是勾选项
-   （勾选要 `check`，F09 尚未实现），所以 `todopi done` 通过**不等于**这些判据已被
-   机器核对过。
+1. **核对验收判据。** 有勾选项的任务用 `todopi check <id> <n>` 逐条勾，`done` 会挡下
+   没勾完的。**自举迁移来的任务判据是散文**（`show` 会显示它，但不编号），验收门禁对它们
+   不生效——`todopi done` 通过**不等于**这些判据已被机器核对过，由人对着逐条看。
 2. `git commit` —— 代码**加上** `claim` 留下的账本改动。漏掉后者，下一步就会
    `dirty=true`。**一个 commit 一个完整逻辑改动**（atomic）；每次 commit 后仓库都
    MUST 处于一致状态，不提交半成品。commit message 解释 **why**, not just what。
@@ -166,10 +166,11 @@ after a compaction, on another machine, or under a different agent.
 somebody could check. Editing a file or running a test is a step, not a task. Keep using
 your own todo list for the steps inside this turn, and never copy todopi tasks into it.
 
-> **本仓库的现状（2026-09-23 自举）**：下面这张表里，`prime`、`note`、`handoff`
-> 分别属于 F11、F09、F12，**都还没实现**；`add --from` 的 `--from` 也要等 F10。
-> 现在真能跑的只有 `ls` / `claim` / `release` / `done` / `close` / `reopen` /
-> `doctor` / `init` / `add`。照表里敲那几条会得到「命令不存在」。
+> **本仓库的现状**：下面这张表里，`prime`（F11）与 `handoff`（F12）**还没实现**，
+> 照表敲会得到「命令不存在」。其余都能跑：`init` / `add`（含 `--from`）/ `ls` / `show` /
+> `claim` / `release` / `note` / `check` / `done` / `close` / `reopen` / `doctor`。
+> （此前这里写着 `note` 与 `add --from` 都没实现——前者 F09 才有，后者其实一直都有；
+> `show` 那条在 F08 合并时漏改了。都是 2026-09-24 逐条对着 `todopi --help` 核实后更正。）
 >
 > 当前可执行的路径在本文件上方的 clock-in / clock-out 两节，以及
 > 「提交的顺序」那一节。表格随各自的 feature 落地逐条变真。
@@ -192,8 +193,9 @@ it is for the case where the check itself is wrong, and it is recorded permanent
 **Queries.** `todopi ls --ready` for what to pick up next. `todopi show <id>` for one task's
 detail. `todopi prime --full` when you need the whole picture. Add `--json` when parsing.
 
-> 本仓库现状：`show`（F08）与 `prime`（F11）**尚未实现**。现在读一条任务的详情用
-> `cat .todopi/tasks/<id>.md`，看全局用 `make status`。
+> 本仓库现状：`prime`（F11）**尚未实现**，看全局用 `make status`。`show` 已可用，
+> 但它按格式规格忽略未识别小节——自举任务的 `## Repair` 段要用
+> `cat .todopi/tasks/<id>.md` 看（PRD §15）。
 
 **Commits.** Include the `.todopi/` changes in the same commit as the work they describe,
 and mention the task id in the message.

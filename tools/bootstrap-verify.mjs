@@ -7,7 +7,8 @@
 //
 // 迁移完成后仍然可重跑：原始 JSON 已被删除，就从删掉它的那个 commit 取父提交。
 
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { discoverLedger } from "../src/format/discover.ts";
@@ -20,15 +21,41 @@ const ROOT = process.argv[2] ?? process.cwd();
 const git = (...a) =>
   execFileSync("git", ["-C", ROOT, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 
-/** 原始 JSON：HEAD 上还有就读它；没有了就从删除它的 commit 取父提交。 */
-function originalJson() {
-  try {
-    return JSON.parse(git("show", "HEAD:feature_list.json"));
-  } catch {
-    const sha = git("log", "--diff-filter=D", "--format=%H", "-1", "--", "feature_list.json").trim();
-    if (sha === "") throw new Error("既不在 HEAD 上，也找不到删除 feature_list.json 的 commit");
-    return JSON.parse(git("show", `${sha}^:feature_list.json`));
+/**
+ * 对账的两边：原始 JSON，与**迁移那一刻**的账本。
+ *
+ * - 迁移提交之前（彩排时）：JSON 在 HEAD 上，账本就是工作区。
+ * - 迁移提交之后：JSON 取删除它的那个 commit 的父提交；账本取**那个 commit 本身**的
+ *   `.todopi/` 与 PROGRESS.md，解到一个临时目录里再对。
+ *
+ * 第一版在迁移之后对的是**工作区**的账本。那只在没人动账本之前成立——F08 一关闭、
+ * F09 一认领，对账就「失败」了，而我在三份文档里都写了它「随时可重跑」（F09 时自己
+ * 撞见）。它要验的是迁移做得对不对，不是账本后来有没有变。
+ */
+/**
+ * 迁移提交，钉死。「当前历史里最近一次删除 feature_list.json 的 commit」只在历史没被
+ * 改写时等于它；改写之后脚本会悄悄对上另一个提交并报「通过」（F09 第二轮评审指出）。
+ * 钉住之后，找到的不是它就响亮地失败——那正是需要人去看的时候。
+ */
+const MIGRATION_COMMIT = "3e204adb40b3f0df9b05dc64d9d657afe798ea92";
+
+function sides() {
+  // 先问**有没有**，再解析。曾用一个 catch 同时吞掉「HEAD 上没有」与「有但 JSON 坏了」，
+  // 后者会退回旧的迁移提交并报「通过」（评审在临时克隆里复现）。
+  let onHead = true;
+  try { git("cat-file", "-e", "HEAD:feature_list.json"); } catch { onHead = false; }
+  if (onHead) {
+    return { json: JSON.parse(git("show", "HEAD:feature_list.json")), root: ROOT, at: "工作区（迁移提交之前）" };
   }
+  const sha = git("log", "--diff-filter=D", "--format=%H", "-1", "--", "feature_list.json").trim();
+  if (sha !== MIGRATION_COMMIT) {
+    throw new Error(`删除 feature_list.json 的 commit 是 ${sha || "（找不到）"}，不是钉住的迁移提交 `
+      + `${MIGRATION_COMMIT.slice(0, 7)}——历史被改写过，这次对账证明不了原来那次迁移。`);
+  }
+  const snap = mkdtempSync(join(tmpdir(), "bootstrap-verify-"));
+  process.on("exit", () => rmSync(snap, { recursive: true, force: true }));
+  execFileSync("sh", ["-c", `git -C "$1" archive "$2" .todopi PROGRESS.md | tar -x -C "$3"`, "sh", ROOT, sha, snap]);
+  return { json: JSON.parse(git("show", `${sha}^:feature_list.json`)), root: snap, at: `迁移提交 ${sha.slice(0, 7)}` };
 }
 
 const problems = [];
@@ -62,10 +89,11 @@ function sectionOr(w, body, heading) {
   return sec;
 }
 
-const src = originalJson();
+const side = sides();
+const src = side.json;
 // 用仓库自己的读取器。解析失败要吵——不能让坏文件被读成空字段后从计数里消失。
 const tasks = [];
-for (const t of readTasks(discoverLedger(ROOT))) {
+for (const t of readTasks(discoverLedger(side.root))) {
   if (t.parseError !== undefined) { bad(`${t.path}: 解析失败 —— ${t.parseError}`); continue; }
   tasks.push({ file: t.path, fm: t.frontmatter, body: t.body });
 }
@@ -193,7 +221,7 @@ for (let i = 1; i < ranked.length; i += 1) {
 }
 
 // 4. milestones[].done_when 进了 PROGRESS.md
-const progress = readFileSync(join(ROOT, "PROGRESS.md"), "utf8");
+const progress = readFileSync(join(side.root, "PROGRESS.md"), "utf8");
 for (const [name, m] of Object.entries(src.milestones ?? {})) {
   if (!progress.includes(m.done_when)) bad(`${name} 的 done_when 原文没有出现在 PROGRESS.md`);
 }
@@ -203,4 +231,4 @@ if (problems.length > 0) {
   for (const p of problems) console.error(`  ✗ ${p}`);
   process.exit(1);
 }
-console.log(`对账通过：${tasks.length} 条，字段逐项对得上原始 feature_list.json`);
+console.log(`对账通过（${side.at}）：${tasks.length} 条，字段逐项对得上原始 feature_list.json`);

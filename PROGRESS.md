@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `92baaf7` —— F08 show 经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `22dc272` —— F09 note/check 经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,11 +19,11 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 21 个任务，8 个 `closed/done`（F01–F08）、13 个 `open`。
+- 账本: `.todopi/` 21 个任务，9 个 `closed/done`（F01–F09）、12 个 `open`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F08 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
-  `claim` / `release` / `done` / `close` / `reopen` / `show`
+- 代码状态：**F01–F09 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+  `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check`
   可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
@@ -54,10 +54,8 @@ todopi ls --ready → todopi claim <id> → 干活 → 人核对验收判据
 → git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
 
-**remote 状态**：`origin` 是 `github.com/seandong/todopi`，
-`origin/main` 停在 `b9beb6d`（F01 时期），本地领先 **128 个 commit**。
-（此前这一行写的是「整个仓库尚未推送到 remote」——那是错的，`git reflog show
-origin/main` 显示确实推过三次。2026-09-23 更正。）
+**remote 状态**：`origin` 是 `github.com/seandong/todopi`。2026-09-24 已把 `main` 推到
+`92edf6d`（F08 合并之后）。此后合回 `main` 即推送，只在快进时推、不 force。
 
 ## 里程碑
 
@@ -133,8 +131,13 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     claim → 提交 → Codex 两轮评审 → `todopi done`（`verify=pass commit=92baaf7
     dirty=false`）。流程上定下「评审必须在 done 之前」（自举后没有 reverify）；
     在真实账本上 dogfood 发现散文验收判据在 `show` 里看不见，已修。见 D028。
-29. **下一步：`todopi ls --ready` 看队列。** F09 `note / check` 会让验收判据可以勾选，
-    自举任务那段散文就有了去处。
+29. ~~F09 `note` / `check`~~ 已完成（2026-09-24）。三轮评审，阻塞项 2+1+0——两条都是
+    新命令第一次走到的**旧**缺陷（写入端找 `## Log` 用 trim、`- [ ]x` 被当成标准）。
+    `todopi done`：`verify=pass commit=22dc272 dirty=false`。见 D029。
+    它给了勾选的**机制**；但自举任务的散文判据**不会因此自动有去处**——见下一条。
+30. **待决：要不要把 12 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
+    谁来写、写多细、改完之后验收门禁开始对它们生效（`done` 会被没勾完的挡下）。
+    不在 F09 里做。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
     门禁骨架在 `commands/transition.ts`，`verify` 那道门加进 `domain/gates.ts` 即可，
     报告与动作走 `gateActions()`（`command` 无占位符、`template` 需填空）。
