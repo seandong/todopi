@@ -433,7 +433,12 @@ cmd_test() {
     # 测试全红也会被记成 pass。加 tee 是为了数 skipped，差点把整层的判据换掉。
     local _tlog _rc
     _tlog="$(mktemp)"
-    node --test 2>&1 | tee "$_tlog"
+    # **单测超时 120 秒。** node --test 默认不超时，一个同步死循环不会让用例失败，
+    # 只会让 make test 永远挂着（F08：去掉 show --tree 的环检测，实测就是这样）。
+    # 注意它在父运行器里**按文件**计：一个测试文件整体超过它也算失败（实测，5 秒
+    # 时 claim、ls 等文件都红了）。实测全量在 30 秒超时下全过，120 秒留了 4 倍以上
+    # 余量，只挡真挂死。
+    node --test --test-timeout=120000 2>&1 | tee "$_tlog"
     _rc="${PIPESTATUS[0]}"
     if [ "$_rc" -eq 0 ]; then
       emit unit-test pass "node --test 通过"
