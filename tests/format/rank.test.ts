@@ -118,3 +118,27 @@ test("从 \"z\" 连续追加：不会过早耗尽（z 加 18 个 0 是一个更�
   }
   assert.ok(last.length <= 24, `从 z 追加 2000 次后长到了 ${last.length}：${last}`);
 });
+
+test("32 位边界：上界的真前缀本身就是答案，不要去延长下界", () => {
+  // 评审反例：("a"+31 个 z, "b0") 之间有 "b"——它是上界的真前缀、比上界短、首位比下界大。
+  // 旧实现只会延长下界，撞到 32 位上限就说无解。暴力枚举只覆盖长度 ≤ 3，看不见这个边界。
+  const lo = "a" + "z".repeat(31);
+  assert.equal(rankBetween(lo, "b0"), "b");
+  assert.equal(rankBetween(lo, "b"), null, "这一对之间才真的放不下（只能延长下界，而它已经 32 位）");
+  const after = rankBetween(lo, null);
+  assert.ok(after !== null && after > lo && after.length <= 32);
+});
+
+test("属性：把 lo / hi 拉长到 30–32 位，结果仍然严格居中且不超长", () => {
+  const r = rng(2026);
+  for (let i = 0; i < 5000; i++) {
+    const pad = (s: string): string => (r() < 0.5 ? s + randomRank(r, 32).slice(0, Math.max(0, 30 + Math.floor(r() * 3) - s.length)) : s);
+    let lo = pad(randomRank(r, 3)).slice(0, 32), hi = pad(randomRank(r, 3)).slice(0, 32);
+    if (lo === hi) continue;
+    if (lo > hi) [lo, hi] = [hi, lo];
+    const k = rankBetween(lo, hi);
+    if (k !== null) assert.ok(RANK.test(k) && lo < k && k < hi, `${lo} < ${k} < ${hi}`);
+    // 上界不止一个字符、且首位比下界大：上界的首字符本身就是一个答案
+    if (hi.length > 1 && hi[0]! > lo[0]!) assert.ok(k !== null, `${lo} 与 ${hi} 之间至少有 ${hi[0]}，却说无解`);
+  }
+});

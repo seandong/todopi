@@ -290,6 +290,10 @@ function specBetween(lo: string, hi: string | null): string | null {
     return rest === null ? null : lo[0]! + rest;
   }
   if (h - l > 1) return RANK_ALPHABET[Math.floor((l + h) / 2)]!;
+  // 首位紧挨着。上界不止一个字符时，它的首字符本身就是答案：首位比 lo 大，又是 hi 的真前缀
+  // 所以比 hi 小。只有 hi 恰好一个字符时才去延长 lo——旧实现总是延长 lo，于是
+  // ("a"+31 个 z, "b0") 明明有 "b" 却撞上 32 位上限说无解（F10 第三轮评审）。
+  if (hi.length > 1) return hi[0]!;
   const rest = specBetween(lo.slice(1), null);
   return rest === null ? null : lo[0]! + rest;
 }
