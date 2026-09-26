@@ -129,7 +129,8 @@ function descriptionOf(i: BeadsIssue, overflowTitle: string | undefined, safe: S
     if (text) parts.push(`${label} (from Beads):\n\n${text}`);
   }
   if (parts.length === 0) return undefined;
-  const text = parts.join("\n\n").replace(/\r\n?/g, "\n").trim();
+  // 只去掉首尾的空行，不动第一行的缩进（F20 评审二轮：`.trim()` 会吃掉它）
+  const text = parts.join("\n\n").replace(/\r\n?/g, "\n").replace(/^(\s*\n)+/, "").trimEnd();
   return safe(text) ? text : indented(text);
 }
 
@@ -195,35 +196,69 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
     });
   }
 
-  // 建的顺序：parent 与 blocked_by 的目标先建。DFS 拓扑序，遇到回边（成环）就把那条边丢掉。
-  const out: BeadsPlanned[] = [];
-  const state = new Map<string, 1 | 2>();
-  const visit = (id: string): void => {
+  // 建的顺序分三步（F20 评审二轮：三种边混在一个 DFS 里，撞上回边时丢的可能是真正的 blocked_by 而不是软的 from）：
+  // ① 只按 parent 与 blocked_by 做 DFS，回边（这两种引用合起来成环）丢掉——没有一个建的顺序能让两头都先存在；
+  // ② from 按 priority 顺序逐条判断：目标能经已有的边走回源，加上就成环，丢掉；否则保留；
+  // ③ 在合起来已无环的图上排拓扑序。
+  const hardVisit = new Map<string, 1 | 2>();
+  const hard = (id: string): void => {
     const t = planned.get(id);
-    if (t === undefined || state.get(id) === 2) return;
-    state.set(id, 1);
-    // from= 也要先建目标：created 那行写下就不能再改，目标晚建就只能省掉（F20 评审：真实导出里丢了 15%）
-    const edges: [string, "parent" | "blocks" | "from", () => void][] = [
+    if (t === undefined || hardVisit.get(id) === 2) return;
+    hardVisit.set(id, 1);
+    const edges: [string, "parent" | "blocks", () => void][] = [
       ...(t.parent !== undefined ? [[t.parent, "parent", () => { t.parent = undefined; }] as [string, "parent", () => void]] : []),
       ...t.blockedBy.map((b) => [b, "blocks", () => { t.blockedBy = t.blockedBy.filter((x) => x !== b); }] as [string, "blocks", () => void]),
-      ...(t.from !== undefined ? [[t.from, "from", () => { t.from = undefined; }] as [string, "from", () => void]] : []),
     ];
     for (const [target, kind, drop] of edges) {
-      if (state.get(target) === 1) {
-        // 回边：parent、blocks、from 三种引用合起来成了环，没有一个建的顺序能让它们都先存在。规格只要求 parent 与
-        // blocked_by 各自无环（F20 评审），所以这不一定是 Beads 里的环——说清楚是哪种引用、为什么丢
+      if (hardVisit.get(target) === 1) {
         drop();
-        if (kind === "from") dropped.fromEdges += 1;
-        else dropped.cycleEdges += 1;
-        warnings.push(`${id}: its ${kind === "from" ? "discovered-from" : kind === "parent" ? "parent" : "blocks"} reference to ${target} `
-          + "cannot be kept: together with the other references it forms a loop, so no creation order has both tasks exist first; dropped");
+        dropped.cycleEdges += 1;
+        warnings.push(`${id}: its ${kind} reference to ${target} cannot be kept: together with the other parent and blocks `
+          + "references it forms a loop, so no creation order has both tasks exist first; dropped");
         continue;
       }
-      visit(target);
+      hard(target);
     }
-    state.set(id, 2);
+    hardVisit.set(id, 2);
+  };
+  for (const i of byPriority) hard(i.id);
+
+  const next = (t: BeadsPlanned): string[] => [...(t.parent !== undefined ? [t.parent] : []), ...t.blockedBy, ...(t.from !== undefined ? [t.from] : [])];
+  /** 从 start 沿「要先建的」边走，能不能走到 goal */
+  const reaches = (start: string, goal: string): boolean => {
+    const seen = new Set<string>();
+    const stack = [start];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (id === goal) return true;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const t = planned.get(id);
+      if (t !== undefined) stack.push(...next(t));
+    }
+    return false;
+  };
+  for (const i of byPriority) {
+    const t = planned.get(i.id)!;
+    if (t.from === undefined) continue;
+    const target = t.from;
+    t.from = undefined;
+    if (planned.has(target) && reaches(target, t.beadsId)) {
+      dropped.fromEdges += 1;
+      warnings.push(`${t.beadsId}: its discovered-from reference to ${target} cannot be kept: ${target} must itself be `
+        + `created after ${t.beadsId} (parent or blocks), so no creation order has it exist first; dropped`);
+    } else t.from = target;
+  }
+
+  const out: BeadsPlanned[] = [];
+  const done = new Set<string>();
+  const place = (id: string): void => {
+    const t = planned.get(id);
+    if (t === undefined || done.has(id)) return;
+    done.add(id);
+    for (const target of next(t)) place(target);
     out.push(t);
   };
-  for (const i of byPriority) visit(i.id);
+  for (const i of byPriority) place(i.id);
   return { tasks: out, skipped, dropped, warnings };
 }

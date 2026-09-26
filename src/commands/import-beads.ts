@@ -127,13 +127,9 @@ export function runImportBeads(opts: { directory: string; path?: string; actor?:
     // 纵深防御：评审找出的两个触发输入（150 个 emoji 的标题、setext 的 `=======`）已在映射里修掉，现在造不出能到达这里
     // 的公开输入，所以没有专门的用例；修之前它实测拦下了 emoji 标题、一个文件都没写。
     const placeholder = `${ledger.config.id_prefix}-000000`;
-    const problems: string[] = [];
-    for (const t of plan.tasks) {
-      const c = candidateFor(newTask(t, placeholder, () => placeholder));
-      const why = typeof c === "string" ? c
-        : validateFile(c).map((f) => `${f.rule}: ${f.message}`).join("; ") || readsBack(c, t.description);
-      if (why) problems.push(`${t.beadsId}: ${why}`);
-    }
+    const problems = preflight(plan.tasks.map((t) => ({
+      beadsId: t.beadsId, description: t.description, task: newTask(t, placeholder, () => placeholder),
+    })));
     if (problems.length > 0) {
       throw new CliError(EXIT.usage, `${problems.length} Beads issue${problems.length === 1 ? "" : "s"} cannot be written as todopi tasks; `
         + `nothing was imported.\n${problems.slice(0, 10).map((p) => `  ${p}`).join("\n")}${problems.length > 10 ? "\n  ..." : ""}`);
@@ -162,10 +158,27 @@ export function runImportBeads(opts: { directory: string; path?: string; actor?:
 }
 
 /**
+ * 预检一批要建的任务（不写盘）：文件级的不变量与描述读回。返回「Beads id: 原因」的列表，空表示都写得下去。
+ * 单独导出是为了能直接喂坏的候选来测（F20 评审二轮：映射修好之后，公开输入已到不了这里）。
+ */
+export function preflight(items: { beadsId: string; description?: string; task: NewTask }[]): string[] {
+  const problems: string[] = [];
+  for (const { beadsId, description, task } of items) {
+    const c = candidateFor(task);
+    const why = typeof c === "string" ? c
+      : validateFile(c).map((f) => `${f.rule}: ${f.message}`).join("; ") || readsBack(c, description);
+    if (why) problems.push(`${beadsId}: ${why}`);
+  }
+  return problems;
+}
+
+/**
  * 写之前核对：描述读回来一字不差（与 add 同一个后置条件）。纵深防御：safeText 判定为安全的文字本就读得回来，
  * 这一道只在那个判定本身出错时才会拦下——造不出绕过前一道的输入，所以没有专门的用例。
  */
 function readsBack(candidate: TaskFile, description: string | undefined): string | null {
-  const got = sectionLines(candidate.body, "## Description").map((l) => l.text).join("\n").trim();
-  return got === (description ?? "").trim() ? null : "the description would not read back unchanged";
+  // 只去首尾空行（与 domain/beads.ts 生成描述时同一个口径）：第一行的缩进也要读得回来
+  const edges = (x: string) => x.replace(/^(\s*\n)+/, "").trimEnd();
+  const got = edges(sectionLines(candidate.body, "## Description").map((l) => l.text).join("\n"));
+  return got === edges(description ?? "") ? null : "the description would not read back unchanged";
 }

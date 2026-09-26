@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
-import { runImportBeads, parseIssues } from "../../src/commands/import-beads.ts";
+import { runImportBeads, parseIssues, preflight } from "../../src/commands/import-beads.ts";
 import { runLs } from "../../src/commands/ls.ts";
 import { runShow } from "../../src/commands/show.ts";
 import { runDoctor } from "../../src/commands/doctor.ts";
@@ -252,7 +252,7 @@ test("discovered-from 与 parent 合起来成环：丢掉 from 并计数、警�
   ] as BeadsIssue[], new Set(), () => true);
   assert.equal(p.dropped.fromEdges, 1, "丢的是 from，不是 parent");
   assert.equal(p.dropped.cycleEdges, 0);
-  assert.match(p.warnings.join("\n"), /reference to .* cannot be kept: together with the other references it forms a loop/);
+  assert.match(p.warnings.join("\n"), /discovered-from reference to .* cannot be kept/);
   assert.doesNotMatch(p.warnings.join("\n"), /cycle in Beads/);
 });
 
@@ -275,4 +275,42 @@ test("描述里只有 setext 下划线（=======，像冲突标记、但不是�
   const r = runImportBeads({ directory: d, actor: ME });
   assert.equal(runShow({ directory: d, id: r.created[0]!.id, actor: ME }).description, "    Overview\n    =======\n    stuff");
   assert.equal(runDoctor({ directory: d }).findings.length, 0);
+});
+
+test("from 与 blocks 冲突时丢的是软的 from，不是 blocked_by——两种访问顺序都是（F20 评审二轮 N1）", () => {
+  for (const [pa, pb] of [[0, 1], [1, 0]]) {
+    const d = repo();
+    // a discovered-from b；b 被 a 挡着（b blocked_by a）→ a 必须先建，from=b 没法先存在
+    beads(d, [
+      { id: "bd-a", title: "A", priority: pa, dependencies: [dep("bd-a", "bd-b", "discovered-from")] },
+      { id: "bd-b", title: "B", priority: pb, dependencies: [dep("bd-b", "bd-a", "blocks")] },
+    ]);
+    const r = runImportBeads({ directory: d, actor: ME });
+    const id = (b: string) => r.created.find((t) => t.beads_id === b)!.id;
+    assert.deepEqual(runShow({ directory: d, id: id("bd-b"), actor: ME }).blocked_by, [id("bd-a")], `priorities ${pa}/${pb}`);
+    const created = runShow({ directory: d, id: id("bd-a"), full: true, actor: ME }).log[0]!;
+    assert.ok("args" in created && created.args["from"] === undefined);
+    assert.deepEqual(runLs({ directory: d, ready: true, actor: ME }).tasks.map((t) => t.id), [id("bd-a")], "B 仍被 A 挡着");
+    assert.equal(runDoctor({ directory: d }).findings.length, 0);
+  }
+});
+
+test("预检：候选写不下去（标题带换行）或描述读不回来，都点名 Beads id；都好时返回空", () => {
+  const base = { id: "tp-000000", title: "T", status: "open", rank: "a0", created: "2026-01-01T00:00:00Z", updated: "2026-01-01T00:00:00Z", log: ["2026-01-01T00:00:00Z me created"] };
+  assert.deepEqual(preflight([{ beadsId: "ok", task: base }]), []);
+  const bad = preflight([
+    { beadsId: "bd-nl", task: { ...base, title: "a\nb" } },
+    { beadsId: "bd-desc", description: "what we meant", task: { ...base, description: "something else" } },
+    { beadsId: "bd-indent", description: "  indented", task: { ...base, description: "indented" } },
+  ]);
+  assert.equal(bad.length, 3, "只差首行缩进也算读不回来");
+  assert.match(bad[0]!, /^bd-nl: /);
+  assert.match(bad[1]!, /^bd-desc: the description would not read back unchanged/);
+});
+
+test("描述第一行的缩进保留（只去首尾空行）", () => {
+  const d = repo();
+  beads(d, [{ id: "bd-i", title: "I", description: "\n\n  indented first line\nsecond\n\n", priority: 2 }]);
+  const r = runImportBeads({ directory: d, actor: ME });
+  assert.equal(runShow({ directory: d, id: r.created[0]!.id, actor: ME }).description, "  indented first line\nsecond");
 });
