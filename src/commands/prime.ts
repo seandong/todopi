@@ -20,7 +20,7 @@ import { sortTasks } from "../domain/order.ts";
 import { estimateTokens } from "../domain/tokens.ts";
 import type { TaskFile } from "../domain/types.ts";
 import type { PrimeFullReport, PrimeReport, PrimeTask } from "../output/dto/prime.ts";
-import { moreHeldLine, pointer, renderPrime } from "../output/render/prime.ts";
+import { renderPrime } from "../output/render/prime.ts";
 import { EXIT, CliError } from "../exit.ts";
 
 export type PrimeOptions = {
@@ -67,6 +67,19 @@ function project(t: TaskFile, level: 0 | 1 | 2): PrimeTask {
     log: entries.map((e) => visible([e.head, ...e.continuation.map((l) => `  ${l}`)].join("\n"))),
     logOmitted: Math.min(every.length, 2) - entries.length,
   };
+}
+
+/** 指针行与它提到的命令。命令只在这里拼（ARCH-026：渲染层不生成内容），--json 里的 `commands` 就是它们。 */
+export function pointer(ready: number, heldByOthers: number, held: boolean): { line: string; commands: string[] } {
+  const others = heldByOthers > 0 ? ` · ${heldByOthers} held by others` : "";
+  return held
+    ? { line: `${ready} ready (\`todopi ls --ready\`)${others} · everything else: \`todopi prime --full\``,
+      commands: ["todopi ls --ready", "todopi prime --full"] }
+    : { line: `No task in progress · ${ready} ready: \`todopi ls --ready\`${others}`, commands: ["todopi ls --ready"] };
+}
+
+export function moreHeldLine(n: number): string | null {
+  return n > 0 ? `+ ${n} more task${n === 1 ? "" : "s"} you hold: \`todopi ls --mine\`` : null;
 }
 
 type View = {

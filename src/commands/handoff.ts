@@ -62,7 +62,9 @@ export function verifySnapshot(t: TaskFile): string {
   const print = t.parseError !== undefined || (raw !== undefined && typeof raw !== "string") ? UNREADABLE
     : verifyPrint(raw);
   // frontmatter 坏了正文照样读得出来（read.ts 保留它），Log 里的编辑照数——硬记成 0 会让两端都读不
-  // 出来、中间经 CLI 改过的漏报（评审四轮）。
+  // 出来、中间经 CLI 改过的漏报（评审四轮）。信封都坏了时正文读不出来：次数记 `?`（不知道），不记 0
+  // （评审五轮）。
+  if (t.parseError !== undefined && t.body === "" && t.raw !== "") return `${print}#?`;
   const edits = parsedLog(t)
     .filter((p) => p.verb === "edited" && (p.args["fields"] ?? "").split(",").includes("verify")).length;
   return `${print}#${edits}`;
@@ -89,6 +91,9 @@ export function runHandoff(opts: HandoffOptions): HandoffReport {
   // 2、3 都要一个基准：上次 prime 时的快照。从没 prime 过、或上次 prime 是没有快照的旧格式，**两节都
   //    不猜**（F12 评审：旧格式下曾退回比 created 时间，合并进来的旧任务就漏了）。
   const snap = record?.verify ?? null;
+  // 快照里有条目没有 `#<次数>`：那是本分支早期的格式，只有指纹、没有编辑次数。它能回答「谁是新出现的」，
+  // 回答不了「期间改没改过」——verify 一节整体不给结论（评审五轮：当作完整基准会漏掉改了又改回的）。
+  const partial = snap !== null && Object.values(snap).some((v) => !v.includes("#"));
 
   // 2. 自上次 prime 以来我新建的：快照里没有这个 id（新建的与被合并进来的都算出现），且 created
   //    那条 Log 的 actor 算我的（宽松匹配）。
@@ -109,15 +114,16 @@ export function runHandoff(opts: HandoffOptions): HandoffReport {
     const [bp, be] = before === undefined ? [undefined, "0"] : before.split("#");
     // **先算编辑次数有没有增长**，再按两端的状态决定报什么——计数判断曾被下面几个提前返回的分支
     // 吞掉：prime 之后新建又经 CLI 改掉 verify 的、prime 时读不出来的，都漏了（评审三轮）。
-    const edited = be !== undefined && Number(ce) > Number(be);
-    if (cp === UNREADABLE) return bp === UNREADABLE && !edited ? null : { ...ref(t), verify: null, state: "unreadable" };
-    if (bp === undefined) return cp !== "-" ? row("new") : edited ? row("edited") : null;
+    // 三态：增长了、没增长、不知道（任一端的次数是 `?`）。不知道的按「可能改过」处理——漏报比多报糟。
+    const edited: boolean | "unknown" = ce === "?" || be === "?" ? "unknown" : Number(ce) > Number(be);
+    if (cp === UNREADABLE) return bp === UNREADABLE && edited === false ? null : { ...ref(t), verify: null, state: "unreadable" };
+    if (bp === undefined) return cp !== "-" ? row("new") : edited !== false ? row("edited") : null;
     // prime 时读不出来：不知道原来是什么，就不说它变了（评审二轮）。现在没有 verify 则只看编辑次数。
-    if (bp === UNREADABLE) return cp !== "-" ? row("unknown") : edited ? row("edited") : null;
+    if (bp === UNREADABLE) return cp !== "-" ? row("unknown") : edited === true ? row("edited") : edited === "unknown" ? row("unknown") : null;
     if (bp !== cp) return row(cp === "-" ? "removed" : "changed");
-    return edited ? row("edited") : null;
+    return edited === true ? row("edited") : edited === "unknown" ? row("unknown") : null;
   };
-  const verifyChanged = snap === null ? null
+  const verifyChanged = snap === null || partial ? null
     : all.map((t) => verifyRow(t, snap[t.idFromFilename])).filter((row): row is VerifyRow => row !== null);
 
   const report: HandoffReport = {
@@ -125,7 +131,8 @@ export function runHandoff(opts: HandoffOptions): HandoffReport {
     quiet, created, verifyChanged, logged: [], skipped: [], failed: [], check: opts.check === true,
     baselineNote: record === null ? "No baseline: no `todopi prime` recorded for this session yet."
       : snap === null ? "No baseline: the last `todopi prime` predates verify snapshots; the next one records one."
-        : null,
+        : partial ? "No verify baseline: the last `todopi prime` did not record edit counts; the next one does."
+          : null,
   };
   if (opts.check === true) return report;
 

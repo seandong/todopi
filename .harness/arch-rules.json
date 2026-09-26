@@ -251,6 +251,26 @@
       "what": "src/markdown/（含子目录）在运行时依赖了 commonmark 之外的模块，或出现了动态加载（import(…)、require、createRequire、getBuiltinModule）。",
       "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。 2026-09-24 评审：第一版只匹配行首的 `import `，缩进的 import、`export … from`、动态 import 都能引入依赖而不触发。 2026-09-25：这一层改用 commonmark 判定正文结构（D031），允许依赖它；检查器改成问 Node 自己的模块加载器——grep 版本连着两轮被合法语法绕过（`import{join}from\"node:path\"` 等）。 第四轮评审：子目录不扫、`import /* c */ (…)` 不报——改为递归，动态加载的判据允许中间夹注释，并加上 createRequire / getBuiltinModule。不防刻意混淆：这条规则防的是分层被无意打破。",
       "fix": "把依赖挪回调用方，markdown/ 只收字符串、只回字符串与行号。"
+    },
+    {
+      "id": "ARCH-026",
+      "description": "prime / handoff 的渲染层不生成内容：命令只来自 DTO",
+      "applies_when": "test -f src/output/render/prime.ts",
+      "check": "grep -nE 'todopi ' src/output/render/prime.ts src/output/render/handoff.ts | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\\*)' || true",
+      "expect": "empty",
+      "what": "src/output/render/prime.ts 或 handoff.ts 的代码里出现了 `todopi …` 字面量——渲染时现拼了一条命令。",
+      "why": "FR-P2 要求 `prime --json` 与文本是同样的内容；handoff 同理。命令一旦在渲染层现拼，JSON 里就没有它：F11 评审第一轮（指针行）与第三轮（`todopi show <id>`、`--full` 的 `todopi ls --ready`）两次因此 No-Go。命令改在 commands/ 里拼进 DTO（pointer、commands、seeAlso、readyMore），渲染只拼 DTO 的值。其余命令的渲染（ls、add 的 Next 提示）没有这个承诺，不在此列。",
+      "fix": "把命令放进 DTO（commands/prime.ts 或 handoff.ts 里生成），渲染层引用 DTO 字段。"
+    },
+    {
+      "id": "ARCH-027",
+      "description": "注入模型上下文的输出（prime、handoff）不含原始控制字符",
+      "applies_when": "test -f src/commands/prime.ts",
+      "check": "node tools/check-output-controls.mjs",
+      "expect": "empty",
+      "what": "prime（默认 / --full，文本 / --json）或 handoff --check 的输出里出现了 ESC、BEL 之类的原始控制字符，或单行字段里出现了换行。",
+      "why": "这些输出会进模型的上下文，也会打到终端上：一条验收标准或一个 assignee 不该能改终端颜色、挪光标，多行 verify 不该在报告里伪造出一行任务。F11 评审一、二轮与 F12 评审一轮四次找到漏网的字段（标准、assignee、只在渲染时转义导致 JSON 里仍带 ESC、多行 verify）。检查器不做静态分析：造一个每个自由文本字段都带控制字符的账本，逐字节检查全部输出形态，并自检这些字段确实进了输出。",
+      "fix": "在 commands/ 的投影里经 visible()（多行字段）或 visibleLine()（单行字段）处理，见 src/commands/view.ts。"
     }
   ]
 }

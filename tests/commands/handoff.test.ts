@@ -320,3 +320,70 @@ test("frontmatter 两端都坏、中间修好并经 CLI 改过 verify：编辑�
   breakIt();
   assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true }).verifyChanged?.map((x) => [x.id, x.state]), [[t, "unreadable"]]);
 });
+
+test("状态矩阵：3 种读不出来 × prime 时 4 种 × 现在 4 种 × 编辑次数增长与否，列与不列都对（评审四、五轮）", () => {
+  type Mode = "invalidScalar" | "malformedYaml" | "brokenEnvelope";
+  type State = "absent" | "none" | "unreadable" | "A" | "B";
+  const setVerify = (s: string, v: string | null) => {
+    const without = s.replace(/^verify: .*\n/m, "");
+    return v === null ? without : without.replace(/^(title: .*\n)/m, `$1verify: ${v}\n`);
+  };
+  const corrupt = (s: string, mode: Mode) => mode === "invalidScalar" ? setVerify(s, "123")
+    : mode === "malformedYaml" ? s.replace(/^title: .*$/m, "title: [invalid") : s.replace(/^---\n/, "");
+  let bad = 0;
+  for (const mode of ["invalidScalar", "malformedYaml", "brokenEnvelope"] as Mode[]) {
+    for (const before of ["absent", "none", "unreadable", "A"] as State[]) {
+      for (const now of ["none", "unreadable", "A", "B"] as State[]) {
+        for (const grew of [false, true]) {
+          const d = repo();
+          let id = "";
+          let good = "";
+          const create = (v: string | undefined) => {
+            id = runAdd({ directory: d, title: "t", verify: v, actor: ME }).id;
+            good = read(d, id);
+          };
+          if (before !== "absent") {
+            create(before === "none" ? undefined : "A");
+            if (before === "unreadable") edit(d, id, (s) => corrupt(s, mode));
+          }
+          runPrime({ directory: d, actor: ME });
+          if (before === "absent") create("A");
+          if (before === "unreadable") writeFileSync(taskPath(d, id), good);        // 修好，次数不变
+          if (grew) runEdit({ directory: d, id, verify: "X", actor: ME });
+          // 塑造现在的状态只用手改——经 CLI 会让次数多出来。
+          edit(d, id, (s) => now === "unreadable" ? corrupt(setVerify(s, '"A"'), mode)
+            : setVerify(s, now === "none" ? null : `"${now}"`));
+          // 判据（与实现独立写）：信封坏掉时读不出 Log，那一端的次数未知；未知按「可能改过」。
+          const countKnown = !(mode === "brokenEnvelope" && (before === "unreadable" || now === "unreadable"));
+          const hasVerify = now === "A" || now === "B";
+          const want = now === "unreadable" ? !(before === "unreadable" && countKnown && !grew)
+            : before === "absent" ? hasVerify || grew
+              : before === "unreadable" ? hasVerify || grew || !countKnown
+                : (before === "none" ? now !== "none" : now !== "A") || grew;
+          const got = (runHandoff({ directory: d, actor: ME, check: true }).verifyChanged ?? []).some((x) => x.id === id);
+          if (got !== want) { bad++; console.error(`不符：${mode} ${before} → ${now} grew=${grew}：列=${got}，应=${want}`); }
+        }
+      }
+    }
+  }
+  assert.equal(bad, 0);
+});
+
+test("快照条目没有 #<次数>（早期格式）：verify 一节不给结论，说明原因（评审五轮）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t", verify: "A", actor: ME }).id;
+  runPrime({ directory: d, actor: ME });
+  const ledger = discoverLedger(d);
+  const dir = join(leaseDirFor(ledger), "sessions");
+  for (const f of readdirSync(dir)) {
+    const rec = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    const legacy = Object.fromEntries(Object.entries(rec.verify as Record<string, string>).map(([k, v]) => [k, v.split("#")[0]]));
+    writeFileSync(join(dir, f), JSON.stringify({ ...rec, verify: legacy }));
+  }
+  runEdit({ directory: d, id: t, verify: "B", actor: ME });
+  runEdit({ directory: d, id: t, verify: "A", actor: ME });
+  const r = runHandoff({ directory: d, actor: ME, check: true });
+  assert.equal(r.verifyChanged, null);
+  assert.match(r.baselineNote ?? "", /did not record edit counts/);
+  assert.deepEqual(r.created, [], "「新建」一节只要 id，照常可用");
+});
