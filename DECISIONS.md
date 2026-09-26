@@ -2027,3 +2027,25 @@ Node 用 spec reporter，整层被判 blocked。
   「用字符形状近似需要真解析的判断」——正则 `^updated:` 认不得 `"updated":`）；frontmatter 有手写注释就不重写。
   这几类错误没有有意义的静态判据，按 AGENTS.md 的要求说明：由 tests/commands/doctor-fix.test.ts 守护
   （updated 原文的五种写法、非法 UTF-8、回填的两种阻挡情形、注释）。
+
+## D035 — setup claude：只判断「我们的钩子装好了、能跑」，不校验用户别的钩子
+
+- 日期：2026-09-26（F14）
+- 外部事实（PRD §17 重核并实测）：Claude Code 的 PostCompact 存在，但不在「stdout 进上下文」的事件表里；压缩后
+  注入走 SessionStart 的 compact 来源。setup 只装 SessionStart（不设 matcher）与 SessionEnd。任务验收标准据此改写。
+- 评审前三轮把我推向「逐条校验用户的钩子形状」——那等于手写一份 Claude Code 的设置校验器（第五次「用手写
+  近似代替真解析」）。收回：用户别的钩子**不校验、原样保留**，我们只往数组末尾加一组，不会让它们变得更糟。
+  只在要往里加东西的容器不对（`hooks` 不是对象、事件不是列表、文件不是 JSON 对象、符号链接）时拒绝。
+- 需要判断的只有「我们的钩子装好了、能跑、覆盖全部来源」，而且**连 matcher 的语义也不猜**：评审三、四轮各找出
+  一种我对 matcher 的解释错了的写法（逗号列表按精确匹配、正则不锚定）。所以只认我们自己写出的形状——没有
+  matcher（或为空、为 `*`）的组里，一个标准处理器（type command、命令恰好是我们的，只允许正数 timeout 与字符串
+  statusMessage）。这样的组覆盖 startup / resume / clear / compact / fork 全部来源。其余同名组（限定了 matcher、
+  带 `if` / `async` / 陌生键）一律不算装好：原样保留，末尾补一组标准的，并提示「两组都匹配时会注入两遍，删掉一个」。
+  宁可多一组、说清楚，也不把一个可能不跑、或只覆盖一部分来源的组当成装好。
+- 「原样保留」指 **JSON 值**：整份 settings.json 经 JSON.parse / stringify 重写，缩进与数字的原始写法不保留；
+  超出双精度的数字写回的是 Claude Code 自己（同样用 JS 的 JSON.parse）读到的值——对它这个唯一的读者，值不变。
+  唯一的例外是 `-0`：JSON.stringify 把它写成 `0`，这里把两者视为同一个 JSON 数值（评审六轮；为此拒绝整份设置不值得）。
+  为了字节级保留而在源码层面拼接，就又得手写一个 JSON 定位器（评审五轮后收窄承诺，而不是再写一个）。
+  非法 UTF-8 的 settings.json 拒绝。
+- 用户文件的权限位不变（writeFileAtomic 新增 mode）；CLAUDE.md 按字节追加；导入判定按纯 CommonMark
+  （markdown 层新增 commonmarkCodeLines——不带为验收门禁做的偏离）。

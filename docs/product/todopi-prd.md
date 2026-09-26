@@ -164,7 +164,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
   | Agent | 会话开始 | 压缩 | 会话结束 | 配置位置 |
   |---|---|---|---|---|
-  | Claude Code | `SessionStart`（matcher：`startup` `resume` `clear` `compact` `fork`） | `PostCompact` | `SessionEnd` | `.claude/settings.json` |
+  | Claude Code | `SessionStart`（matcher：`startup` `resume` `clear` `compact` `fork`） | `SessionStart` 的 `compact` 来源（`PostCompact` 存在，但它不在文档列出的「纯文本 stdout 进上下文」事件里；`additionalContext` 是否生效文档不清。见 §17 2026-09-26 重核） | `SessionEnd` | `.claude/settings.json` |
   | Codex | `SessionStart` | `PostCompact` | `SessionEnd` | `.codex/hooks.json` |
   | OpenCode | `event` 钩子订阅 `session.created` | 同上订阅 `session.compacted` | `session.idle` 兜底 | `.opencode/plugins/` |
   | pi | `session_start` | **`session_compact`**（压缩后）；`session_before_compact` 是压缩前 | `session_shutdown` | `.pi/extensions/`，`pi install` |
@@ -379,6 +379,23 @@ Cursor 只有 `preCompact`、Gemini CLI 只有 `PreCompress`，都没有压缩�
 FR-A2a 给出的替代路径是压缩**前**注入摘要，让指针成为摘要的一部分；这不是等价
 替代，差异写在 FR-A2a 里。这个约束应当影响首发叙事：核心演示用有 post 事件的
 agent 录，而不是假设六家表现一致。
+
+### 2026-09-26 重核（F14 `setup claude`）
+
+- Claude Code 的 `PostCompact` **存在**（官方 hooks 文档的事件表里有，输入含 `compaction_trigger`）。但文档
+  明确列出「纯文本 stdout 作为上下文加给 Claude」的事件只有 `UserPromptSubmit`、`UserPromptExpansion`、
+  `SessionStart`、`PostModelSwitch`，**不含 `PostCompact`**；它的 `additionalContext` 是否进上下文，文档表述
+  不清。压缩后重新注入因此走 `SessionStart`：它在压缩后以 `compact` 来源再触发一次，stdout 进上下文，
+  这一点文档写得明确。`setup claude` 只装 `SessionStart`（不设 matcher，覆盖全部来源）与 `SessionEnd`。
+- 钩子的 stdin JSON 在所有事件上都带 `session_id`；`$CLAUDE_PROJECT_DIR` 对钩子命令可用。
+- Claude Code 在**没有** CLAUDE.md 时会读 AGENTS.md（较新版本）；两者都在时只读 CLAUDE.md。所以 FR-Q5a
+  的 `@AGENTS.md` 导入仍然需要——多数仓库已有 CLAUDE.md。
+- 过程记录：一个查文档的子 agent 报告「`PostCompact` 不存在」，直接查官方页面发现它错了；外部事实以一手
+  文档为准。
+- **实测**（Claude Code 2.1.281，临时仓库，`setup claude` 装的钩子）：无头 `claude -p` 会话开始时原样收到
+  prime 的 `## tp-…` 行；交互式会话里执行 `/compact` 后触发 `SessionStart`（`source: compact`），会话里能
+  原样引出注入的那一行；`/exit` 触发 `SessionEnd`（`reason: prompt_input_exit`）。三次调用的 stdin 都带同一个
+  `session_id`。无头 `-p` 模式下的 `/compact` 没有触发 `compact` 来源——要验证压缩后注入，得用交互式会话。
 
 ### 顺带确认
 
