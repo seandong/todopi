@@ -339,3 +339,51 @@ test("opencode 插件：prime 失败（todopi 还不在 PATH 上）时不缓存�
   await hooks["experimental.chat.system.transform"]({ sessionID: "s1" }, second);
   assert.deepEqual(second.system, ["base", "## tp-aaaaaa: ok"], "装好之后下一轮就注入上了");
 });
+
+test("pi：写 .pi/extensions/todopi.ts（--user：~/.pi/agent/extensions/），提示信任项目；带标记才替换", async () => {
+  const { PI_EXTENSION, PI_MARKER } = await import("../../src/format/pi-extension.ts");
+  const d = repo();
+  const p = join(d, ".pi", "extensions", "todopi.ts");
+  const r = runSetup({ directory: d, agent: "pi" });
+  assert.deepEqual(r.files.map((f) => [f.path, f.status]), [[p, "created"]]);
+  assert.ok(r.notes.some((n) => /trust the project/.test(n)));
+  assert.equal(readFileSync(p, "utf8"), PI_EXTENSION);
+  const again = runSetup({ directory: d, agent: "pi" });
+  assert.deepEqual([again.files[0]!.status, again.notes], ["unchanged", []]);
+  writeFileSync(p, `${PI_MARKER}\nexport default function () {}\n`);
+  assert.equal(runSetup({ directory: d, agent: "pi" }).files[0]!.status, "updated");
+  writeFileSync(p, "export default function mine() {}\n");
+  assert.throws(() => runSetup({ directory: d, agent: "pi" }), code(EXIT.usage));
+  const home = tmp();
+  assert.deepEqual(runSetup({ directory: d, agent: "pi", user: true, home }).files.map((f) => f.path),
+    [join(home, ".pi", "agent", "extensions", "todopi.ts")]);
+});
+
+test("pi 扩展：session_start / session_compact 跑 prime（--session 取自 sessionManager）并缓存，before_agent_start 追加系统提示；失败不缓存", async () => {
+  const { PI_EXTENSION } = await import("../../src/format/pi-extension.ts");
+  const dir = tmp();
+  const file = join(dir, "ext.mjs");
+  writeFileSync(file, PI_EXTENSION);
+  const { default: factory } = await import(file);
+  const handlers = new Map<string, (e: unknown, ctx: unknown) => Promise<unknown>>();
+  const calls: string[][] = [];
+  let code = 0;
+  let n = 0;
+  const pi = {
+    on: (name: string, fn: (e: unknown, ctx: unknown) => Promise<unknown>) => handlers.set(name, fn),
+    exec: async (cmd: string, args: string[]) => { calls.push([cmd, ...args]); return { code, stdout: `## tp-aaaaaa: call ${++n}\n`, stderr: "" }; },
+  };
+  factory(pi);
+  const ctx = (id: string) => ({ cwd: dir, sessionManager: { getSessionId: () => id } });
+  const turn = async (id: string) => handlers.get("before_agent_start")!({ systemPrompt: "BASE" }, ctx(id));
+  await handlers.get("session_start")!({ reason: "startup" }, ctx("s1"));
+  assert.deepEqual(calls, [["todopi", "prime", "--hook", "--session", "s1"]]);
+  assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" });
+  assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" }, "缓存：不是每一轮都跑 prime");
+  await handlers.get("session_compact")!({ reason: "manual" }, ctx("s1"));
+  assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 2" }, "压缩后刷新");
+  code = 127;
+  assert.equal(await turn("s2"), undefined, "prime 失败：不注入");
+  code = 0;
+  assert.deepEqual(await turn("s2"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 4" }, "失败不缓存，下一轮重试");
+});

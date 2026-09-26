@@ -2061,3 +2061,14 @@ Node 用 spec reporter，整层被判 blocked。
   记在 §17。插件文件是我们生成的：带标记头，已有且带标记才替换。
 - **未实测**：OpenCode 的压缩后注入——免费模型不能用于压缩，本机另外两个 provider 的凭据不可用。机制上
   （compacted 事件刷新缓存 + 系统提示）与会话开始注入同一条路径。
+
+## D037 — pi 经 before_agent_start 注入；用测试专用的 echo provider 在真实运行时里验证
+
+- 日期：2026-09-26（F16）。事实与实测见 PRD §17。
+- 扩展与 OpenCode 插件同构：`session_start` 跑 prime、按会话缓存，`session_compact` 刷新，`before_agent_start` 追加系统提示。
+  会话 id 经 `--session` 传（`pi.exec` 没有 stdin 选项），`--hook` 仍用来在没有账本的项目里静默退出。生成文件的归属判据
+  （整个第一行的标记）抽成 format/generated-file.ts，OpenCode 与 pi 共用。
+- **验证方式**：本机 pi 没有可用的模型凭据。与其把「压缩后注入」再拆成一个等凭据的任务（OpenCode 那样），不如让测试
+  专用的扩展注册一个 echo provider——它把收到的系统提示里的相关行原样回答。这样压缩、事件、扩展、系统提示全走 pi 的真实
+  代码路径，不联网、确定。它证明「todopi 的内容进了 pi 发给模型的系统提示」；「真模型会读系统提示」不在我们的边界内。
+  （回头看，OpenCode 的压缩后注入也许能用同样的办法验证——插件 SDK 同样支持自定义 provider；记在 tp-1ssqrw。）

@@ -5,7 +5,7 @@ status: "open"
 rank: "il"
 verify: "make check && bash tools/e2e/f15-setup-codex-opencode.sh"
 created: "2026-09-26T08:46:43Z"
-updated: "2026-09-26T08:46:43Z"
+updated: "2026-09-26T10:08:57Z"
 ---
 
 ## Description
@@ -21,3 +21,4 @@ updated: "2026-09-26T08:46:43Z"
 ## Log
 
 - 2026-09-26T08:46:43Z seandong created from=tp-thtkze
+- 2026-09-26T10:08:57Z seandong note: 可能的无凭据验证办法（F16 在 pi 上用过，D037）：测试专用的插件注册一个 echo provider，把系统提示原样回答，在真实 OpenCode 运行时里验证压缩后的注入。OpenCode 是否支持插件注册自定义 provider、免费档限制是否也管到自定义 provider，需要先核实。

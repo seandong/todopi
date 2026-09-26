@@ -10,11 +10,7 @@
 // 约定，不是证明——用户若在带标记的文件里改动或照抄这个开头，重跑 setup 会覆盖它；标记那一行写明了这一点。
 // 符号链接（含悬空的）一律拒绝。
 
-import { lstatSync, mkdirSync, readFileSync } from "node:fs";
-import { lstatOrNull } from "./claude-settings.ts";
-import { dirname } from "node:path";
-import { writeFileAtomic } from "../fs/atomic.ts";
-import { EXIT, CliError } from "../exit.ts";
+import { ensureGeneratedFile, type GeneratedFileResult } from "./generated-file.ts";
 
 /**
  * 标记是**整个第一行**。判据是「第一行与它逐字相同」——代码认的与提示写的是同一段文字（F15 评审二轮：曾只比前缀，
@@ -49,22 +45,8 @@ export const TodopiPlugin = async ({ $, directory }) => {
 };
 `;
 
-export type PluginResult = "created" | "updated" | "unchanged";
+export type PluginResult = GeneratedFileResult;
 
 export function ensureOpencodePlugin(path: string): PluginResult {
-  // lstat 判断存在：悬空符号链接也是「有东西」，不能当空位（F15 评审）。
-  const link = lstatOrNull(path);
-  if (link?.isSymbolicLink() === true) throw new CliError(EXIT.usage, `${path} is a symbolic link; left untouched.`);
-  if (link === null) {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileAtomic(path, OPENCODE_PLUGIN);
-    return "created";
-  }
-  const current = readFileSync(path, "utf8");
-  if (current === OPENCODE_PLUGIN) return "unchanged";
-  if (current.split("\n", 1)[0] !== PLUGIN_MARKER) {
-    throw new CliError(EXIT.usage, `${path} exists and was not written by todopi; left untouched. Move it aside, then run setup again.`);
-  }
-  writeFileAtomic(path, OPENCODE_PLUGIN, lstatSync(path).mode);
-  return "updated";
+  return ensureGeneratedFile(path, OPENCODE_PLUGIN, PLUGIN_MARKER);
 }

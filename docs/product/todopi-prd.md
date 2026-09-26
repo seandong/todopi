@@ -167,7 +167,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
   | Claude Code | `SessionStart`（matcher：`startup` `resume` `clear` `compact` `fork`） | `SessionStart` 的 `compact` 来源（`PostCompact` 存在，但它不在文档列出的「纯文本 stdout 进上下文」事件里；`additionalContext` 是否生效文档不清。见 §17 2026-09-26 重核） | `SessionEnd` | `.claude/settings.json` |
   | Codex | `SessionStart`（`source`：`startup` `resume` `clear` `compact`） | `SessionStart` 的 `compact` 来源（`PostCompact` 也会触发，两个都装会注入两遍；见 §17 2026-09-26 实测） | `SessionEnd` | `.codex/hooks.json`（项目级钩子要在 Codex 里信任后才运行） |
   | OpenCode | `event` 钩子订阅 `session.created`（id 在 `properties.info.id`）；输出经 `experimental.chat.system.transform` 进系统提示 | 同上订阅 `session.compacted`（`properties.sessionID`），刷新缓存 | `session.idle` 兜底（未装） | `.opencode/plugins/` |
-  | pi | `session_start` | **`session_compact`**（压缩后）；`session_before_compact` 是压缩前 | `session_shutdown` | `.pi/extensions/`，`pi install` |
+  | pi | `session_start`；输出经 `before_agent_start` 追加进系统提示 | **`session_compact`**（压缩后）刷新；`session_before_compact` 是压缩前 | `session_shutdown`（未装） | `.pi/extensions/`（项目要先被信任） |
   | Cursor | `sessionStart`（返回 `additional_context`） | **无 post 事件**，只有 `preCompact` | `sessionEnd` | `.cursor/hooks.json` |
   | Gemini CLI | `SessionStart`（返回 `hookSpecificOutput.additionalContext`） | **无 post 事件**，只有 `PreCompress` | `SessionEnd` | `settings.json` |
 
@@ -412,6 +412,18 @@ agent 录，而不是假设六家表现一致。
   注入，`opencode run`（免费模型 big-pickle）能引出 `## tp-…` 那一行，模型也说明它来自「追加到系统提示的
   todopi prime 输出」。**压缩后的注入没有实测**：免费模型不能用于压缩（「free tier can only be used from within
   OpenCode」），本机另外两个 provider 的凭据不可用。
+
+### 2026-09-26 实测（F16 `setup pi`）
+
+- **pi 0.84.0**（包内 docs/extensions.md 与类型定义为一手来源）：项目本地扩展放 `.pi/extensions/*.ts`（jiti 加载，TS 不用编译），
+  用户级 `~/.pi/agent/extensions/`；项目本地扩展要在项目被**信任**后才加载（`pi -a` 只对本次运行信任）。`before_agent_start`
+  可以返回新的 `systemPrompt`（本轮有效、不写进会话）；会话 id 由 `ctx.sessionManager.getSessionId()` 取；`pi.exec` 没有
+  stdin 选项，子进程 stdin 是 `ignore`。
+- 本机 pi 没有登录任何模型 provider，环境里也没有 API key。改用**测试专用的扩展注册一个 echo provider**（模型把收到的
+  系统提示里 `## tp-` 开头与含 MARKER 的行原样回答），在真实 pi 运行时里验证：会话开始时扩展调用
+  `todopi prime --hook --session <id>`、输出进了系统提示；交互式 `/compact`（测试仓库把 `compaction.keepRecentTokens` 调成
+  10）之后扩展用同一个会话 id 再调 prime，下一轮系统提示里出现了压缩前刚记下的新标记。模型是假的，但事件、扩展加载、
+  系统提示注入走的都是 pi 的真实代码路径；真模型读系统提示是 provider 的事，不在 todopi 的边界内。
 
 ### 顺带确认
 
