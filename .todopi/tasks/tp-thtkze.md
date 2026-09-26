@@ -1,6 +1,6 @@
 ---
 id: "tp-thtkze"
-title: "todopi setup codex / opencode 装好，两家的会话开始与压缩后都能收到注入"
+title: "todopi setup codex / opencode 装好：Codex 会话开始与压缩后、OpenCode 会话开始都能收到注入（OpenCode 压缩后见 tp-1ssqrw）"
 status: "in_progress"
 assignee: "seandong"
 blocked_by: ["tp-wnrlpw"]
@@ -11,12 +11,12 @@ external:
   harness:
     legacy_id: "F15"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T08:46:43Z"
+updated: "2026-09-26T08:49:05Z"
 ---
 
 ## Description
 
-todopi setup codex / opencode 装好，两家的会话开始与压缩后都能收到注入
+todopi setup codex / opencode 装好：Codex 会话开始与压缩后、OpenCode 会话开始都能收到注入。OpenCode 压缩后的注入拆到 tp-1ssqrw（2026-09-26，凭据所限未能实测，用户定）。
 
 迁移自 `feature_list.json` 的 **F15**。真实创建时间未知——
 frontmatter 的 `created`/`updated` 是迁移时刻。
@@ -61,3 +61,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - 2026-09-26T08:07:02Z seandong claimed
 - 2026-09-26T08:34:25Z seandong note: 验收标准按 2026-09-26 核实的外部事实改写三条：#8 原文「写 .codex/hooks.json 的 PostCompact」——Codex 0.157.1 实测压缩后 PostCompact 与 SessionStart(compact) 都触发、都注入，只装 SessionStart 即可（标记法验证：去掉 PostCompact 后压缩前新增的标记照样被注入）；#14/#15 原文「事件对象上给 session_id / sessionID」——OpenCode SDK 类型里 session.created 是 properties.info.id、session.compacted 是 properties.sessionID，没有 session_id。见 PRD §17。
 - 2026-09-26T08:46:43Z seandong note: 验收标准「OpenCode 压缩后收到注入（标题）」拆到 tp-1ssqrw（用户 2026-09-26 定）：免费模型不能用于压缩、其余 provider 凭据不可用，这一条没有运行时证据，不在本任务里勾。
+- 2026-09-26T08:49:05Z seandong edited fields=description,title
