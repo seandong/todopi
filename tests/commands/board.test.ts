@@ -14,7 +14,10 @@ import { runBoard, parsePort } from "../../src/commands/board.ts";
 import { runLs } from "../../src/commands/ls.ts";
 import { runShow } from "../../src/commands/show.ts";
 import { startBoardServer, PortInUseError, type BoardServer } from "../../src/board/server.ts";
-import { signature } from "../../src/board/watch.ts";
+import { signature, watchTree } from "../../src/board/watch.ts";
+import { EventEmitter } from "node:events";
+import type { FSWatcher } from "node:fs";
+import { renameSync, mkdirSync } from "node:fs";
 import { BOARD_PAGE } from "../../src/output/render/board-page.ts";
 import { EXIT, CliError } from "../../src/exit.ts";
 
@@ -288,4 +291,60 @@ test("新连上的客户端拿到最新数据；数据变了，已连着的客�
       } finally { b.close(); }
     } finally { a.close(); }
   });
+});
+
+test("监听运行中报错：改为轮询，之后的变化照样回调（F18 评审）", async () => {
+  const d = repo();
+  const dir = join(d, ".todopi");
+  const fake = new EventEmitter() as EventEmitter & { close: () => void };
+  let closed = false;
+  fake.close = () => { closed = true; };
+  let calls = 0;
+  const w = watchTree(dir, () => { calls += 1; }, { pollMs: 30, watchFn: () => fake as unknown as FSWatcher });
+  try {
+    assert.equal(w.mode, "watch");
+    fake.emit("error", new Error("inotify gone"));
+    assert.equal(w.mode, "poll");
+    assert.ok(closed, "旧的监听关掉");
+    await new Promise((r) => setTimeout(r, 200));
+    const before = calls;
+    writeFileSync(join(dir, "tasks", "after-error.md"), "x");
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(calls > before, "改为轮询后变化照样回调");
+  } finally { w.close(); }
+});
+
+test("被监听的目录改名后重建：改为轮询，重建后的变化照样推送（F18 评审）", async () => {
+  const d = repo();
+  const dir = join(d, ".todopi");
+  let version = 1;
+  await withServer({ dir: d, build: () => JSON.stringify({ version }) }, async (s) => {
+    const f = frames(s.port);
+    try {
+      await f.next(1);
+      renameSync(dir, join(d, ".todopi-old"));
+      mkdirSync(join(dir, "tasks"), { recursive: true });
+      await new Promise((r) => setTimeout(r, 1300));
+      version = 2;
+      writeFileSync(join(dir, "tasks", "new.md"), "x");
+      await f.next(2, 4000);
+      assert.equal(f.got.at(-1), 'data: {"version":2}');
+    } finally { f.close(); }
+  });
+});
+
+test("监听回调时目录已不在：改为轮询（Linux 上 inotify 不会跟到重建的目录，与平台无关地钉住）", () => {
+  const d = repo();
+  const dir = join(d, ".todopi");
+  let listener: () => void = () => undefined;
+  const fake = new EventEmitter() as EventEmitter & { close: () => void };
+  fake.close = () => undefined;
+  const w = watchTree(dir, () => undefined, { pollMs: 30, watchFn: (_d, _o, l) => { listener = l; return fake as unknown as FSWatcher; } });
+  try {
+    listener();
+    assert.equal(w.mode, "watch", "目录还在：继续监听");
+    renameSync(dir, join(d, ".todopi-old"));
+    listener();
+    assert.equal(w.mode, "poll");
+  } finally { w.close(); }
 });

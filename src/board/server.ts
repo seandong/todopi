@@ -8,7 +8,7 @@
 // 浏览器就会把它当成同源，读走看板上的任务内容。浏览器发来的 Host 是那个域名，据此拒绝。
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { watchTree } from "./watch.ts";
+import { watchTree, type WatchFn } from "./watch.ts";
 
 export type BoardServerOptions = {
   port: number;
@@ -22,9 +22,11 @@ export type BoardServerOptions = {
   poll?: boolean;
   /** 轮询间隔，毫秒（用例调小） */
   pollMs?: number;
+  /** 用例注入假的 fs.watch */
+  watchFn?: WatchFn;
 };
 
-export type BoardServer = { port: number; mode: "watch" | "poll"; close: () => Promise<void> };
+export type BoardServer = { port: number; readonly mode: "watch" | "poll"; close: () => Promise<void> };
 
 /** 端口被占用：调用方据此给出提示，不换端口。 */
 export class PortInUseError extends Error {
@@ -93,11 +95,11 @@ export function startBoardServer(opts: BoardServerOptions): Promise<BoardServer>
       reject(err.code === "EADDRINUSE" ? new PortInUseError(opts.port) : err);
     });
     server.listen(opts.port, "127.0.0.1", () => {
-      const watcher = watchTree(opts.watchDir, refresh, { poll: opts.poll, pollMs: opts.pollMs });
+      const watcher = watchTree(opts.watchDir, refresh, { poll: opts.poll, pollMs: opts.pollMs, watchFn: opts.watchFn });
       const port = (server.address() as { port: number }).port;
       resolve({
         port,
-        mode: watcher.mode,
+        get mode() { return watcher.mode; },
         close: () => new Promise((done) => {
           watcher.close();
           for (const c of clients) c.end();

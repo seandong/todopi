@@ -30,6 +30,10 @@ test("ARCH-002：board 之外的监听、setInterval 被拦；注释里提到不
   assert.equal(run("ARCH-002", { "src/board/s.ts": "const server = createServer();\nserver.listen(port, \"127.0.0.1\", cb);\nsetInterval(f, 1);\n" }), "");
   assert.match(run("ARCH-002", { "src/board/s.ts": "server.listen(port, cb);\n" }), /s\.ts:1:/);
   assert.match(run("ARCH-002", { "src/board/s.ts": "server.listen(port, \"0.0.0.0\", cb);\n" }), /s\.ts:1:/);
+  // 字面量必须是 listen 的第二个参数，同一行别处出现不算（F18 评审）
+  assert.match(run("ARCH-002", { "src/board/s.ts": "server.listen(port); // \"127.0.0.1\"\n" }), /s\.ts:1:/);
+  assert.match(run("ARCH-002", { "src/board/s.ts": "const h = \"127.0.0.1\"; server.listen(port);\n" }), /s\.ts:1:/);
+  assert.match(run("ARCH-002", { "src/board/s.ts": "server.listen(port, host, \"127.0.0.1\");\n" }), /s\.ts:1:/);
 });
 
 test("ARCH-014：代码行里的中文被拦；整行注释不算；行尾 // 注释不算", () => {
