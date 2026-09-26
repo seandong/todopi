@@ -1,7 +1,9 @@
 ---
 id: "tp-7o45xj"
 title: "todopi prime 推送当前任务、用一行指针指向其余，并在预算内截断"
-status: "open"
+status: "closed"
+resolution: "done"
+assignee: "seandong"
 blocked_by: ["tp-djqkva"]
 rank: "ia"
 verify: "make check && make test && bash tools/e2e/f11-prime.sh"
@@ -10,7 +12,7 @@ external:
   harness:
     legacy_id: "F11"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-23T09:40:27Z"
+updated: "2026-09-26T03:36:29Z"
 ---
 
 ## Description
@@ -43,3 +45,5 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 ## Log
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F11
+- 2026-09-26T01:45:50Z seandong claimed
+- 2026-09-26T03:36:29Z seandong done verify=pass commit=1879ad0 dirty=false

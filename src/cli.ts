@@ -160,6 +160,30 @@ program
   });
 
 program
+  .command("prime")
+  .description("print what you are working on, and one line pointing at everything else")
+  .option("--budget <tokens>", "approximate token budget for the output (default 600)")
+  .option("--full", "print the full picture: your tasks, others', ready, counts, recently closed")
+  .option("--session <id>", "the agent session this prime belongs to (for handoff); defaults to the actor")
+  .action(async (cmdOpts: { budget?: string; full?: boolean; session?: string }) => {
+    const { runPrime, runPrimeFull, parseBudget } = await import("./commands/prime.ts");
+    const { renderPrime, renderPrimeFull } = await import("./output/render/prime.ts");
+    const opts = program.opts();
+    const base = {
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      session: cmdOpts.session,
+      actor: opts["as"] as string | undefined,
+    };
+    const json = opts["json"] === true;
+    const { text, warnings } = cmdOpts.full === true
+      ? ((r) => ({ text: json ? JSON.stringify(r.report, null, 2) + "\n" : renderPrimeFull(r.report), warnings: r.warnings }))(runPrimeFull(base))
+      : ((r) => ({ text: json ? JSON.stringify(r.report, null, 2) + "\n" : renderPrime(r.report), warnings: r.warnings }))(
+        runPrime({ ...base, budget: cmdOpts.budget === undefined ? undefined : parseBudget(cmdOpts.budget) }));
+    process.stdout.write(text);
+    for (const w of warnings) process.stderr.write(`${w}\n`);
+  });
+
+program
   .command("note")
   .description("append a line to a task's log; the text may span several lines")
   .argument("<id>", "the task to note on")

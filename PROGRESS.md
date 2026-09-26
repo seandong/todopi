@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `21565db` —— F10 edit/move/dep 经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `1879ad0` —— F11 prime 经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,12 +19,12 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 21 个任务，10 个 `closed/done`（F01–F10）、11 个 `open`。
+- 账本: `.todopi/` 21 个任务，11 个 `closed/done`（F01–F11）、10 个 `open`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F10 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+- 代码状态：**F01–F11 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
   `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check` /
-  `edit` / `move` / `dep` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
+  `edit` / `move` / `dep` / `prime` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
   身份解析（FR-C4 前三级）在 `domain/actor.ts` + `commands/actor.ts`，`ls` 与
@@ -142,7 +142,12 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     （用户决定：发布前的修订记在 spec §9.1、不升版），用旧实现对照差分核实迁移断言。ARCH-024 从手写
     bash 词法退回文字判据（DECISIONS，F10 第七轮）。`todopi done`：verify=pass dirty=false。
     教训：**后置条件加在一个入口上，要问其余入口；迁移说明也是断言，要拿旧实现对照跑过再写。**
-30. **待决：要不要把 11 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
+32. ~~F11 `prime`~~ 已完成（2026-09-26）。token 估算按字符类别加权（用户定）；会话标识用 `--session`，
+    没给按 actor（D032）。四轮评审，阻塞项都在「--json 与文本是同一份内容」与「输出里没有控制字符」
+    这两条性质上：先补指针，再把转义从渲染挪到投影，最后让渲染不生成任何内容。
+    教训：**一条「A 与 B 内容相同」的性质，要让 B 只从 A 生成，而不是两边各自拼。**
+    `todopi done`：verify=pass dirty=false。下一步是 F12 handoff（读 prime 记下的会话时间）。
+30. **待决：要不要把 10 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
     谁来写、写多细、改完之后验收门禁开始对它们生效（`done` 会被没勾完的挡下）。
     不在 F09 里做。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
