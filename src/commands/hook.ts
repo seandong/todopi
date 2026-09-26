@@ -7,7 +7,7 @@
 //    退回按 actor 记录——钩子里绝不因为载荷长得不对而失败。
 // 2. 用户级钩子会在**每个**项目里触发，包括没有 `.todopi/` 的；那里什么都不输出、退出 0。
 
-import { discoverLedger } from "../format/discover.ts";
+import { discoverLedger, findLedger } from "../format/discover.ts";
 import { markCompacted, takeCompacted } from "../format/session.ts";
 import { currentActor } from "./actor.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -30,8 +30,9 @@ export function sessionFromHookPayload(payload: string): string | undefined {
 }
 
 /**
- * 钩子载荷里的项目目录：Cursor 的公共字段 `workspace_roots`（官方文档）取第一项。取不到返回 undefined，绝不抛。
- * 只认这一个字段：别家的钩子在项目目录里运行，工作目录就对。
+ * 钩子载荷里的项目目录：Cursor 的公共字段 `workspace_roots`（官方文档）。多根工作区里账本不一定在第一个根，
+ * 所以取**第一个找得到账本的根**（F17 评审）；都找不到就返回 undefined，调用方照常按工作目录找、找不到就静默。
+ * 绝不抛。只认这一个字段：别家的钩子在项目目录里运行，工作目录就对。
  */
 export function directoryFromHookPayload(payload: string): string | undefined {
   let parsed: unknown;
@@ -42,7 +43,8 @@ export function directoryFromHookPayload(payload: string): string | undefined {
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
   const roots = (parsed as Record<string, unknown>)["workspace_roots"];
-  return Array.isArray(roots) && typeof roots[0] === "string" && roots[0] !== "" ? roots[0] : undefined;
+  if (!Array.isArray(roots)) return undefined;
+  return roots.find((r): r is string => typeof r === "string" && r !== "" && findLedger(r) !== null);
 }
 
 /**

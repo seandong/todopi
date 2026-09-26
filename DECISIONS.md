@@ -2091,4 +2091,7 @@ Node 用 spec reporter，整层被判 blocked。
   别家的钩子本来就在项目里运行。
 - **验证方式**：Gemini 用本地假 API 服务器（`GOOGLE_GEMINI_BASE_URL`）记录请求体，在真实 Gemini 运行时里看注入落在哪——
   与 D037 的 echo provider 同一个思路，不联网、不需要凭据。Cursor 需要登录，实机验证拆出。
+- 评审（F17）：`context: null` 当成缺失会覆盖用户的显式值——改为拒绝；多根工作区的账本不一定在第一个根——取第一个
+  找得到账本的根。评审还要求把 Gemini 运行时验证做成自动门禁：没做，`/compress` 要交互式终端，与 F14–F16 一样手工实测、
+  记在 PRD §17；假服务器进了 `tools/probes/`，让这次实测可以照做。
 

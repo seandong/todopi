@@ -57,7 +57,7 @@ test("gemini：已有的 context.fileName 是字符串或数组就补上 AGENTS.
     assert.deepEqual(json(p).context.fileName, already, "已含 AGENTS.md：不改写法");
   }
 
-  for (const bad of [{ context: "x" }, { context: { fileName: 3 } }, { context: { fileName: ["a", 1] } }]) {
+  for (const bad of [{ context: "x" }, { context: null }, { context: { fileName: 3 } }, { context: { fileName: ["a", 1] } }]) {
     writeFileSync(p, JSON.stringify(bad));
     const before = readFileSync(p, "utf8");
     assert.throws(() => ensureGeminiSettings(p), code(EXIT.usage));
@@ -205,10 +205,14 @@ test("Cursor 的钩子载荷用 conversation_id；session_id 优先", () => {
   assert.equal(sessionFromHookPayload(JSON.stringify({ session_id: "s", conversation_id: "c" })), "s");
 });
 
-test("Cursor 的 workspace_roots：取第一项作项目目录（用户级钩子在 ~/.cursor/ 里运行）；取不到返回 undefined", () => {
-  assert.equal(directoryFromHookPayload(JSON.stringify({ workspace_roots: ["/p/a", "/p/b"] })), "/p/a");
-  for (const bad of ["", "{", "[]", "null", JSON.stringify({ workspace_roots: [] }), JSON.stringify({ workspace_roots: [""] }),
-    JSON.stringify({ workspace_roots: "/p" }), JSON.stringify({ workspace_roots: [3] }), JSON.stringify({ cwd: "/p" })]) {
+test("Cursor 的 workspace_roots：取第一个找得到账本的根（多根工作区，F17 评审）；都找不到返回 undefined", () => {
+  const a = repo(), b = repo(), none = tmp();
+  assert.equal(directoryFromHookPayload(JSON.stringify({ workspace_roots: [a, b] })), a);
+  assert.equal(directoryFromHookPayload(JSON.stringify({ workspace_roots: [none, b] })), b, "第一个根没有账本");
+  mkdirSync(join(a, "sub"));
+  assert.equal(directoryFromHookPayload(JSON.stringify({ workspace_roots: [join(a, "sub")] })), join(a, "sub"), "根在项目里的子目录也算");
+  for (const bad of ["", "{", "[]", "null", JSON.stringify({ workspace_roots: [] }), JSON.stringify({ workspace_roots: ["", none] }),
+    JSON.stringify({ workspace_roots: a }), JSON.stringify({ workspace_roots: [3] }), JSON.stringify({ cwd: a })]) {
     assert.equal(directoryFromHookPayload(bad), undefined, bad);
   }
 });

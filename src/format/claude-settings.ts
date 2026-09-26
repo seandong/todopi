@@ -148,7 +148,8 @@ export function ensureHookConfig(path: string, list: HookList,
  */
 function includeAgentsMd(path: string): (settings: Record<string, unknown>) => boolean {
   return (settings) => {
-    const context = settings["context"] ?? {};
+    // 缺失与显式 null 不是一回事（与 hooks 同理，F17 评审）。
+    const context = "context" in settings ? settings["context"] : {};
     if (!isObject(context)) refuse(path, "has a \"context\" entry that is not an object");
     const names = context["fileName"];
     let next: string[];

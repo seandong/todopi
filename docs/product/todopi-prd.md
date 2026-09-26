@@ -447,6 +447,7 @@ agent 录，而不是假设六家表现一致。
   系统指令里含 AGENTS.md 的协议段（含「You notice your context was compacted → `todopi prime`」）；`/compress` 真压缩后
   （50000 → 299 tokens）那条注入被摘要替掉，下一轮请求在用户消息之后出现 BeforeAgent 追加的 prime；再下一轮不再注入，
   标记已消费。另见：token 数太小时 `/compress` 报「Compression was not beneficial」但 PreCompress 照样触发。
+  假服务器与复现步骤在 `tools/probes/gemini-fake-api.mjs`（不是门禁：`/compress` 要交互式终端）。
 - **Cursor 未实测**：`cursor-agent status` 显示已登录，但无头 `-p` 报「Authentication required」，交互式要求浏览器登录。
   CLI 与 IDE 的手工验证（FR-A2b）拆到单独的任务。
 
