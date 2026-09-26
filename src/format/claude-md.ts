@@ -3,7 +3,8 @@
 // 一行 `@AGENTS.md` 导入——已有的 CLAUDE.md 只在缺这行时追加，其余**字节**一个都不动（与 upsertProtocol 同一条
 // 规矩：目标文件是用户的）。
 
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
+import { lstatOrNull } from "./claude-settings.ts";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { commonmarkCodeLines } from "../markdown/sections.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -24,11 +25,13 @@ export function hasAgentsImport(text: string): boolean {
 }
 
 export function ensureAgentsImport(path: string): ImportResult {
-  if (!existsSync(path)) {
+  // lstat 判断存在：悬空符号链接不能当空位（F15 评审在另外两个写入口上发现，这里同理）。
+  const link = lstatOrNull(path);
+  if (link === null) {
     writeFileAtomic(path, "@AGENTS.md\n");
     return "created";
   }
-  if (lstatSync(path).isSymbolicLink()) {
+  if (link.isSymbolicLink()) {
     throw new CliError(EXIT.usage, `${path} is a symbolic link (replacing it would break the link); left untouched. Add a line \`@AGENTS.md\` to it yourself.`);
   }
   const bytes = readFileSync(path);

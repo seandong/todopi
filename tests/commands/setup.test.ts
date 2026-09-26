@@ -295,3 +295,42 @@ test("opencode 插件：在 session.created / session.compacted 时跑 prime 并
   assert.deepEqual(await system("s2"), ["base", "## tp-aaaaaa: call 3"], "没见过 created 的会话：第一次用到时补跑");
   assert.deepEqual(await system(undefined), ["base"]);
 });
+
+test("悬空的符号链接也算「有东西」：三个写入口都拒绝，链接原样（F15 评审）", async () => {
+  const { ensureOpencodePlugin } = await import("../../src/format/opencode-plugin.ts");
+  for (const [name, write] of [
+    ["settings.json", (p: string) => ensureClaudeHooks(p)],
+    ["todopi.js", (p: string) => ensureOpencodePlugin(p)],
+    ["CLAUDE.md", (p: string) => ensureAgentsImport(p)],
+  ] as const) {
+    const d = tmp();
+    const p = join(d, name);
+    symlinkSync(join(d, "missing-target"), p);
+    assert.throws(() => write(p), code(EXIT.usage), name);
+    assert.equal(lstatSync(p).isSymbolicLink(), true, name);
+    assert.equal(existsSync(join(d, "missing-target")), false, name);
+  }
+});
+
+test("opencode 插件：prime 失败（todopi 还不在 PATH 上）时不缓存，下一轮重试（F15 评审）", async () => {
+  const { OPENCODE_PLUGIN } = await import("../../src/format/opencode-plugin.ts");
+  const dir = tmp();
+  const file = join(dir, "plugin.mjs");
+  writeFileSync(file, OPENCODE_PLUGIN);
+  const { TodopiPlugin } = await import(file);
+  let installed = false;
+  const $ = () => {
+    const out = installed ? { exitCode: 0, stdout: Buffer.from("## tp-aaaaaa: ok\n") } : { exitCode: 127, stdout: Buffer.from("") };
+    const chain = { cwd: () => chain, quiet: () => chain, nothrow: () => Promise.resolve(out) };
+    return chain;
+  };
+  const hooks = await TodopiPlugin({ $, directory: dir });
+  await hooks.event({ event: { type: "session.created", properties: { info: { id: "s1" } } } });
+  const first = { system: ["base"] };
+  await hooks["experimental.chat.system.transform"]({ sessionID: "s1" }, first);
+  assert.deepEqual(first.system, ["base"]);
+  installed = true;
+  const second = { system: ["base"] };
+  await hooks["experimental.chat.system.transform"]({ sessionID: "s1" }, second);
+  assert.deepEqual(second.system, ["base", "## tp-aaaaaa: ok"], "装好之后下一轮就注入上了");
+});

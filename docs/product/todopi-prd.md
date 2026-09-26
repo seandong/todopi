@@ -146,7 +146,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
   Log 只保留最新一条。末尾那行指针**永不裁剪**——它是 22 token 的常量，而且裁掉
   它就等于让 agent 既拿不到内容也不知道去哪取。持有多个任务时按 `updated` 由新到旧，
   装不下的任务退化为一行「另有 N 个你持有的任务」。
-- **FR-P1b** `prime` 把调用时间按**会话**记录在 FR-C5 的运行时目录，供 FR-H1 使用。会话标识的可得性于 2026-09-16 核实：Claude Code、Codex、Gemini CLI 在钩子 stdin 里给 `session_id`；Cursor 的钩子载荷同样带会话标识；OpenCode 在事件对象上给 `session_id` 或 `sessionID`（两种拼法都要处理）；pi 不把它传进事件，扩展需调 `ctx.sessionManager.getSessionId()` 自取。六家都拿得到，因此按 actor 记录只是**防御性**回退，不是常态。
+- **FR-P1b** `prime` 把调用时间按**会话**记录在 FR-C5 的运行时目录，供 FR-H1 使用。会话标识的可得性于 2026-09-16 核实：Claude Code、Codex、Gemini CLI 在钩子 stdin 里给 `session_id`；Cursor 的钩子载荷同样带会话标识；OpenCode 的事件里 id 在 `properties.info.id`（session.created）或 `properties.sessionID`（session.compacted），由 todopi 生成的插件规范化为 `{"sessionID": …}` 喂给 `--hook`（2026-09-26 按 SDK 类型更正）；pi 不把它传进事件，扩展需调 `ctx.sessionManager.getSessionId()` 自取。六家都拿得到，因此按 actor 记录只是**防御性**回退，不是常态。
 - **FR-P2** `prime --json` 以结构化数据输出相同内容。
 - **FR-P3** `prime --full` 输出 1.1 版那种全量上下文：当前任务、别人（按 FR-C6 不算你的）
   持有的任务、ready 前 5 条、计数、最近关闭 3 条。它是**给 agent 主动调用的**——
