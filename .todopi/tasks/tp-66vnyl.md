@@ -1,7 +1,8 @@
 ---
 id: "tp-66vnyl"
 title: "todopi import beads 迁移 Beads Classic 导出"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "seandong"
 blocked_by: ["tp-medxth"]
 rank: "ij"
@@ -11,7 +12,7 @@ external:
   harness:
     legacy_id: "F20"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T14:21:03Z"
+updated: "2026-09-26T15:00:38Z"
 ---
 
 ## Description
@@ -23,17 +24,17 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-- [ ] `todopi import beads` 迁移 Beads Classic 导出（标题）
-- [ ] 读 `issues.jsonl`（默认 `.beads/issues.jsonl`）
-- [ ] priority 映射为 rank 顺序
-- [ ] type 映射为 label
-- [ ] blocks 映射为 blocked_by
-- [ ] parent-child 映射为 parent
-- [ ] closed 映射为 closed
-- [ ] closed 映射时带上 resolution
-- [ ] Beads 的理由指明时 resolution 用 wontfix
-- [ ] 原 id 存入 `external.beads.id`
-- [ ] 导入结果通过 doctor
+- [x] `todopi import beads` 迁移 Beads Classic 导出（标题）
+- [x] 读 `issues.jsonl`（默认 `.beads/issues.jsonl`）
+- [x] priority 映射为 rank 顺序
+- [x] type 映射为 label
+- [x] blocks 映射为 blocked_by
+- [x] parent-child 映射为 parent
+- [x] closed 映射为 closed
+- [x] closed 映射时带上 resolution
+- [x] Beads 的理由指明时 resolution 用 wontfix
+- [x] 原 id 存入 `external.beads.id`
+- [x] 导入结果通过 doctor
 
 范围之外：Dolt 时代的导出。
 
@@ -55,3 +56,16 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F20
 - 2026-09-26T06:21:54Z seandong note: 验收判据由散文拆成勾选项（用户 2026-09-26 定）：逐条对应原文，不增不减；任务标题本身是验收结果的，另列一条并标「标题」。原文见 git 历史。
 - 2026-09-26T14:21:03Z seandong claimed
+- 2026-09-26T14:59:44Z seandong note: 验收依据：tests/commands/import-beads.test.ts（21 个：resolution 开头判定与词边界、label 规范化、时间戳拒绝不存在的日期、跳过 tombstone / ephemeral / 已导入、parent / blocks / from 的建立顺序与去环、priority → rank、描述合并与缩进代码块、导入后每个字段、幂等与引用旧任务、预检、长依赖链；变异全部杀死）+ tools/e2e/f20-import-beads.sh（默认路径、给路径、doctor、幂等、并发导入只建一份、错误）。真实数据：Beads v0.47.1 自己的 .beads/issues.jsonl（2404 行）→ 1738 条、doctor 通过、68 条 from= 全保住、重复导入 0 新建（D041）。已关闭的不标 forced，出处在 imported 事件里（我按规格定，用户未表态，可推翻）。评审由 Claude 子代理做（Codex 额度见底，用户 2026-09-26 定）：四轮，from 被静默丢、半途失败、环的措辞、from 与 blocks 冲突时误丢 blocked_by、连带丢 from、长链爆栈 → 修 → Go。
+- 2026-09-26T14:59:44Z seandong check ac=1: `todopi import beads` 迁移 Beads Classic 导出（标题）
+- 2026-09-26T14:59:44Z seandong check ac=2: 读 `issues.jsonl`（默认 `.beads/issues.jsonl`）
+- 2026-09-26T14:59:44Z seandong check ac=3: priority 映射为 rank 顺序
+- 2026-09-26T14:59:44Z seandong check ac=4: type 映射为 label
+- 2026-09-26T14:59:45Z seandong check ac=5: blocks 映射为 blocked_by
+- 2026-09-26T14:59:45Z seandong check ac=6: parent-child 映射为 parent
+- 2026-09-26T14:59:45Z seandong check ac=7: closed 映射为 closed
+- 2026-09-26T14:59:45Z seandong check ac=8: closed 映射时带上 resolution
+- 2026-09-26T14:59:45Z seandong check ac=9: Beads 的理由指明时 resolution 用 wontfix
+- 2026-09-26T14:59:45Z seandong check ac=10: 原 id 存入 `external.beads.id`
+- 2026-09-26T14:59:45Z seandong check ac=11: 导入结果通过 doctor
+- 2026-09-26T15:00:38Z seandong done verify=pass commit=9cb14ac dirty=true
