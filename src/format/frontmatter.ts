@@ -1,5 +1,5 @@
 // src/format/frontmatter.ts
-import { parse as parseYaml } from "yaml";
+import { Lexer, isMap, isNode, isScalar, parse as parseYaml, parseDocument } from "yaml";
 import { scanCanonical } from "./scan.ts";
 
 export type ParseResult =
@@ -28,4 +28,30 @@ export function parseFrontmatter(head: string): ParseResult {
     if (code === "DUPLICATE_KEY") return { ok: false, error: "frontmatter has a duplicate key" };
     return { ok: false, error: `frontmatter could not be parsed: ${(err as Error).message.split("\n")[0]}` };
   }
+}
+
+/**
+ * frontmatter 里某个顶层键那一整条的源码原文：从键所在行的行首，到值结束所在行的行尾（行尾注释在内）。
+ * 找不到或不是映射返回 null。
+ *
+ * **问 YAML 解析器，不认字符形状**：`"updated": …`、`updated : …`、`? updated` 都是同一个键，正则
+ * `^updated:` 只认得第一种写法之外的一种（F13 评审三轮）。`doctor --fix` 用它原样保留 `updated`。
+ */
+export function entrySource(head: string, key: string): string | null {
+  const doc = parseDocument(head);
+  const map = doc.contents;
+  if (!isMap(map)) return null;
+  const pair = map.items.find((p) => isScalar(p.key) && p.key.value === key);
+  if (pair === undefined || !isScalar(pair.key) || pair.key.range == null || pair.value == null
+    || !isNode(pair.value) || pair.value.range == null) return null;
+  const start = head.lastIndexOf("\n", pair.key.range[0] - 1) + 1;
+  let end = pair.value.range[1];
+  if (end > 0 && head[end - 1] === "\n") end -= 1;
+  const eol = head.indexOf("\n", end);
+  return head.slice(start, eol < 0 ? head.length : eol);
+}
+
+/** frontmatter 源码里的 YAML 注释（按词法器的 token，不按 `#` 字符：引号里的 `#` 不是注释）。 */
+export function commentsIn(head: string): string[] {
+  return [...new Lexer().lex(head)].filter((tok) => tok.startsWith("#"));
 }

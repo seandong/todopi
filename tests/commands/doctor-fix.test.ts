@@ -236,3 +236,31 @@ test("排在前面的缺 rank 任务写不了（非法 UTF-8）：整体不回�
   assert.equal(r.after.ok, false);
   assert.ok(r.after.findings.some((f) => f.path === `tasks/${early}.md` && /not valid UTF-8/.test(f.message)));
 });
+
+test("updated 的原文在各种合法 YAML 写法下都保留（问解析器，不认字符形状）（评审三轮）", () => {
+  for (const entry of ['"updated": 2026-09-14T09:00:00Z', "updated : 2026-09-14T09:00:00Z", "updated: 2026-09-14T09:00:00Z # hand-edited",
+    "? updated\n: 2026-09-14T09:00:00Z", "'updated': '2026-09-14T09:00:00Z'"]) {
+    const d = repo();
+    const src = readFileSync(join(ROOT, "spec/fixtures/valid/unquoted-hand-written.md"), "utf8")
+      .replace("updated: 2026-09-14T09:00:00Z", entry);
+    writeFileSync(taskPath(d, "tp-a1b2c3"), src);
+    const r = runDoctorFix({ directory: d });
+    const text = read(d, "tp-a1b2c3");
+    assert.ok(text.includes(`\n${entry}\n`), `${JSON.stringify(entry)} 的原文没保留：\n${text}`);
+    assert.deepEqual(r.skipped, [], JSON.stringify(entry));
+    assert.equal(fm(d, "tp-a1b2c3")["updated"], "2026-09-14T09:00:00Z");
+  }
+});
+
+test("frontmatter 里有手写的 YAML 注释：不重写（规范形态会丢掉它们），报告原因；引号里的 # 不算注释", () => {
+  const d = repo();
+  const src = readFileSync(join(ROOT, "spec/fixtures/valid/unquoted-hand-written.md"), "utf8")
+    .replace("status: open", "status: open # waiting on design");
+  writeFileSync(taskPath(d, "tp-a1b2c3"), src);
+  const r = runDoctorFix({ directory: d });
+  assert.equal(read(d, "tp-a1b2c3"), src);
+  assert.ok(r.skipped.some((s) => /YAML comments/.test(s.reason)));
+  const d2 = repo();
+  writeFileSync(taskPath(d2, "tp-a1b2c3"), src.replace("status: open # waiting on design", "status: open").replace("title: A hand-written task", 'title: "fix #42"'));
+  assert.deepEqual(runDoctorFix({ directory: d2 }).skipped.filter((s) => /YAML comments/.test(s.reason)), []);
+});

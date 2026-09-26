@@ -10,7 +10,7 @@ import { emitTask, emitFrontmatter, nextRank, type NewTask } from "./emit.ts";
 import { newIdBody, makeId } from "./id.ts";
 import { leasePaths } from "./lease.ts";
 import { splitEnvelope } from "./envelope.ts";
-import { parseFrontmatter } from "./frontmatter.ts";
+import { commentsIn, entrySource, parseFrontmatter } from "./frontmatter.ts";
 import type { Ledger } from "./discover.ts";
 import type { TaskFile } from "../domain/types.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -341,9 +341,19 @@ export function planNormalized(
   if (t.invalidUtf8 === true) return { error: "the file is not valid UTF-8; rewriting it would alter bytes" };
   const env = splitEnvelope(t.raw);
   if (env === null) return { error: "the file has no valid envelope" };
+  // 规范形态没有注释：frontmatter 里手写的 YAML 注释（`updated` 那一条的行尾注释除外，它原样保留）会在
+  // 重写中丢掉。不丢人写的东西——不重写，报告。
+  const kept = "updated" in t.frontmatter ? entrySource(env.head, "updated") ?? "" : "";
+  if (commentsIn(env.head).length > commentsIn(kept).length) {
+    return { error: "the frontmatter has YAML comments, which the normalized form would drop" };
+  }
   let head = emitFrontmatter(want);
-  const updatedLine = /^updated:[^\n]*$/m.exec(env.head);
-  if (updatedLine !== null && "updated" in want) head = head.replace(/^updated:[^\n]*$/m, () => updatedLine[0]);
+  if ("updated" in t.frontmatter) {
+    // 原文由 YAML 解析器定位；发射出来的那一行是我们自己的规范形态，认它用正则是可靠的。
+    const original = entrySource(env.head, "updated");
+    if (original === null) return { error: "could not locate the original `updated` entry to keep it verbatim" };
+    head = head.replace(/^updated: [^\n]*$/m, () => original);
+  }
   const text = `---\n${head}---\n${body}`;
   const back = splitEnvelope(text);
   const parsed = back === null ? null : parseFrontmatter(back.head);
