@@ -17,12 +17,13 @@ export function renderHandoff(r: HandoffReport): string {
     section("Created since last prime:", r.created === null ? null : r.created.map((t) => `- ${t.id} ${t.title}`), noBase),
     section("Verify new or changed since last prime:",
       r.verifyChanged === null ? null
-        : r.verifyChanged.map((t) => `- ${t.id} ${t.title}: ${t.verify === null ? "(removed)" : `\`${t.verify}\``}`), noBase),
+        : r.verifyChanged.map((t) => `- ${t.id} ${t.title}: ${t.state}${t.verify === null ? "" : ` \`${t.verify}\``}`), noBase),
   ];
   if (r.check) blocks.push("Check only: nothing was written.");
   else {
     blocks.push(section("Logged handoff:", r.logged.map((t) => `- ${t.id} ${t.title} (${t.summary})`), ""));
-    if (r.failed.length > 0) blocks.push(section("Could not log handoff:", r.failed.map((t) => `- ${t.id} ${t.title}: ${t.message}`), ""));
+    if (r.skipped.length > 0) blocks.push(section("Skipped:", r.skipped.map((t) => `- ${t.id} ${t.title}: ${t.reason}`), ""));
+    if (r.failed.length > 0) blocks.push(section("Could not log handoff:", r.failed.map((t) => `- ${t.id} ${t.title}: ${t.message} (exit ${t.code})`), ""));
   }
   return `${blocks.join("\n\n")}\n`;
 }

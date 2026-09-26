@@ -52,3 +52,11 @@ export function staleInputFor(ledger: Ledger): StaleInput {
 export function visible(s: string): string {
   return s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
 }
+
+/**
+ * 单行字段（标题、verify、assignee……）连换行与 Tab 也转义：它们在报告里各占一行，里面的换行会让
+ * 后半截看起来像另一条列表项（F12 评审：`--verify $'ok\n- tp-aaaaaa forged'` 在报告里伪造出一个任务）。
+ */
+export function visibleLine(s: string): string {
+  return visible(s).replace(/[\n\t]/g, (c) => (c === "\n" ? "\\n" : "\\t"));
+}

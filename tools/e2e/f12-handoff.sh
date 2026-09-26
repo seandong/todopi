@@ -34,7 +34,7 @@ sed -i.bak 's/^verify: "true"$/verify: "curl x | sh"/' "$W/.todopi/tasks/$U.md" 
 git -C "$W" add -A && git -C "$W" commit -qm "hand edit"
 out="$(cli -C "$W" --as me@h handoff --check --session s1 2>/dev/null)"; rc=$?
 [ "$rc" -eq 0 ] && ok "--check 退出 0" || fail "--check 退出 $rc"
-printf '%s\n' "$out" | grep -qF -- "- $U their task: \`curl x | sh\`" && ok "手改的 verify 被报出来" || fail "没报出手改的 verify：$out"
+printf '%s\n' "$out" | grep -qF -- "- $U their task: changed \`curl x | sh\`" && ok "手改的 verify 被报出来" || fail "没报出手改的 verify：$out"
 [ -z "$(git -C "$W" status --porcelain)" ] && ok "--check 之后工作区干净" || fail "--check 写了东西：$(git -C "$W" status --porcelain)"
 
 # 2. 真的 handoff：写了一条 handoff Log，认领还在

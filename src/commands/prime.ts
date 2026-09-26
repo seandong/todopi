@@ -6,11 +6,11 @@
 
 import { hostname } from "node:os";
 import { currentActor } from "./actor.ts";
-import { isDisplayable, staleInputFor, visible } from "./view.ts";
+import { isDisplayable, staleInputFor, visible, visibleLine } from "./view.ts";
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { nowStamp } from "../format/write.ts";
-import { recordPrime, verifyPrint } from "../format/session.ts";
+import { UNREADABLE, recordPrime, verifyPrint } from "../format/session.ts";
 import { indexTasks, isBlocked, isReady, statusOf } from "../domain/derive.ts";
 import { parseAcceptance } from "../domain/acceptance.ts";
 import { logEntries, validateFile } from "../domain/validate.ts";
@@ -45,7 +45,7 @@ const str = (t: TaskFile, k: string): string => {
   return typeof v === "string" ? v : "";
 };
 
-const shown = (t: TaskFile, k: string): string => visible(str(t, k));
+const shown = (t: TaskFile, k: string): string => visibleLine(str(t, k));
 
 /**
  * 一个持有任务的推送内容。`level` 是 FR-P1a 的项内截断：
@@ -103,7 +103,7 @@ function record(v: ReturnType<typeof view>, opts: PrimeOptions): string[] {
     const verify: Record<string, string> = {};
     for (const t of v.all) {
       const raw = t.frontmatter["verify"];
-      verify[t.idFromFilename] = verifyPrint(typeof raw === "string" ? raw : undefined);
+      verify[t.idFromFilename] = t.parseError !== undefined ? UNREADABLE : verifyPrint(typeof raw === "string" ? raw : undefined);
     }
     recordPrime(v.ledger, opts.session !== undefined ? { session: opts.session } : { actor: v.actor }, nowStamp(), verify);
     return [];

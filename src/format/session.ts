@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { leaseDirFor } from "./lease.ts";
 import type { Ledger } from "./discover.ts";
+import { TIMESTAMP_RE } from "../domain/types.ts";
 
 export type PrimeKey = { session: string } | { actor: string };
 
@@ -23,7 +24,11 @@ function pathFor(ledger: Ledger, key: PrimeKey): string {
   return join(leaseDirFor(ledger), "sessions", `${name}.json`);
 }
 
-/** verify 的指纹：没有 verify 记成 "-"，有就是它的哈希前 16 位（快照只用来比「变没变」）。 */
+/**
+ * verify 的指纹：没有 verify 记成 "-"，任务文件读不出来记成 "?"（不知道就不假装知道），有就是它的
+ * 哈希前 16 位（快照只用来比「变没变」）。
+ */
+export const UNREADABLE = "?";
 export function verifyPrint(verify: string | undefined): string {
   return verify === undefined ? "-" : createHash("sha256").update(verify).digest("hex").slice(0, 16);
 }
@@ -53,11 +58,18 @@ export function readPrimeRecord(ledger: Ledger, key: PrimeKey): PrimeRecord | nu
     const parsed: unknown = JSON.parse(readFileSync(pathFor(ledger, key), "utf8"));
     if (typeof parsed !== "object" || parsed === null) return null;
     const rec = parsed as Record<string, unknown>;
-    if (rec["key"] !== keyText(key) || typeof rec["primed_at"] !== "string") return null;
+    // 时间戳按格式校验：它会原样进报告（F12 评审：带 ESC 的 primed_at 直接打到了终端上）。
+    if (rec["key"] !== keyText(key) || typeof rec["primed_at"] !== "string" || !TIMESTAMP_RE.test(rec["primed_at"])) return null;
     const v = rec["verify"];
-    const ok = typeof v === "object" && v !== null && !Array.isArray(v)
-      && Object.values(v).every((x) => typeof x === "string");
-    return { primedAt: rec["primed_at"], verify: ok ? (v as Record<string, string>) : null };
+    let verify: Record<string, string> | null = null;
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      const entries = Object.entries(v);
+      if (entries.every(([, x]) => typeof x === "string")) {
+        verify = {};
+        for (const [id, x] of entries) if (typeof x === "string") verify[id] = x;
+      }
+    }
+    return { primedAt: rec["primed_at"], verify };
   } catch {
     return null;
   }
