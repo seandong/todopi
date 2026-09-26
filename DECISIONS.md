@@ -2004,3 +2004,26 @@ version 与迁移说明。之前我在括注里写「按 §9 不改版本」，�
 的东西，并写明它**不**证明文本是 DTO 的纯函数。**一条规则的措辞，只能宣称它的检查能拒绝的东西。**
 同轮顺带修了 harness：`make test` 按 TAP 的 `# skipped` 读跳过数，却没显式指定 reporter——在终端里跑时
 Node 用 spec reporter，整层被判 blocked。
+
+## D034 — doctor --fix 不刷新 updated，不碰 Log
+
+- 日期：2026-09-26（F13）
+- 背景：规格 §6.3 要求每次写任务文件都刷新 `updated`，而 `updated` 同时是跨机器的心跳（§7.3）。
+- 决策（用户定）：**修复不是对任务的工作**。`doctor --fix` 的规范化 MUST NOT 改 `updated`、MUST NOT 改
+  Log；规格 §6.3 加例外，§9.1 记为发布前修订。否则在一个仓库上跑一次 `--fix`，被改写的过期认领都会
+  看起来又活了。
+- 修复的范围与写前核对见 docs/plans/2026-09-26-f13-doctor-fix.md。
+- 评审一轮（F13）之后：时间戳规范化**只做 `created`**——`updated` 换个写法也是改（我第一版违反了刚定的
+  规则）；形状对但日期不存在的（2 月 30 日）不规范化，那是猜。写入挪进格式层 `rewriteNormalized`，并先
+  核对原始字节就是 UTF-8 再编码——否则 `\xff` 会被写成 `ef bf bd`。rank 回填只在「无 rank 段里的每个
+  任务都能回填」时做：§7.4 把读不出来的与 `rank: 7` 也排在那一段，只回填其余的会改变显示顺序。
+- **孤儿租约不判**：评审要求 doctor 报告「孤儿租约」（FR-Q1 原文），我没照做。租约目录由所有 worktree
+  共享（`.git/todopi/leases/`），一个在本 checkout 里对不上任务、或任务在这里是 open 的租约，很可能是
+  另一个 worktree 分支上的活认领——单个 checkout 分辨不出。能可靠判断的只有「过期」，`--fix` 已在清。
+  PRD FR-Q1 的措辞相应改掉。未知键按 §5.2 给警告（不让 doctor 失败）。
+
+- F13 评审二至四轮：rank 回填改为两阶段（全部算好、核对过才写，任何一个缺 rank 的任务写不了就整体不回填）；
+  读取时标记非法 UTF-8，doctor 报告、所有写入口拒绝；`updated` 的原文由 YAML 解析器定位后原样放回（第四次
+  「用字符形状近似需要真解析的判断」——正则 `^updated:` 认不得 `"updated":`）；frontmatter 有手写注释就不重写。
+  这几类错误没有有意义的静态判据，按 AGENTS.md 的要求说明：由 tests/commands/doctor-fix.test.ts 守护
+  （updated 原文的五种写法、非法 UTF-8、回填的两种阻挡情形、注释）。

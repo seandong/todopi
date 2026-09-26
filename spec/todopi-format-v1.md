@@ -296,6 +296,8 @@ A conforming task set satisfies all of the following. `doctor` reports violation
 
 Every write to a task file MUST set `updated` to the current time. `updated` doubles as the cross-machine heartbeat for stale detection (§7.3), so writers that only touch the body (a note, a checkbox) still bump it.
 
+One exception: a repair that only normalizes a file (`doctor --fix`: key order, quoting, timestamp and checkbox form, a backfilled `rank`) is not work on the task, and MUST NOT change `updated` — otherwise running a repair tool would make every stale claim look alive. Such a repair also MUST NOT change the Log.
+
 ## 7. Derived state
 
 Readers compute the following; nothing here is stored.
@@ -375,6 +377,8 @@ Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.
 
 The version number protects files and implementations that exist. Until the first release of a tool implementing this document, revisions that fill gaps in version 1 are recorded here instead of incrementing the version; after that, §9 applies without exception.
 
+**2026-09-26** — §6.3 (`updated`). The 2026-09-16 text required every write to bump `updated`. This revision exempts repairs that only normalize a file (`doctor --fix`), which MUST leave `updated` and the Log unchanged, because `updated` is also the stale-detection heartbeat (§7.3). Migration: none; no file changes meaning.
+
 **2026-09-26** — §5.3 (body structure). The 2026-09-16 text said the four headings are recognized "exactly and case-sensitively" and left undefined: headings and list items inside code blocks, HTML blocks and containers; repeated headings; code fences and HTML blocks that are never closed. This revision defines them:
 
 - Section headings and top-level list items are located by CommonMark. A section heading is a top-level ATX level-2 heading whose source line is exactly `## <name>`. A section ends only at a top-level ATX level-2 heading whose source line begins with `## `; other level-2 headings (indented, `##` followed by a tab, empty, setext) are content of the section they appear in — the same boundary the 2026-09-16 text's "exactly" implied for unindented lines.
@@ -435,6 +439,6 @@ remains the fallback.
 - [ ] Assign a `rank` when creating a task.
 - [ ] Normalize actor strings (§5.4); never emit one containing whitespace or `:`.
 - [ ] Append to Log; never rewrite earlier lines, and never append for a refused transition.
-- [ ] Bump `updated` on every write.
+- [ ] Bump `updated` on every write, except a normalizing repair (`doctor --fix`), which leaves `updated` and the Log unchanged (§6.3).
 - [ ] Hold the write lock; write via temp file and rename.
 - [ ] Refuse to write when `config.yml` `version` is unknown.

@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `ed8adeb` —— F12 handoff 经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `04df358` —— F13 doctor --fix 经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,12 +19,12 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 21 个任务，12 个 `closed/done`（F01–F12）、9 个 `open`。
+- 账本: `.todopi/` 21 个任务，13 个 `closed/done`（F01–F13）、8 个 `open`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F12 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+- 代码状态：**F01–F13 已完成（M1、M2 收齐）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
   `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check` /
-  `edit` / `move` / `dep` / `prime` / `handoff` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
+  `edit` / `move` / `dep` / `prime` / `handoff` / `doctor --fix` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
   身份解析（FR-C4 前三级）在 `domain/actor.ts` + `commands/actor.ts`，`ls` 与
@@ -153,7 +153,12 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     检查输出本身，措辞收窄到检查真正能拒绝的东西。顺带修了 harness 在终端里跑 `make test` 被判 blocked。
     教训：**一条规则的措辞只能宣称它的检查能拒绝的东西**（措辞宽于检查，第十一次）。
     `todopi done`：verify=pass dirty=false。
-30. **待决：要不要把 9 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
+34. ~~F13 `doctor --fix`~~ 已完成（2026-09-26），**M2 收齐**。用户定：修复不刷新 `updated`、不碰 Log
+    （规格 §6.3 例外，D034）。孤儿租约不判——租约目录由所有 worktree 共享，单个 checkout 分辨不出，只按过期
+    清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
+    定位 updated 原文。`todopi done`：verify=pass dirty=false。
+    下一步：F14 `setup claude`（M3 的第一个）。
+30. **待决：要不要把 8 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
     谁来写、写多细、改完之后验收门禁开始对它们生效（`done` 会被没勾完的挡下）。
     不在 F09 里做。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；

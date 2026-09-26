@@ -16,12 +16,23 @@ export type DoctorReport = {
   ok: boolean;
   scanned: number;
   findings: FindingDto[];
+  /** 不让 doctor 失败的提示（目前只有 spec §5.2 的未知键）。ok 只看 findings */
+  warnings: FindingDto[];
 };
 
-export function toDoctorReport(scanned: number, findings: Finding[]): DoctorReport {
+export function toDoctorReport(scanned: number, findings: Finding[], warnings: FindingDto[] = []): DoctorReport {
   return {
     ok: findings.length === 0,
     scanned,
     findings: findings.map((f) => ({ rule: f.rule, path: f.path, message: f.message })),
+    warnings,
   };
 }
+
+/** `doctor --fix` 的结果：改了哪些文件、各改了什么，哪些没改成，清掉了哪些租约，以及修完之后的 doctor。 */
+export type DoctorFixReport = {
+  fixed: { path: string; changes: string[] }[];
+  skipped: { path: string; reason: string }[];
+  leasesCleared: string[];
+  after: DoctorReport;
+};

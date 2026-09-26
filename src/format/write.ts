@@ -1,6 +1,7 @@
 // src/format/write.ts
 import { headingIndex, sectionEnd, structure } from "../markdown/sections.ts";
 import { existsSync, readFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import { join } from "node:path";
 import { withLock } from "../fs/lock.ts";
 import { writeFileAtomic } from "../fs/atomic.ts";
@@ -9,7 +10,7 @@ import { emitTask, emitFrontmatter, nextRank, type NewTask } from "./emit.ts";
 import { newIdBody, makeId } from "./id.ts";
 import { leasePaths } from "./lease.ts";
 import { splitEnvelope } from "./envelope.ts";
-import { parseFrontmatter } from "./frontmatter.ts";
+import { commentsIn, entrySource, parseFrontmatter } from "./frontmatter.ts";
 import type { Ledger } from "./discover.ts";
 import type { TaskFile } from "../domain/types.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -176,6 +177,12 @@ export function prepareUpdate(
       `Task ${id} cannot be read: ${target.parseError}. Run "todopi doctor" to see what is wrong with it.`);
   }
 
+  // 文件里有非法 UTF-8 字节：解码时已换成 U+FFFD，整文件写回就改掉了原字节（包括 Log）。拒绝，让人先修
+  // （F13 评审二轮在 doctor --fix 上发现，所有写入口同理）。
+  if (target.invalidUtf8 === true) {
+    throw new CliError(EXIT.usage, `Refusing to write ${relPathOf(id)}: the file is not valid UTF-8 (spec §5.1); fix it first.`);
+  }
+
   // **写回时把正文规范化成 LF**（spec §5.1：行尾 LF，无 BOM）。
   //
   // 读取侧对 CRLF 是容错的（`sectionLines` 会去掉行尾的 \r），否则一份 CRLF
@@ -312,4 +319,55 @@ function appendLogLine(body: string, line: string): string {
     }
   }
   return out;
+}
+
+const relPathOf = (id: string) => join("tasks", `${id}.md`);
+
+/**
+ * `doctor --fix` 的规范化重写，分两步：planNormalized 算出新内容并核对，writeNormalized 才写。分开是为了
+ * 让调用方先把**所有**文件都算好——rank 回填只有全部能写时才做，写到一半停下会改变显示顺序（F13 评审二轮）。
+ *
+ * 与 prepareUpdate **有意不同**：不刷新 `updated`、不追加 Log（规格 §6.3 的例外，D034）。`updated` 那一行
+ * 保留原文——换个写法（加引号）也是改（D034）。
+ *
+ * 核对，任何一道不过就不写、返回原因：
+ *   1. 文件是合法 UTF-8——否则整文件重写会把非法字节换成 U+FFFD，Log 就不是原来的字节了；
+ *   2. 新 frontmatter 读回来恰好是 `want`；
+ *   3. 正文只在 `changedLines` 这几行不同。
+ */
+export function planNormalized(
+  t: TaskFile, want: Record<string, unknown>, body: string, changedLines: Set<number>,
+): { text: string } | { unchanged: true } | { error: string } {
+  if (t.invalidUtf8 === true) return { error: "the file is not valid UTF-8; rewriting it would alter bytes" };
+  const env = splitEnvelope(t.raw);
+  if (env === null) return { error: "the file has no valid envelope" };
+  // 规范形态没有注释：frontmatter 里手写的 YAML 注释（`updated` 那一条的行尾注释除外，它原样保留）会在
+  // 重写中丢掉。不丢人写的东西——不重写，报告。
+  const kept = "updated" in t.frontmatter ? entrySource(env.head, "updated") ?? "" : "";
+  if (commentsIn(env.head).length > commentsIn(kept).length) {
+    return { error: "the frontmatter has YAML comments, which the normalized form would drop" };
+  }
+  let head = emitFrontmatter(want);
+  if ("updated" in t.frontmatter) {
+    // 原文由 YAML 解析器定位；发射出来的那一行是我们自己的规范形态，认它用正则是可靠的。
+    const original = entrySource(env.head, "updated");
+    if (original === null) return { error: "could not locate the original `updated` entry to keep it verbatim" };
+    head = head.replace(/^updated: [^\n]*$/m, () => original);
+  }
+  const text = `---\n${head}---\n${body}`;
+  const back = splitEnvelope(text);
+  const parsed = back === null ? null : parseFrontmatter(back.head);
+  if (back === null || parsed === null || !parsed.ok || !isDeepStrictEqual(parsed.data, want)) {
+    return { error: "the normalized frontmatter would not read back as the same data" };
+  }
+  const before = env.body.split("\n"), after = back.body.split("\n");
+  if (before.length !== after.length || before.some((l, i) => l !== after[i] && !changedLines.has(i))) {
+    return { error: "the body would change outside the lines being normalized" };
+  }
+  return text === t.raw ? { unchanged: true } : { text };
+}
+
+/** 写 planNormalized 算好的内容。调用方必须已持有账本锁。 */
+export function writeNormalized(ledger: Ledger, t: TaskFile, text: string): void {
+  writeFileAtomic(join(ledger.dir, relPathOf(t.idFromFilename)), text);
 }
