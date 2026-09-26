@@ -153,6 +153,13 @@ function frames(port: number) {
   return { got, next, close };
 }
 
+/** 每 300ms 改一次文件，直到 `wait` 完成：事件延迟或被合并都不影响「最终会推送」的断言。 */
+async function keepWriting<T>(path: string, wait: () => Promise<T>): Promise<T> {
+  let i = 0;
+  const timer = setInterval(() => writeFileSync(path, `w${i++}`), 300);
+  try { return await wait(); } finally { clearInterval(timer); }
+}
+
 async function withServer(opts: { poll?: boolean; build?: () => string; dir?: string }, f: (s: BoardServer, d: string) => Promise<void>) {
   const d = opts.dir ?? repo();
   let n = 0;
@@ -206,8 +213,8 @@ test("SSE：连上先推一份全量；文件变化后推新数据；数据没�
       await new Promise((r) => setTimeout(r, 400));
       assert.equal(f.got.length, 1, "数据没变不该推");
       version = 2;
-      writeFileSync(join(d, ".todopi", "tasks", "noise.txt"), "y");
-      assert.equal(await f.next(2), 'data: {"version":2}');
+      // macOS 的 FSEvents 在整套测试并行跑时可能延迟好几秒：一直写到收到为止，只断言「会推、推的是新数据」
+      assert.equal(await keepWriting(join(d, ".todopi", "tasks", "noise.txt"), () => f.next(2, 10000)), 'data: {"version":2}');
     } finally { f.close(); }
   });
 });
@@ -259,7 +266,7 @@ test("轮询的签名：文件名、mtime、大小有一样变就不同；目录
   assert.equal(signature(join(d, "nope")), "");
 });
 
-test("变化合并：一阵连续写入只重算一次；轮询在一次变化后不会每轮都重算", async () => {
+test("变化合并：一阵连续写入只重算寥寥几次；轮询在一次变化后不会每轮都重算", async () => {
   for (const poll of [false, true]) {
     let builds = 0;
     const d = repo();
@@ -269,9 +276,10 @@ test("变化合并：一阵连续写入只重算一次；轮询在一次变化�
         await f.next(1);
         const base = builds;
         for (let i = 0; i < 10; i++) writeFileSync(join(d, ".todopi", "tasks", `burst-${i}.md`), String(i));
-        await f.next(2);
+        await f.next(2, 10000);
         await new Promise((r) => setTimeout(r, 400));
-        assert.ok(builds - base <= 2, `poll=${poll}: ${builds - base} builds for one burst`);
+        // 十次写入远少于十次重算：负载高时 FSEvents 会分几批送、兜底轮询也会算一次，所以上限是 4 而不是 1
+        assert.ok(builds - base <= 4, `poll=${poll}: ${builds - base} builds for one burst of 10 writes`);
       } finally { f.close(); }
     });
   }
@@ -367,5 +375,21 @@ test("回调到达时目录已被改名并重建（inode 换了）：同样改�
     writeFileSync(join(dir, "tasks", "x.md"), "1");
     await new Promise((r) => setTimeout(r, 300));
     assert.ok(calls > before, "重建后的目录上的变化照样回调");
+  } finally { w.close(); }
+});
+
+test("watch 模式下的兜底轮询：监听丢了事件（从不触发），变化也会在轮询间隔的 5 倍内被发现", async () => {
+  const d = repo();
+  const dir = join(d, ".todopi");
+  const fake = new EventEmitter() as EventEmitter & { close: () => void };
+  fake.close = () => undefined;
+  let calls = 0;
+  const w = watchTree(dir, () => { calls += 1; }, { pollMs: 20, watchFn: () => fake as unknown as FSWatcher });
+  try {
+    assert.equal(w.mode, "watch");
+    writeFileSync(join(dir, "tasks", "silent.md"), "x");
+    await new Promise((r) => setTimeout(r, 400));
+    assert.ok(calls >= 1, "兜底轮询发现了变化");
+    assert.equal(w.mode, "watch", "仍是 watch 模式");
   } finally { w.close(); }
 });
