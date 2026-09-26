@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `04df358` —— F13 doctor --fix 经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `c415490` —— 8 个 open 自举任务的验收判据拆成勾选项（用户定，评审四轮 Go）；此前 F13 经 todopi done 关闭。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
