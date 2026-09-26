@@ -2144,3 +2144,29 @@ Node 用 spec reporter，整层被判 blocked。
   真问题——看板会停在旧数据上。watch 模式下加一个兜底的慢速轮询（间隔是轮询模式的 5 倍，默认 5 秒）：fs.watch 负责快，
   轮询负责最终一定对得上。这一条属于 D039（F18 的看板），记在这里是因为它在 F19 的分支上被发现和修复。
 
+## D041 — import beads：出处记在 imported 事件里，不标 forced；只有 closed 映射成 closed
+
+- 日期：2026-09-26（F20）。用户对「500 个未验证标记」这个待决项没有表态，我按规格定：FR-I2 与验收标准都没要求 `forced=true`，
+  规格的 Log 动词表里本来就有 `imported source= system=`。Beads 里关闭的任务建成 closed + resolution，Log 是
+  `created source=` 加 `imported source=<path> system=beads: Beads <id>; status …; priority P…; assignee …; close reason: …`，
+  不伪造一次「被强制通过的 done」。于是它们不显示为「未验证」——那个标记留给「有人在 todopi 里跳过了门禁」。可推翻。
+- **字段以 Beads v0.47.1 的 internal/types/types.go 为准**（Classic：Dolt 在 v0.49.3 前后成为默认存储之前）。用 Beads 仓库
+  自己在 v0.47.1 提交的 `.beads/issues.jsonl`（2404 行）实测：1738 条导入、约 10 秒、doctor 通过、重复导入 0 新建；tombstone 342 条、
+  ephemeral 324 条跳过；rank 顺序符合 priority；34 条 wontfix、5 条 duplicate。这份数据只在本地用，不进仓库；测试用自造的样例。
+- **状态**：只有 closed → closed；in_progress、hooked、blocked、deferred 等都建成 open，原状态与 assignee 写进 imported 的文字。
+  迁移不替别人认领（todopi 的认领带租约与心跳），blocked 在 todopi 里由 blocked_by 派生。
+- **resolution**：`close_reason` 以重复类措辞开头 → duplicate（规格里有这个值，比笼统的 wontfix 准）；以放弃类措辞开头（won't fix、
+  not planned、abandoned、cancelled、invalid、stale、obsolete、wrong repo……）→ wontfix；其余 → done。只看开头、每个词带词边界：
+  「Fixed stale cache」「duplicated logic removed」是做完了的事。原文照样进 Log，判错了人看得见。
+- **依赖**：`blocks` → blocked_by；`parent-child` → parent（多个父级取第一个并警告）；`discovered-from` → created 的 `from=`；其余类型
+  （related、supersedes、duplicates……）todopi 没有对应物，计数。建的顺序是 parent 与 blocked_by 的拓扑序（引用必须先存在，不变量 4），
+  成环的边丢掉并警告。rank 按 priority 顺序预先算好，与建的顺序无关。
+- **描述**：description + design + acceptance_criteria + notes 合进 Description。Beads 的描述常有顶格的 `## Current State`，原样放进去会
+  成为新小节、把描述截断；判定与写入端同一份 CommonMark（没有顶层二级标题、没有没闭合的块），不安全就整段放进比正文里最长反引号串
+  还长一个的围栏，原文一字不改（实测约 28% 的描述走这条路）。另有一道写后读回的核对。
+- **幂等**：`external.beads.id` 认出已导入的；新条目可以引用以前导入过的任务。整次导入一把锁，只读一次账本
+  （`createTaskUnlocked` 的 `known` 参数——每建一个都重读会是平方级）。
+- 时间：`created` 取 Beads 的 created_at（换成 UTC 秒级；不存在的日期、在未来的时间用导入时刻），`updated` 是导入时刻。
+- 评论（comments）不导入，计数报告：Log 的 actor 格式容不下 Beads 的作者名，放进描述又会把讨论混进任务说明。
+- CLI：`import beads [path]` 是子命令——要导入一个叫 beads 的 Markdown 文件，写成 `./beads`。
+

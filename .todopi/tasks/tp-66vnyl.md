@@ -1,7 +1,8 @@
 ---
 id: "tp-66vnyl"
 title: "todopi import beads 迁移 Beads Classic 导出"
-status: "open"
+status: "in_progress"
+assignee: "seandong"
 blocked_by: ["tp-medxth"]
 rank: "ij"
 verify: "make check && make test && bash tools/e2e/f20-import-beads.sh"
@@ -10,7 +11,7 @@ external:
   harness:
     legacy_id: "F20"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T06:21:54Z"
+updated: "2026-09-26T14:21:03Z"
 ---
 
 ## Description
@@ -53,3 +54,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F20
 - 2026-09-26T06:21:54Z seandong note: 验收判据由散文拆成勾选项（用户 2026-09-26 定）：逐条对应原文，不增不减；任务标题本身是验收结果的，另列一条并标「标题」。原文见 git 历史。
+- 2026-09-26T14:21:03Z seandong claimed

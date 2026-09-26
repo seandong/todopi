@@ -462,17 +462,26 @@ function registerTransition(
 
 program
   .command("import")
-  .argument("<file>", "a Markdown plan with checkbox items (Superpowers plan, spec-kit or OpenSpec tasks.md)")
-  .description("turn a Markdown checkbox plan into tasks: headings become parents, items become tasks, in document order")
-  .action(async (file: string) => {
+  .argument("<file>", "a Markdown plan with checkbox items (Superpowers plan, spec-kit or OpenSpec tasks.md), or \"beads\"")
+  .argument("[path]", "with \"beads\": the Beads Classic issues.jsonl (default .beads/issues.jsonl)")
+  .description("turn a Markdown checkbox plan into tasks (headings become parents, items become tasks, in document order), "
+    + "or migrate a Beads Classic export with `import beads [path]`")
+  .action(async (file: string, path: string | undefined) => {
+    const opts = program.opts();
+    const directory = (opts["directory"] as string | undefined) ?? process.cwd();
+    const actor = opts["as"] as string | undefined;
+    // `beads` 是子命令：要导入一个叫 beads 的 Markdown 文件，写成 ./beads
+    if (file === "beads") {
+      const { runImportBeads } = await import("./commands/import-beads.ts");
+      const { renderImportBeads } = await import("./output/render/import-beads.ts");
+      const report = runImportBeads({ directory, path, actor });
+      process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImportBeads(report));
+      return;
+    }
+    if (path !== undefined) throw new CliError(EXIT.usage, `import takes one plan file; got an extra argument ${JSON.stringify(path)}.`);
     const { runImport } = await import("./commands/import.ts");
     const { renderImport } = await import("./output/render/import.ts");
-    const opts = program.opts();
-    const report = runImport({
-      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
-      file,
-      actor: opts["as"] as string | undefined,
-    });
+    const report = runImport({ directory, file, actor });
     process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImport(report));
   });
 
