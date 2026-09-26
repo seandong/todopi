@@ -30,7 +30,11 @@ export function writeFileAtomic(path: string, content: string | Buffer, mode?: n
     if (mode !== undefined) chmodSync(tmp, mode & 0o7777);
     renameSync(tmp, path);
   } catch (err) {
-    try { unlinkSync(tmp); } catch { /* 临时文件可能压根没建起来 */ }
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // 临时文件可能压根没建起来
+    }
     throw err;
   }
 }

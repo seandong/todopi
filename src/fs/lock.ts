@@ -97,7 +97,11 @@ export function withLock<T>(lockPath: string, fn: () => T, opts: LockOptions = {
     // 而那种外部干预本身已经破坏了互斥——这条检查只是不再雪上加霜。
     const current = readHolder(lockPath);
     if (current !== null && current.nonce !== mine.nonce) return;
-    try { unlinkSync(lockPath); } catch { /* 已经被释放 */ }
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // 已经被释放
+    }
   };
   // 临界区是**同步**的，所以信号在它执行期间无法送达——Node 的信号处理器跑在
   // 事件循环上，而同步代码把事件循环堵死了。实测（Node 22）：
@@ -172,7 +176,11 @@ function tryCreate(lockPath: string): LockHolder | null {
     }
     return holder;
   } finally {
-    try { unlinkSync(tmp); } catch { /* 可能压根没建起来 */ }
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // 可能压根没建起来
+    }
   }
 }
 

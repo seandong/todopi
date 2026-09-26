@@ -6,7 +6,7 @@ import { currentActor } from "./actor.ts";
 import { blockingRules, isDisplayable, staleInputFor } from "./view.ts";
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
-import { childProgress, deriveState, indexTasks, isContainer, type TaskIndex } from "../domain/derive.ts";
+import { childProgress, deriveState, indexTasks, isContainer, type StaleInput, type TaskIndex } from "../domain/derive.ts";
 import { parseAcceptance, sectionLines } from "../domain/acceptance.ts";
 import { logEntries, parseLogLine, validateFile } from "../domain/validate.ts";
 import { isMine } from "../domain/actor.ts";
@@ -112,6 +112,41 @@ function ancestorsOf(index: TaskIndex, t: TaskFile): { ancestors: TreeNode[]; cy
   return { ancestors: chain.reverse(), cycle: false };
 }
 
+/** 建详情要的上下文：读一次盘、建一次图，看板对每个任务复用（F18）。 */
+export type ShowContext = { index: TaskIndex; stale: StaleInput; who: { actor: string; host: string } };
+
+/** 一个（已确认可显示的）任务的 ShowDto。`full` 为真时 Log 全量，否则最近 5 条。 */
+export function showOf(ctx: ShowContext, task: TaskFile, opts: { full?: boolean; tree?: boolean }): ShowDto {
+  const acceptance = parseAcceptance(task.body);
+  const entries = logEntries(task.body);
+  // **最近** 5 条是尾部：slice(-5)。写成 slice(0, 5) 同样「显示 5 条」，
+  // 只有断言「是哪 5 条」的用例抓得到它。
+  const shown = opts.full === true ? entries : entries.slice(-RECENT);
+
+  let tree: { ancestors: TreeNode[]; children: TreeNode[]; cycle: boolean } | undefined;
+  if (opts.tree === true) {
+    const { ancestors, cycle } = ancestorsOf(ctx.index, task);
+    const children = sortTasks(ctx.index.childrenOf.get(task.idFromFilename) ?? [])
+      .map((c) => treeNode(ctx.index, c.idFromFilename));
+    tree = { ancestors, children, cycle };
+  }
+
+  return toShowDto({
+    task: {
+      task,
+      derived: deriveState(ctx.index, task, ctx.stale),
+      mine: isMine(task.frontmatter["assignee"], ctx.who),
+    },
+    acceptance,
+    acceptanceNotes: acceptanceNotes(task.body, new Map(acceptance.map((c) => [c.line, c.n]))),
+    log: shown.map((entry) => ({ entry, parsed: parseLogLine(entry.head) })),
+    logTotal: entries.length,
+    description: section(task.body, "## Description"),
+    plan: section(task.body, "## Plan"),
+    tree,
+  });
+}
+
 export function runShow(opts: ShowOptions): ShowDto {
   const ledger = discoverLedger(opts.directory);
   const all = readTasks(ledger);
@@ -127,38 +162,12 @@ export function runShow(opts: ShowOptions): ShowDto {
       `Task ${opts.id} is not a valid v1 task file (${blockingRules(findings).join(", ")}). `
       + 'Run "todopi doctor" to see what is wrong with it.');
   }
-
   // 图建在磁盘上**全部**任务之上，理由同 ls：一个字段坏掉的任务仍然是它父任务的
   // 子任务，排除它会让容器退化成叶子。
-  const index = indexTasks(all);
-  const who = { actor: currentActor(ledger.root, opts.actor), host: hostname() };
-
-  const acceptance = parseAcceptance(task.body);
-  const entries = logEntries(task.body);
-  // **最近** 5 条是尾部：slice(-5)。写成 slice(0, 5) 同样「显示 5 条」，
-  // 只有断言「是哪 5 条」的用例抓得到它。
-  const shown = opts.full === true ? entries : entries.slice(-RECENT);
-
-  let tree: { ancestors: TreeNode[]; children: TreeNode[]; cycle: boolean } | undefined;
-  if (opts.tree === true) {
-    const { ancestors, cycle } = ancestorsOf(index, task);
-    const children = sortTasks(index.childrenOf.get(task.idFromFilename) ?? [])
-      .map((c) => treeNode(index, c.idFromFilename));
-    tree = { ancestors, children, cycle };
-  }
-
-  return toShowDto({
-    task: {
-      task,
-      derived: deriveState(index, task, staleInputFor(ledger)),
-      mine: isMine(task.frontmatter["assignee"], who),
-    },
-    acceptance,
-    acceptanceNotes: acceptanceNotes(task.body, new Map(acceptance.map((c) => [c.line, c.n]))),
-    log: shown.map((entry) => ({ entry, parsed: parseLogLine(entry.head) })),
-    logTotal: entries.length,
-    description: section(task.body, "## Description"),
-    plan: section(task.body, "## Plan"),
-    tree,
-  });
+  const ctx: ShowContext = {
+    index: indexTasks(all),
+    stale: staleInputFor(ledger),
+    who: { actor: currentActor(ledger.root, opts.actor), host: hostname() },
+  };
+  return showOf(ctx, task, opts);
 }

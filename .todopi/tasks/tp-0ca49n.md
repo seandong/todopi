@@ -1,7 +1,8 @@
 ---
 id: "tp-0ca49n"
 title: "todopi web 在 127.0.0.1 提供只读看板，文件变化时页面自动更新"
-status: "open"
+status: "in_progress"
+assignee: "seandong"
 blocked_by: ["tp-wj9u76"]
 rank: "ih"
 verify: "make check && make test && bash tools/e2e/f18-web.sh"
@@ -10,7 +11,7 @@ external:
   harness:
     legacy_id: "F18"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T06:21:53Z"
+updated: "2026-09-26T12:07:20Z"
 ---
 
 ## Description
@@ -58,3 +59,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F18
 - 2026-09-26T06:21:53Z seandong note: 验收判据由散文拆成勾选项（用户 2026-09-26 定）：逐条对应原文，不增不减；任务标题本身是验收结果的，另列一条并标「标题」。原文见 git 历史。
+- 2026-09-26T12:07:20Z seandong claimed

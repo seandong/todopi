@@ -10,6 +10,7 @@
 | `format/` | 磁盘 ↔ 内存。`.todopi/` 的解析、发射、发现、id 生成 | `node:*`、`yaml`、`fs/`、`domain/types.ts`（仅类型与常量）、`markdown/` |
 | `markdown/` | Markdown 正文的结构：哪一行是标题、哪些行是代码。由 CommonMark 参考实现判定（D031）。**不认识 todopi 的格式** | 仅 `commonmark` |
 | `fs/` | 文件系统原语：原子替换、锁。**不认识 todopi 的格式** | 仅 `node:*` |
+| `board/` | 本地看板（`todopi web`）的 HTTP 服务、目录监听、打开浏览器。**不认识 todopi 的格式**：页面与数据由 `cli.ts` 注入。src/ 里唯一允许监听端口的地方，只绑 127.0.0.1（ARCH-001 / ARCH-002） | 仅 `node:*`，以及同目录的 `./<name>.ts` |
 | `exec/` | 子进程与用户级配置：以独立进程组执行 `verify`、按仓库路径的信任记录。**不认识 todopi 的格式** | 仅 `node:*`，以及同目录的 `./<name>.ts` |
 
 顶层还有一个文件不属于任何层：`protocol.ts`。它是写进用户仓库的协议文本，
