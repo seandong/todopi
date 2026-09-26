@@ -17,10 +17,19 @@ import { dirname } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { EXIT, CliError } from "../exit.ts";
 
-export const CLAUDE_HOOKS: readonly (readonly [event: string, command: string])[] = [
+export type HookList = readonly (readonly [event: string, command: string])[];
+
+export const CLAUDE_HOOKS: HookList = [
   ["SessionStart", "todopi prime --hook"],
   ["SessionEnd", "todopi handoff --check --hook"],
 ];
+
+/**
+ * Codex 的 hooks.json 与 Claude Code 同构（官方文档；2026-09-26 在 Codex 0.157.1 上实测）：SessionStart 不设
+ * matcher，压缩后以 `compact` 来源在下一轮前再触发、stdout 进上下文；PostCompact 也会触发——两个都装会注入两遍，
+ * 所以只装 SessionStart（PRD §17）。
+ */
+export const CODEX_HOOKS: HookList = CLAUDE_HOOKS;
 
 export type SettingsResult = { status: "created" | "updated" | "unchanged"; notes: string[] };
 
@@ -54,6 +63,11 @@ function refuse(path: string, why: string): never {
 }
 
 export function ensureClaudeHooks(path: string): SettingsResult {
+  return ensureHookConfig(path, CLAUDE_HOOKS);
+}
+
+/** Claude Code 与 Codex 共用：往它们的 hooks JSON 里合并 `list` 里的钩子。 */
+export function ensureHookConfig(path: string, list: HookList): SettingsResult {
   const existed = existsSync(path);
   if (existed && lstatSync(path).isSymbolicLink()) refuse(path, "is a symbolic link (replacing it would break the link)");
   let settings: Record<string, unknown> = {};
@@ -79,7 +93,7 @@ export function ensureClaudeHooks(path: string): SettingsResult {
 
   const notes: string[] = [];
   let changed = false;
-  for (const [event, command] of CLAUDE_HOOKS) {
+  for (const [event, command] of list) {
     if (event in hooks && !Array.isArray(hooks[event])) refuse(path, `hooks.${event} is not a list`);
     const groups: unknown[] = Array.isArray(hooks[event]) ? hooks[event] : [];
     if (groups.some((g) => isOurGroup(g, command))) continue;

@@ -238,8 +238,8 @@ program
 program
   .command("setup")
   .description("install the agent's hooks and rule-file import so every session starts with `todopi prime`")
-  .argument("<agent>", "which agent: claude")
-  .option("--user", "write user-level hooks (~/.claude/settings.json) instead of the project's")
+  .argument("<agent>", "which agent: claude, codex, opencode")
+  .option("--user", "write user-level hooks (in your home directory) instead of the project's")
   .action(async (agent: string, cmdOpts: { user?: boolean }) => {
     const { runSetup } = await import("./commands/setup.ts");
     const { renderSetup } = await import("./output/render/setup.ts");

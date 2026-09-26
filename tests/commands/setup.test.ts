@@ -228,3 +228,70 @@ test("settings.json 有非法 UTF-8 字节：拒绝、字节不动（评审五�
   assert.throws(() => ensureClaudeHooks(p), code(EXIT.usage));
   assert.ok(readFileSync(p).equals(bytes));
 });
+
+test("codex：写 .codex/hooks.json（与 Claude Code 同构：SessionStart 不设 matcher + SessionEnd，不装 PostCompact），提示要在 Codex 里信任", () => {
+  const d = repo();
+  const r = runSetup({ directory: d, agent: "codex" });
+  assert.deepEqual(r.files.map((f) => [f.path, f.status]), [[join(d, ".codex", "hooks.json"), "created"]]);
+  const s = json(join(d, ".codex", "hooks.json"));
+  assert.deepEqual(commands(s, "SessionStart"), ["todopi prime --hook"]);
+  assert.deepEqual(commands(s, "SessionEnd"), ["todopi handoff --check --hook"]);
+  assert.equal("PostCompact" in s.hooks, false, "Codex 压缩后 SessionStart(compact) 与 PostCompact 都会触发——两个都装会注入两遍");
+  assert.ok(r.notes.some((n) => /trust/.test(n)));
+  assert.equal(existsSync(join(d, "CLAUDE.md")), false, "Codex 原生读 AGENTS.md");
+  const again = runSetup({ directory: d, agent: "codex" });
+  assert.deepEqual(again.files.map((f) => f.status), ["unchanged"]);
+  assert.deepEqual(again.notes, [], "没改就不提示信任");
+  const home = tmp();
+  assert.deepEqual(runSetup({ directory: d, agent: "codex", user: true, home }).files.map((f) => f.path), [join(home, ".codex", "hooks.json")]);
+});
+
+test("opencode：写 .opencode/plugins/todopi.js；带我们标记的整份替换，不带标记的（用户自己的）拒绝", async () => {
+  const { OPENCODE_PLUGIN, PLUGIN_MARKER } = await import("../../src/format/opencode-plugin.ts");
+  const d = repo();
+  const p = join(d, ".opencode", "plugins", "todopi.js");
+  assert.deepEqual(runSetup({ directory: d, agent: "opencode" }).files.map((f) => [f.path, f.status]), [[p, "created"]]);
+  assert.equal(readFileSync(p, "utf8"), OPENCODE_PLUGIN);
+  assert.deepEqual(runSetup({ directory: d, agent: "opencode" }).files.map((f) => f.status), ["unchanged"]);
+  writeFileSync(p, `${PLUGIN_MARKER} older version\nexport const TodopiPlugin = async () => ({});\n`);
+  assert.deepEqual(runSetup({ directory: d, agent: "opencode" }).files.map((f) => f.status), ["updated"]);
+  assert.equal(readFileSync(p, "utf8"), OPENCODE_PLUGIN);
+  writeFileSync(p, "export const Mine = async () => ({});\n");
+  assert.throws(() => runSetup({ directory: d, agent: "opencode" }), code(EXIT.usage));
+  assert.equal(readFileSync(p, "utf8"), "export const Mine = async () => ({});\n");
+  const home = tmp();
+  assert.deepEqual(runSetup({ directory: d, agent: "opencode", user: true, home }).files.map((f) => f.path),
+    [join(home, ".config", "opencode", "plugins", "todopi.js")]);
+});
+
+test("opencode 插件：在 session.created / session.compacted 时跑 prime 并按会话缓存，经系统提示注入；没见过的会话补跑", async () => {
+  // 用一个假的 Bun `$` 驱动插件本身（真 OpenCode 的实测记在 PRD §17）。
+  const { OPENCODE_PLUGIN } = await import("../../src/format/opencode-plugin.ts");
+  const dir = tmp();
+  const file = join(dir, "plugin.mjs");
+  writeFileSync(file, OPENCODE_PLUGIN);
+  const { TodopiPlugin } = await import(file);
+  const calls: string[] = [];
+  let n = 0;
+  const $ = (strings: TemplateStringsArray, payload: Buffer) => {
+    calls.push(`${strings.join("<payload>")}|${payload.toString()}`);
+    const out = { exitCode: 0, stdout: Buffer.from(`## tp-aaaaaa: call ${++n}\n`) };
+    const chain = { cwd: () => chain, quiet: () => chain, nothrow: () => Promise.resolve(out) };
+    return chain;
+  };
+  const hooks = await TodopiPlugin({ $, directory: dir });
+  const system = async (sessionID?: string) => {
+    const out = { system: ["base"] };
+    await hooks["experimental.chat.system.transform"]({ sessionID }, out);
+    return out.system;
+  };
+  await hooks.event({ event: { type: "session.created", properties: { info: { id: "s1" } } } });
+  assert.deepEqual(calls, ['todopi prime --hook < <payload>|{"sessionID":"s1"}']);
+  assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 1"]);
+  assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 1"], "缓存：不是每一轮都跑 prime");
+  assert.equal(calls.length, 1);
+  await hooks.event({ event: { type: "session.compacted", properties: { sessionID: "s1" } } });
+  assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 2"], "压缩后刷新");
+  assert.deepEqual(await system("s2"), ["base", "## tp-aaaaaa: call 3"], "没见过 created 的会话：第一次用到时补跑");
+  assert.deepEqual(await system(undefined), ["base"]);
+});
