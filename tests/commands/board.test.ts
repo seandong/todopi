@@ -348,3 +348,24 @@ test("监听回调时目录已不在：改为轮询（Linux 上 inotify 不会�
     assert.equal(w.mode, "poll");
   } finally { w.close(); }
 });
+
+test("回调到达时目录已被改名并重建（inode 换了）：同样改为轮询（评审二轮：只看存在与否会漏掉这个竞态）", async () => {
+  const d = repo();
+  const dir = join(d, ".todopi");
+  let listener: () => void = () => undefined;
+  const fake = new EventEmitter() as EventEmitter & { close: () => void };
+  fake.close = () => undefined;
+  let calls = 0;
+  const w = watchTree(dir, () => { calls += 1; }, { pollMs: 30, watchFn: (_d, _o, l) => { listener = l; return fake as unknown as FSWatcher; } });
+  try {
+    renameSync(dir, join(d, ".todopi-old"));
+    mkdirSync(join(dir, "tasks"), { recursive: true });
+    listener();
+    assert.equal(w.mode, "poll");
+    await new Promise((r) => setTimeout(r, 200));
+    const before = calls;
+    writeFileSync(join(dir, "tasks", "x.md"), "1");
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(calls > before, "重建后的目录上的变化照样回调");
+  } finally { w.close(); }
+});

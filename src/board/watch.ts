@@ -5,7 +5,7 @@
 // 但也不触发——没法检测出来，只能按环境判断）、调用方强制（容器的挂载卷同理，给用户 `--poll`）。
 // 轮询比较的是「文件名 + mtime + 大小」的签名。
 
-import { existsSync, readdirSync, readFileSync, statSync, watch, type FSWatcher } from "node:fs";
+import { readdirSync, readFileSync, statSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 
 const DEBOUNCE_MS = 100;
@@ -21,6 +21,16 @@ export function underWsl(): boolean {
     return /microsoft/i.test(readFileSync("/proc/sys/kernel/osrelease", "utf8"));
   } catch {
     return false;
+  }
+}
+
+/** 目录的身份：dev + inode。目录不在返回 null。 */
+function identity(dir: string): string | null {
+  try {
+    const s = statSync(dir);
+    return `${s.dev}:${s.ino}`;
+  } catch {
+    return null;
   }
 }
 
@@ -62,12 +72,14 @@ export function watchTree(dir: string, onChange: () => void,
     stop = () => clearInterval(timer);
   };
 
+  const root = identity(dir);
   let watcher: FSWatcher | null = null;
   if (opts.poll !== true && !underWsl()) {
     try {
       watcher = (opts.watchFn ?? watch)(dir, { recursive: true }, () => {
-        // 被监听的目录本身没了（改名、删掉重建）：已有的监听不会跟到新目录上，改为轮询（F18 评审）
-        if (!existsSync(dir)) fallBack();
+        // 被监听的目录本身换了（改名、删掉重建——哪怕回调到达时新目录已经建好）：inotify 挂在旧 inode 上，不会跟到
+        // 新目录，改为轮询。按 dev + inode 判断，不只看存在与否（F18 评审二轮）。
+        if (identity(dir) !== root) fallBack();
         changed();
       });
     } catch {
