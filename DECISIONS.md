@@ -2049,3 +2049,15 @@ Node 用 spec reporter，整层被判 blocked。
   非法 UTF-8 的 settings.json 拒绝。
 - 用户文件的权限位不变（writeFileAtomic 新增 mode）；CLAUDE.md 按字节追加；导入判定按纯 CommonMark
   （markdown 层新增 commonmarkCodeLines——不带为验收门禁做的偏离）。
+
+## D036 — Codex 只装 SessionStart；OpenCode 经系统提示注入
+
+- 日期：2026-09-26（F15）。事实与实测见 PRD §17。
+- **Codex**：压缩后 PostCompact 立即触发、SessionStart(compact) 在下一轮前触发，两个都装会注入两遍。只装
+  SessionStart（不设 matcher）+ SessionEnd——与 Claude Code 同一份配置、同一个合并判据（D035）。验收标准 #8 据此改写。
+- **OpenCode**：`event` 钩子只观察、不能注入。插件在 `session.created` / `session.compacted` 跑 `todopi prime --hook`、
+  按会话缓存，经 `experimental.chat.system.transform` 追加系统提示：系统提示天然活过压缩，也不会每轮都跑 prime
+  （每跑一次都会刷新 handoff 的会话基准）。`experimental.*` 是 OpenCode 的实验接口，版本升级可能变——实测版本
+  记在 §17。插件文件是我们生成的：带标记头，已有且带标记才替换。
+- **未实测**：OpenCode 的压缩后注入——免费模型不能用于压缩，本机另外两个 provider 的凭据不可用。机制上
+  （compacted 事件刷新缓存 + 系统提示）与会话开始注入同一条路径。

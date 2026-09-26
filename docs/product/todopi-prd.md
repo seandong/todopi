@@ -146,7 +146,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
   Log 只保留最新一条。末尾那行指针**永不裁剪**——它是 22 token 的常量，而且裁掉
   它就等于让 agent 既拿不到内容也不知道去哪取。持有多个任务时按 `updated` 由新到旧，
   装不下的任务退化为一行「另有 N 个你持有的任务」。
-- **FR-P1b** `prime` 把调用时间按**会话**记录在 FR-C5 的运行时目录，供 FR-H1 使用。会话标识的可得性于 2026-09-16 核实：Claude Code、Codex、Gemini CLI 在钩子 stdin 里给 `session_id`；Cursor 的钩子载荷同样带会话标识；OpenCode 在事件对象上给 `session_id` 或 `sessionID`（两种拼法都要处理）；pi 不把它传进事件，扩展需调 `ctx.sessionManager.getSessionId()` 自取。六家都拿得到，因此按 actor 记录只是**防御性**回退，不是常态。
+- **FR-P1b** `prime` 把调用时间按**会话**记录在 FR-C5 的运行时目录，供 FR-H1 使用。会话标识的可得性于 2026-09-16 核实：Claude Code、Codex、Gemini CLI 在钩子 stdin 里给 `session_id`；Cursor 的钩子载荷同样带会话标识；OpenCode 的事件里 id 在 `properties.info.id`（session.created）或 `properties.sessionID`（session.compacted），由 todopi 生成的插件规范化为 `{"sessionID": …}` 喂给 `--hook`（2026-09-26 按 SDK 类型更正）；pi 不把它传进事件，扩展需调 `ctx.sessionManager.getSessionId()` 自取。六家都拿得到，因此按 actor 记录只是**防御性**回退，不是常态。
 - **FR-P2** `prime --json` 以结构化数据输出相同内容。
 - **FR-P3** `prime --full` 输出 1.1 版那种全量上下文：当前任务、别人（按 FR-C6 不算你的）
   持有的任务、ready 前 5 条、计数、最近关闭 3 条。它是**给 agent 主动调用的**——
@@ -165,8 +165,8 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
   | Agent | 会话开始 | 压缩 | 会话结束 | 配置位置 |
   |---|---|---|---|---|
   | Claude Code | `SessionStart`（matcher：`startup` `resume` `clear` `compact` `fork`） | `SessionStart` 的 `compact` 来源（`PostCompact` 存在，但它不在文档列出的「纯文本 stdout 进上下文」事件里；`additionalContext` 是否生效文档不清。见 §17 2026-09-26 重核） | `SessionEnd` | `.claude/settings.json` |
-  | Codex | `SessionStart` | `PostCompact` | `SessionEnd` | `.codex/hooks.json` |
-  | OpenCode | `event` 钩子订阅 `session.created` | 同上订阅 `session.compacted` | `session.idle` 兜底 | `.opencode/plugins/` |
+  | Codex | `SessionStart`（`source`：`startup` `resume` `clear` `compact`） | `SessionStart` 的 `compact` 来源（`PostCompact` 也会触发，两个都装会注入两遍；见 §17 2026-09-26 实测） | `SessionEnd` | `.codex/hooks.json`（项目级钩子要在 Codex 里信任后才运行） |
+  | OpenCode | `event` 钩子订阅 `session.created`（id 在 `properties.info.id`）；输出经 `experimental.chat.system.transform` 进系统提示 | 同上订阅 `session.compacted`（`properties.sessionID`），刷新缓存 | `session.idle` 兜底（未装） | `.opencode/plugins/` |
   | pi | `session_start` | **`session_compact`**（压缩后）；`session_before_compact` 是压缩前 | `session_shutdown` | `.pi/extensions/`，`pi install` |
   | Cursor | `sessionStart`（返回 `additional_context`） | **无 post 事件**，只有 `preCompact` | `sessionEnd` | `.cursor/hooks.json` |
   | Gemini CLI | `SessionStart`（返回 `hookSpecificOutput.additionalContext`） | **无 post 事件**，只有 `PreCompress` | `SessionEnd` | `settings.json` |
@@ -396,6 +396,22 @@ agent 录，而不是假设六家表现一致。
   prime 的 `## tp-…` 行；交互式会话里执行 `/compact` 后触发 `SessionStart`（`source: compact`），会话里能
   原样引出注入的那一行；`/exit` 触发 `SessionEnd`（`reason: prompt_input_exit`）。三次调用的 stdin 都带同一个
   `session_id`。无头 `-p` 模式下的 `/compact` 没有触发 `compact` 来源——要验证压缩后注入，得用交互式会话。
+
+### 2026-09-26 实测（F15 `setup codex / opencode`）
+
+- **Codex 0.157.1**：钩子结构与 Claude Code 同构（`.codex/hooks.json`，`hooks → 事件 → matcher 组 → handlers`）。
+  项目级钩子要在 Codex 里**信任**后才运行：启动时提示「Hooks need review」，可在 `/hooks` 审核；无头 `codex exec`
+  不会替你批准。SessionStart 在**第一轮对话前**触发（不是打开界面时）。`/compact` 之后 `PostCompact` 立即触发，
+  `SessionStart`（`source: compact`）在下一轮前触发——两个都装会注入两遍。标记法验证（压缩前往任务里记一个新
+  标记，压缩后问模型）：只装 SessionStart 时，压缩后新标记照样被原样引出。钩子命令用的 PATH 不是启动 Codex
+  那个 shell 里 export 的——`todopi` 必须在用户的常规 PATH 上（全局安装）。
+- **OpenCode 1.18.15**：插件放 `.opencode/plugins/`，启动时自动加载。`event` 钩子只能观察，不能注入；插件 SDK
+  （@opencode-ai/plugin 1.14.29 的类型）里能改模型输入的是 `experimental.chat.system.transform`（追加系统提示）
+  与 `experimental.session.compacting`（压缩前往摘要里加上下文）。`session.created` 的会话 id 在
+  `properties.info.id`，`session.compacted` 在 `properties.sessionID`。实测：插件在 created 时跑 prime、经系统提示
+  注入，`opencode run`（免费模型 big-pickle）能引出 `## tp-…` 那一行，模型也说明它来自「追加到系统提示的
+  todopi prime 输出」。**压缩后的注入没有实测**：免费模型不能用于压缩（「free tier can only be used from within
+  OpenCode」），本机另外两个 provider 的凭据不可用。
 
 ### 顺带确认
 

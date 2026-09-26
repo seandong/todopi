@@ -9,35 +9,53 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { findLedger } from "../format/discover.ts";
-import { ensureClaudeHooks } from "../format/claude-settings.ts";
+import { CLAUDE_HOOKS, CODEX_HOOKS, ensureHookConfig } from "../format/claude-settings.ts";
+import { ensureOpencodePlugin } from "../format/opencode-plugin.ts";
 import { ensureAgentsImport } from "../format/claude-md.ts";
 import type { SetupReport } from "../output/dto/setup.ts";
 import { EXIT, CliError } from "../exit.ts";
 
 export type SetupOptions = { directory: string; agent: string; user?: boolean; home?: string };
 
-export const AGENTS = ["claude"] as const;
+export const AGENTS = ["claude", "codex", "opencode"] as const;
 
 export function runSetup(opts: SetupOptions): SetupReport {
-  if (opts.agent !== "claude") {
+  if (!(AGENTS as readonly string[]).includes(opts.agent)) {
     throw new CliError(EXIT.usage, `Unknown or not yet supported agent ${JSON.stringify(opts.agent)}; supported: ${AGENTS.join(", ")}.`);
   }
   const ledger = findLedger(opts.directory);
   if (ledger === null && opts.user !== true) {
     throw new CliError(EXIT.usage, "No .todopi/ directory found here or above. Run \"todopi init\" first, or use --user for user-level hooks.");
   }
+  const home = opts.home ?? homedir();
+  const at = (project: string[], user: string[]) => (opts.user === true ? join(home, ...user) : join(ledger!.root, ...project));
   const files: SetupReport["files"] = [];
-  const settings = opts.user === true
-    ? join(opts.home ?? homedir(), ".claude", "settings.json")
-    : join(ledger!.root, ".claude", "settings.json");
-  const hooks = ensureClaudeHooks(settings);
-  files.push({ path: settings, status: hooks.status });
-  const notes: string[] = [...hooks.notes];
-  if (ledger !== null) {
-    const claudeMd = join(ledger.root, "CLAUDE.md");
-    files.push({ path: claudeMd, status: ensureAgentsImport(claudeMd) });
+  const notes: string[] = [];
+
+  if (opts.agent === "claude") {
+    const r = ensureHookConfig(at([".claude", "settings.json"], [".claude", "settings.json"]), CLAUDE_HOOKS);
+    files.push({ path: at([".claude", "settings.json"], [".claude", "settings.json"]), status: r.status });
+    notes.push(...r.notes);
+    // CLAUDE.md 的导入是项目的事（AGENTS.md 按项目存在）：在账本里就确保项目的 CLAUDE.md，不在就跳过并说明。
+    if (ledger !== null) {
+      const claudeMd = join(ledger.root, "CLAUDE.md");
+      files.push({ path: claudeMd, status: ensureAgentsImport(claudeMd) });
+    } else {
+      notes.push("Not inside a todopi project, so no CLAUDE.md was touched; run setup in a project to add its @AGENTS.md import.");
+    }
+  } else if (opts.agent === "codex") {
+    // Codex 原生读 AGENTS.md，不需要导入那一步。
+    const path = at([".codex", "hooks.json"], [".codex", "hooks.json"]);
+    const r = ensureHookConfig(path, CODEX_HOOKS);
+    files.push({ path, status: r.status });
+    notes.push(...r.notes);
+    if (r.status !== "unchanged") {
+      notes.push("Codex runs new or changed hooks only after you trust them: on its next start, choose to trust the hooks (or review them with /hooks).");
+    }
   } else {
-    notes.push("Not inside a todopi project, so no CLAUDE.md was touched; run setup in a project to add its @AGENTS.md import.");
+    // OpenCode 原生读 AGENTS.md。
+    const path = at([".opencode", "plugins", "todopi.js"], [".config", "opencode", "plugins", "todopi.js"]);
+    files.push({ path, status: ensureOpencodePlugin(path) });
   }
-  return { agent: "claude", scope: opts.user === true ? "user" : "project", files, notes };
+  return { agent: opts.agent, scope: opts.user === true ? "user" : "project", files, notes };
 }
