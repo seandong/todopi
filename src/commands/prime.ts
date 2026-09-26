@@ -111,7 +111,7 @@ function record(v: ReturnType<typeof view>, opts: PrimeOptions): string[] {
     recordPrime(v.ledger, opts.session !== undefined ? { session: opts.session } : { actor: v.actor }, nowStamp());
     return [];
   } catch (err) {
-    return [`Could not record this prime for handoff: ${(err as Error).message}`];
+    return [`Could not record this prime for handoff: ${err instanceof Error ? err.message : String(err)}`];
   }
 }
 
@@ -152,7 +152,7 @@ export function runPrime(opts: PrimeOptions): { report: PrimeReport; warnings: s
   // 时无可收紧——只剩指针，它永不裁剪（此时 truncated 为假，overBudget 如实报告）。
   let report = build();
   while (report.overBudget && v.held.length > 0 && level < 2) {
-    level = (level + 1) as 1 | 2;
+    level = level === 0 ? 1 : 2;
     report = build();
   }
   while (report.overBudget && count > 1) {
