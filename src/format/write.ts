@@ -141,6 +141,14 @@ export function createTaskUnlocked(
   }
 }
 
+/**
+ * 不写盘，只把一个 NewTask 发射再读回成 TaskFile（失败时返回说明）。批量写入前预检用：import beads 要在写第一个文件之前
+ * 确认每一个都写得下去，否则中途失败会留下半个导入（F20 评审）。
+ */
+export function candidateFor(task: NewTask): TaskFile | string {
+  return parseCandidate(join("tasks", `${task.id}.md`), task.id, emitTask(task));
+}
+
 /** 把一段任务文本解析成 TaskFile。失败时返回说明问题的字符串。 */
 function parseCandidate(relPath: string, id: string, text: string): TaskFile | string {
   const env = splitEnvelope(text);

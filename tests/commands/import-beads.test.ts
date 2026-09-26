@@ -97,7 +97,7 @@ test("计划：成环的依赖丢掉一条边并警告；多个父级取第一�
   assert.equal(y.parent, "p1");
   const x = p.tasks.find((t) => t.beadsId === "x")!;
   assert.equal(x.blockedBy.length + y.blockedBy.length, 1, "环上只剩一条边");
-  assert.match(p.warnings.join("\n"), /closes a cycle/);
+  assert.match(p.warnings.join("\n"), /blocks reference to .* forms a loop/);
 });
 
 test("描述：description + design + acceptance_criteria + notes 合在一起；会改变正文读法的整段放进围栏，原文不改", () => {
@@ -105,9 +105,9 @@ test("描述：description + design + acceptance_criteria + notes 合在一起�
   const safe = planBeadsImport([{ id: "s", title: "S", description: "plain" } as BeadsIssue], new Set(), () => true).tasks[0]!;
   assert.equal(safe.description, "plain");
   const t = planBeadsImport([issue], new Set(), () => false).tasks[0]!;
-  assert.ok(t.description!.startsWith("````text\n"), "围栏比正文里最长的反引号串多一个");
-  assert.ok(t.description!.includes("## Current State\n```\nunclosed\n\nDesign (from Beads):\n\nD\n\nAcceptance criteria (from Beads):\n\nAC\n\nNotes (from Beads):\n\nN"));
-  assert.ok(t.description!.endsWith("\n````"));
+  // 不安全的整段缩进成代码块：每个非空行四格，空行保持空，其余一字不改
+  assert.equal(t.description, ["## Current State", "```", "unclosed", "", "Design (from Beads):", "", "D", "",
+    "Acceptance criteria (from Beads):", "", "AC", "", "Notes (from Beads):", "", "N"].map((l) => (l === "" ? "" : `    ${l}`)).join("\n"));
   const long = planBeadsImport([{ id: "l", title: "t".repeat(250) } as BeadsIssue], new Set(), () => true).tasks[0]!;
   assert.equal([...long.title].length, 200);
   assert.match(long.description!, /^Full title in Beads:/);
@@ -173,13 +173,13 @@ test("幂等：再导入跳过已有的；新条目可以引用以前导入过�
   assert.equal(runDoctor({ directory: d }).findings.length, 0);
 });
 
-test("描述里有顶格 ## 与没闭合的围栏：放进围栏，读回来一字不差，Log 没被吞掉；doctor 通过", () => {
+test("描述里有顶格 ##、没闭合的围栏、setext 下划线（=======，像冲突标记）：缩进成代码块，Log 没被吞掉；doctor 通过", () => {
   const d = repo();
-  const desc = "Intro\n\n## Current State\n- [ ] not a criterion\n\n```go\nfunc x() {";
+  const desc = "Intro\n\n## Current State\n- [ ] not a criterion\n\nOverview\n=======\n\n```go\nfunc x() {";
   beads(d, [{ id: "bd-x", title: "X", description: desc, priority: 2 }]);
   const r = runImportBeads({ directory: d, actor: ME });
   const s = runShow({ directory: d, id: r.created[0]!.id, full: true, actor: ME });
-  assert.ok(s.description!.includes(desc));
+  assert.equal(s.description, desc.split("\n").map((l) => (l === "" ? "" : `    ${l}`)).join("\n"));
   assert.deepEqual(s.acceptance, []);
   assert.equal(s.log_total, 2);
   assert.equal(runDoctor({ directory: d }).findings.length, 0);
@@ -227,5 +227,52 @@ test("created_at 在未来（时钟错了）：用导入时刻，updated 不早�
   const s = runShow({ directory: d, id: r.created[0]!.id, actor: ME });
   assert.ok(s.created <= s.updated);
   assert.notEqual(s.created, "2999-01-01T00:00:00Z");
+  assert.equal(runDoctor({ directory: d }).findings.length, 0);
+});
+
+test("discovered-from 的目标建得晚（priority 更低）也记下 from=（F20 评审：真实导出里丢了 15%）", () => {
+  const d = repo();
+  beads(d, [
+    { id: "bd-1", title: "Found while working", priority: 0, dependencies: [dep("bd-1", "bd-2", "discovered-from")] },
+    { id: "bd-2", title: "The original", priority: 3 },
+  ]);
+  const r = runImportBeads({ directory: d, actor: ME });
+  const id = (b: string) => r.created.find((t) => t.beads_id === b)!.id;
+  const created = runShow({ directory: d, id: id("bd-1"), full: true, actor: ME }).log[0]!;
+  assert.ok("args" in created && created.args["from"] === id("bd-2"));
+  assert.deepEqual(r.warnings, []);
+  // rank 仍按 priority：bd-1 在前
+  assert.deepEqual(runLs({ directory: d, all: true, actor: ME }).tasks.map((t) => t.id), [id("bd-1"), id("bd-2")]);
+});
+
+test("discovered-from 与 parent 合起来成环：丢掉 from 并计数、警告说清楚是哪种引用", () => {
+  const p = planBeadsImport([
+    { id: "a", title: "A", priority: 1, dependencies: [dep("a", "b", "parent-child")] },
+    { id: "b", title: "B", priority: 1, dependencies: [dep("b", "a", "discovered-from")] },
+  ] as BeadsIssue[], new Set(), () => true);
+  assert.equal(p.dropped.fromEdges, 1, "丢的是 from，不是 parent");
+  assert.equal(p.dropped.cycleEdges, 0);
+  assert.match(p.warnings.join("\n"), /reference to .* cannot be kept: together with the other references it forms a loop/);
+  assert.doesNotMatch(p.warnings.join("\n"), /cycle in Beads/);
+});
+
+test("标题：全是空白的用占位标题；150 个 emoji 按校验器的口径截断、不劈开代理对（F20 评审）；doctor 通过", () => {
+  const d = repo();
+  const emoji = "\u{1F600}".repeat(150);
+  beads(d, [{ id: "bd-blank", title: "   ", priority: 1 }, { id: "bd-emoji", title: emoji, priority: 1 }]);
+  const r = runImportBeads({ directory: d, actor: ME });
+  const t = (b: string) => r.created.find((x) => x.beads_id === b)!;
+  assert.equal(t("bd-blank").title, "Untitled Beads issue bd-blank");
+  const e = t("bd-emoji").title;
+  assert.ok(e.length <= 200 && e.endsWith("\u2026"));
+  assert.ok(!/[\ud800-\udbff]\u2026$/.test(e), "没劈开代理对");
+  assert.equal(runDoctor({ directory: d }).findings.length, 0);
+});
+
+test("描述里只有 setext 下划线（=======，像冲突标记、但不是二级标题）：也缩进，doctor 通过（F20 评审）", () => {
+  const d = repo();
+  beads(d, [{ id: "bd-s", title: "S", description: "Overview\n=======\nstuff", priority: 2 }]);
+  const r = runImportBeads({ directory: d, actor: ME });
+  assert.equal(runShow({ directory: d, id: r.created[0]!.id, actor: ME }).description, "    Overview\n    =======\n    stuff");
   assert.equal(runDoctor({ directory: d }).findings.length, 0);
 });

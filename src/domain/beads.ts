@@ -15,6 +15,7 @@
 //   - 建的顺序是 parent 与 blocked_by 的拓扑序（引用必须先存在，spec §6.2 不变量 4）；成环的边丢掉并警告。
 
 import { LABEL_RE } from "./types.ts";
+import { truncateTitle } from "./import-plan.ts";
 
 /** Beads Issue 里我们用到的字段（其余忽略）。 */
 export type BeadsIssue = {
@@ -60,7 +61,7 @@ export type BeadsPlan = {
   /** 建的顺序（拓扑序） */
   tasks: BeadsPlanned[];
   skipped: { tombstone: number; ephemeral: number; existing: number };
-  dropped: { danglingEdges: number; otherEdgeTypes: number; cycleEdges: number; extraParents: number; comments: number };
+  dropped: { danglingEdges: number; otherEdgeTypes: number; cycleEdges: number; fromEdges: number; extraParents: number; comments: number };
   warnings: string[];
 };
 
@@ -101,22 +102,23 @@ export function utcSeconds(ts: string | undefined): string | undefined {
 
 function titleOf(raw: string): { title: string; overflow?: string } {
   const one = raw.replace(/\s+/g, " ").trim();
-  const chars = [...one];
-  if (chars.length <= MAX_TITLE) return { title: one, overflow: one === raw ? undefined : raw };
-  return { title: `${chars.slice(0, MAX_TITLE - 1).join("")}…`, overflow: raw };
+  if (one.length <= MAX_TITLE) return { title: one, overflow: one === raw ? undefined : raw };
+  return { title: truncateTitle(one), overflow: raw };
 }
 
 /**
  * 「这段文字原样放进 Description 会不会改变正文的读法」：Beads 的描述里常有顶格的 `## Current State`，放进去就成了一个
  * 新小节、把描述截断；没闭合的代码围栏会吞掉后面的 Log。判据由调用方注入（与写入端同一份 CommonMark 判定），
- * 不安全就整段放进围栏代码块，原文一个字不改。
+ * 不安全就整段缩进成代码块，原文一个字不改（只多了缩进）。
  */
 export type SafeText = (text: string) => boolean;
 
-function fenced(text: string): string {
-  const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
-  const fence = "`".repeat(longest + 1);
-  return `${fence}text\n${text}\n${fence}`;
+/**
+ * 缩进代码块：每个非空行缩进四格。不用围栏：像冲突标记的行（`=======`，setext 标题的下划线就是这样）在围栏里照样顶格，
+ * 照样触发不变量 7（F20 评审）；缩进之后没有任何一行从行首开始，顶格的 `##`、没闭合的围栏、冲突标记一并失效。
+ */
+function indented(text: string): string {
+  return text.split("\n").map((l) => (l === "" ? "" : `    ${l}`)).join("\n");
 }
 
 function descriptionOf(i: BeadsIssue, overflowTitle: string | undefined, safe: SafeText): string | undefined {
@@ -128,12 +130,12 @@ function descriptionOf(i: BeadsIssue, overflowTitle: string | undefined, safe: S
   }
   if (parts.length === 0) return undefined;
   const text = parts.join("\n\n").replace(/\r\n?/g, "\n").trim();
-  return safe(text) ? text : fenced(text);
+  return safe(text) ? text : indented(text);
 }
 
 export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<string>, safe: SafeText): BeadsPlan {
   const skipped = { tombstone: 0, ephemeral: 0, existing: 0 };
-  const dropped = { danglingEdges: 0, otherEdgeTypes: 0, cycleEdges: 0, extraParents: 0, comments: 0 };
+  const dropped = { danglingEdges: 0, otherEdgeTypes: 0, cycleEdges: 0, fromEdges: 0, extraParents: 0, comments: 0 };
   const warnings: string[] = [];
 
   const kept: BeadsIssue[] = [];
@@ -171,7 +173,9 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
     }
     dropped.comments += Array.isArray(i.comments) ? i.comments.length : 0;
 
-    const { title, overflow } = titleOf(typeof i.title === "string" ? i.title : "");
+    const raw = typeof i.title === "string" ? i.title : "";
+    // 空标题（或全是空白）写不成 todopi 任务（spec §5.2）：用占位标题，原文照样进描述
+    const { title, overflow } = raw.trim() === "" ? { title: `Untitled Beads issue ${i.id}`, overflow: undefined } : titleOf(raw);
     const labels: string[] = [];
     for (const raw of [...(i.issue_type ? [i.issue_type] : []), ...(i.labels ?? [])]) {
       const l = typeof raw === "string" ? normalizeLabel(raw) : null;
@@ -198,15 +202,21 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
     const t = planned.get(id);
     if (t === undefined || state.get(id) === 2) return;
     state.set(id, 1);
-    const edges: [string, () => void][] = [
-      ...(t.parent !== undefined ? [[t.parent, () => { t.parent = undefined; }] as [string, () => void]] : []),
-      ...t.blockedBy.map((b) => [b, () => { t.blockedBy = t.blockedBy.filter((x) => x !== b); }] as [string, () => void]),
+    // from= 也要先建目标：created 那行写下就不能再改，目标晚建就只能省掉（F20 评审：真实导出里丢了 15%）
+    const edges: [string, "parent" | "blocks" | "from", () => void][] = [
+      ...(t.parent !== undefined ? [[t.parent, "parent", () => { t.parent = undefined; }] as [string, "parent", () => void]] : []),
+      ...t.blockedBy.map((b) => [b, "blocks", () => { t.blockedBy = t.blockedBy.filter((x) => x !== b); }] as [string, "blocks", () => void]),
+      ...(t.from !== undefined ? [[t.from, "from", () => { t.from = undefined; }] as [string, "from", () => void]] : []),
     ];
-    for (const [target, drop] of edges) {
+    for (const [target, kind, drop] of edges) {
       if (state.get(target) === 1) {
+        // 回边：parent、blocks、from 三种引用合起来成了环，没有一个建的顺序能让它们都先存在。规格只要求 parent 与
+        // blocked_by 各自无环（F20 评审），所以这不一定是 Beads 里的环——说清楚是哪种引用、为什么丢
         drop();
-        dropped.cycleEdges += 1;
-        warnings.push(`${id} -> ${target} closes a cycle in Beads; dropped`);
+        if (kind === "from") dropped.fromEdges += 1;
+        else dropped.cycleEdges += 1;
+        warnings.push(`${id}: its ${kind === "from" ? "discovered-from" : kind === "parent" ? "parent" : "blocks"} reference to ${target} `
+          + "cannot be kept: together with the other references it forms a loop, so no creation order has both tasks exist first; dropped");
         continue;
       }
       visit(target);

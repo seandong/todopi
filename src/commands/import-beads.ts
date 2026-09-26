@@ -13,18 +13,20 @@ import { withLockConflictMapped } from "./claim.ts";
 import { sourceFor } from "./import.ts";
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
-import { createTaskUnlocked, nowStamp, withLedgerLock } from "../format/write.ts";
-import { nextRank } from "../format/emit.ts";
+import { candidateFor, createTaskUnlocked, nowStamp, withLedgerLock } from "../format/write.ts";
+import { nextRank, type NewTask } from "../format/emit.ts";
 import { structure } from "../markdown/sections.ts";
 import { planBeadsImport, type BeadsIssue } from "../domain/beads.ts";
 import { sectionLines } from "../domain/acceptance.ts";
-import { validateWrite } from "../domain/validate.ts";
+import { validateFile, validateWrite } from "../domain/validate.ts";
 import type { TaskFile } from "../domain/types.ts";
 import type { ImportBeadsReport } from "../output/dto/import-beads.ts";
 import { EXIT, CliError } from "../exit.ts";
 
-/** 原样放进 Description 不会改变正文的读法：没有顶层二级标题、没有没闭合的块（与 add 的判据同一份）。 */
+/** 原样放进 Description 不会改变正文的读法：没有顶层二级标题、没有没闭合的块（与 add 的判据同一份），也没有像冲突标记的行。 */
 function safeText(text: string): boolean {
+  // 像冲突标记的行（setext 标题的 `=======` 下划线就是）会触发不变量 7（F20 评审）
+  if (/^(<<<<<<<|=======|>>>>>>>)/m.test(text)) return false;
   const st = structure(text.split("\n"));
   return st.h2.size === 0 && st.reparsedAt < 0;
 }
@@ -98,19 +100,18 @@ export function runImportBeads(opts: { directory: string; path?: string; actor?:
     for (let n = 0; n < plan.tasks.length; n++) { last = nextRank(last); rankAt.push(last); }
 
     const now = nowStamp();
-    for (const t of plan.tasks) {
-      const from = t.from === undefined ? undefined : idOf.get(t.from);
-      const createdAt = t.created !== undefined && t.created <= now ? t.created : now;
-      const task = createTaskUnlocked(ledger, (ctx) => ({
-        id: ctx.newId(),
+    const newTask = (t: typeof plan.tasks[number], id: string, resolveRef: (beadsId: string) => string | undefined): NewTask => {
+      const from = t.from === undefined ? undefined : resolveRef(t.from);
+      return {
+        id,
         title: t.title,
         status: t.status,
         resolution: t.resolution,
         rank: rankAt[t.order]!,
-        created: createdAt,
+        created: t.created !== undefined && t.created <= now ? t.created : now,
         updated: now,
-        parent: t.parent === undefined ? undefined : idOf.get(t.parent),
-        blocked_by: t.blockedBy.map((b) => idOf.get(b)!),
+        parent: t.parent === undefined ? undefined : resolveRef(t.parent),
+        blocked_by: t.blockedBy.map((b) => resolveRef(b)!),
         labels: t.labels,
         external: { beads: { id: t.beadsId } },
         description: t.description,
@@ -118,7 +119,29 @@ export function runImportBeads(opts: { directory: string; path?: string; actor?:
           `${now} ${actor} created source=${source}${from !== undefined ? ` from=${from}` : ""}`,
           `${now} ${actor} imported source=${source} system=beads: ${t.note.replace(/\s+/g, " ")}`,
         ],
-      }), (candidate, all) => validateWrite(candidate, all) ?? readsBack(candidate, t.description), known);
+      };
+    };
+
+    // 预检：写第一个文件之前确认每一个都写得下去（文件级的不变量、描述读回）。有一个不行就整体拒绝并点名 Beads id——
+    // 中途失败会留下半个导入，而重新导入会停在同一处（F20 评审）。引用用占位 id：图关系由拓扑序保证。
+    // 纵深防御：评审找出的两个触发输入（150 个 emoji 的标题、setext 的 `=======`）已在映射里修掉，现在造不出能到达这里
+    // 的公开输入，所以没有专门的用例；修之前它实测拦下了 emoji 标题、一个文件都没写。
+    const placeholder = `${ledger.config.id_prefix}-000000`;
+    const problems: string[] = [];
+    for (const t of plan.tasks) {
+      const c = candidateFor(newTask(t, placeholder, () => placeholder));
+      const why = typeof c === "string" ? c
+        : validateFile(c).map((f) => `${f.rule}: ${f.message}`).join("; ") || readsBack(c, t.description);
+      if (why) problems.push(`${t.beadsId}: ${why}`);
+    }
+    if (problems.length > 0) {
+      throw new CliError(EXIT.usage, `${problems.length} Beads issue${problems.length === 1 ? "" : "s"} cannot be written as todopi tasks; `
+        + `nothing was imported.\n${problems.slice(0, 10).map((p) => `  ${p}`).join("\n")}${problems.length > 10 ? "\n  ..." : ""}`);
+    }
+
+    for (const t of plan.tasks) {
+      const task = createTaskUnlocked(ledger, (ctx) => newTask(t, ctx.newId(), (b) => idOf.get(b)),
+        (candidate, all) => validateWrite(candidate, all) ?? readsBack(candidate, t.description), known);
       idOf.set(t.beadsId, task.idFromFilename);
       created.push({
         id: task.idFromFilename, beads_id: t.beadsId, title: t.title, status: t.status,
@@ -131,7 +154,8 @@ export function runImportBeads(opts: { directory: string; path?: string; actor?:
     skipped: { tombstone: plan.skipped.tombstone, ephemeral: plan.skipped.ephemeral, already_imported: plan.skipped.existing },
     dropped: {
       dangling_edges: plan.dropped.danglingEdges, other_edge_types: plan.dropped.otherEdgeTypes,
-      cycle_edges: plan.dropped.cycleEdges, extra_parents: plan.dropped.extraParents, comments: plan.dropped.comments,
+      cycle_edges: plan.dropped.cycleEdges, from_edges: plan.dropped.fromEdges, extra_parents: plan.dropped.extraParents,
+      comments: plan.dropped.comments,
     },
     warnings: plan.warnings,
   };

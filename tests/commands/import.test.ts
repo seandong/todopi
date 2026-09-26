@@ -280,3 +280,13 @@ test("同名序号与标题里本来就有的 #n 不会撞（F19 评审）", () 
   assert.deepEqual(r.created.map((t) => t.title), ["A#2", "A", "A"]);
   assert.equal(runImport({ directory: d, file: join(d, "p.md"), actor: ME }).created.length, 0);
 });
+
+test("标题按校验器的口径（UTF-16 长度）截断：150 个 emoji 的条目能导入、doctor 通过（F20 评审发现 F19 同病）", () => {
+  const d = repo();
+  const emoji = "\u{1F600}".repeat(150);
+  const r = runImport({ directory: d, file: plan(d, "p.md", `- [ ] ${emoji}\n`), actor: ME });
+  assert.equal(r.created.length, 1);
+  assert.ok(r.created[0]!.title.length <= 200);
+  assert.equal(runShow({ directory: d, id: r.created[0]!.id, actor: ME }).description, emoji);
+  assert.equal(runDoctor({ directory: d }).findings.length, 0);
+});

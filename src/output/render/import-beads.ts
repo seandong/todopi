@@ -22,7 +22,8 @@ export function renderImportBeads(r: ImportBeadsReport): string {
     d.other_edge_types > 0 ? `${d.other_edge_types} dependencies of types todopi does not have (related, supersedes, ...)` : "",
     d.dangling_edges > 0 ? `${d.dangling_edges} dependencies on issues that were not imported` : "",
     d.extra_parents > 0 ? `${d.extra_parents} extra parents` : "",
-    d.cycle_edges > 0 ? `${d.cycle_edges} dependencies that closed a cycle` : "",
+    d.cycle_edges > 0 ? `${d.cycle_edges} dependencies that formed a loop with other references` : "",
+    d.from_edges > 0 ? `${d.from_edges} discovered-from links that formed a loop` : "",
     d.comments > 0 ? `${d.comments} comments` : "",
   ].filter(Boolean);
   if (dropped.length > 0) lines.push(`Not carried over: ${dropped.join("; ")}.`);
