@@ -9,7 +9,8 @@
 //
 // 做法：造一个账本，让每个会进输出的自由文本字段都带 ESC、BEL、换行（多行 verify 里藏一行伪造的任务），
 // 把 prime（默认、--full）与 handoff（--check、真的写）各跑文本与 --json 两遍：
-//   - commands：文本里每个 `todopi <子命令> …`（空白规范化之后）都出现在 JSON 的某个字符串里；文本里
+//   - commands：文本里每一段以 `todopi` 起头、到反引号 / 右括号 / 换行为止的文字（空白规范化之后），
+//     连同那个分隔符都出现在 JSON 的某个字符串里；文本里
 //     每一行 `- tp-…` / `## tp-…` 的 id 都是 JSON 里的 id，紧跟着的是 JSON 里这个 id 的标题，且行数不多于
 //     JSON 里这个 id 的对象数。
 //   **它不证明**文本是 DTO 的纯函数：渲染层自己拼出的普通文字（标签、标点）它不核对——那靠「渲染只
@@ -80,12 +81,14 @@ const problems = [];
 for (const r of runs) {
   const all = strings(r.json);
   if (mode === "commands") {
-    // 空白先规范化（`todopi  show` 在 shell 里就是 `todopi show`，评审七轮），再连同紧跟的那个字符一起比：
-    // `todopi show` 是 JSON 里 `todopi show tp-x` 的子串，只比命令本身会放过一条现拼的不完整命令。
+    // **不猜命令的语法**：从 `todopi` 起，一直取到下一个反引号、右括号或换行（或文末），整段连同那个
+    // 分隔符都要出现在 JSON 的某个字符串里。前两版按「`todopi` + 子命令 + 选项」的形状去认，先后被
+    // 两个空格（评审七轮）与前置的全局选项 `todopi --json show …`（评审八轮）绕过——又一次用字符形状
+    // 近似一个需要真解析的判断。空白先规范化（`todopi  show` 在 shell 里就是 `todopi show`）。
     const text = squash(r.text), json = all.map(({ s }) => squash(s));
-    for (const m of text.matchAll(/todopi [a-z][a-z-]*(?: (?:--?[a-z-]+|tp-[0-9a-z]+|<[^>]*>))*/g)) {
-      const cmd = m[0], next = text[m.index + cmd.length] ?? "";
-      if (!json.some((s) => s === cmd || s.includes(cmd + next))) problems.push(`${r.name}: 文本里的「${cmd}」不在 JSON 里`);
+    for (const m of text.matchAll(/\btodopi[ \t][^`)\n]*/g)) {
+      const cmd = m[0].trimEnd(), next = text[m.index + m[0].length] ?? "";
+      if (!json.some((s) => s === cmd || s.includes(m[0] + next))) problems.push(`${r.name}: 文本里的「${cmd}」不在 JSON 里`);
     }
     // 任务行：id 后面紧跟的必须是 JSON 里这个 id 的标题；同一个 id 的行数不能多于 JSON 里的对象数
     // （评审七轮：借一个真 id 就能伪造出标题任意的一行）。
