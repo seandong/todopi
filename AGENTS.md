@@ -24,7 +24,9 @@ todopi 管自己的开发任务。技术栈：TypeScript + Bun 编译
 
 - **格式规格是 normative。** 修改 `spec/todopi-format-v1.md` 的 MUST / MUST NOT
   条款，MUST 同步 `version` 与迁移说明；已发布的 v1 语义 MUST NOT 静默变更。
-  source: `spec/todopi-format-v1.md` §1；why: 第三方要能不依赖本 CLI 实现该格式。
+  首个发布之前，填补 v1 空白的修订记在规格 §9.1（写明改了什么、迁移说明），不升 `version`；
+  发布之后一律按 §9 升版（用户决定，2026-09-26，F10 第十轮评审）。
+  source: `spec/todopi-format-v1.md` §1、§9.1；why: 第三方要能不依赖本 CLI 实现该格式。
 - **12 字段上限。** frontmatter MUST NOT 新增字段，扩展一律走 `external` 映射。
   source: `spec/todopi-format-v1.md` §5.2；why: 格式小本身就是产品承诺。
 - **v0.1 零网络。** 源码 MUST NOT 发起网络请求，MUST NOT 上报遥测。

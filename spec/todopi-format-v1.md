@@ -1,6 +1,6 @@
 # The `.todopi/` Format, Version 1
 
-Status: Stable · 2026-09-16
+Status: Stable · 2026-09-16 · revised 2026-09-26 (see §9.1)
 Applies to: `version: 1` in `.todopi/config.yml`
 
 This document specifies the on-disk format that todopi reads and writes. It is written so that a third-party tool can read and write a `.todopi/` directory without the todopi CLI. The key words MUST, MUST NOT, SHOULD, and MAY are to be interpreted as described in RFC 2119.
@@ -134,7 +134,7 @@ What counts as one of those headings is determined by [CommonMark](https://spec.
 
 One deliberate exception to CommonMark: a block that is **not ended by a terminator its author wrote** must not hide what follows it. Under CommonMark three kinds of block can swallow later lines that would otherwise start a heading or list item: a fenced code block (ended by a closing fence, else runs to the end of the body), an HTML block of CommonMark kinds 1–5 (`<pre`, `<script`, `<style`, `<textarea`, `<!--`, `<?`, `<!` + letter, `<![CDATA[`; ended by its end marker, else runs to the end), and an HTML block of kinds 6–7 (any other tag; ended only by a blank line). Readers MUST treat the opening line of such a block as plain text — a fenced or kind 1–5 block with no closing fence or end marker, or a kind 6–7 block whose lines include one that begins an ATX heading or a list item — and parse again, so that later sections, criteria and Log entries stay visible. Writers MUST NOT rewrite the content of any section in such a body, including appending a Log entry.
 
-(Clarification, 2026-09-25. Earlier text said only "exactly and case-sensitively", which left headings inside code blocks undefined. For a body with no code blocks, HTML blocks, block quotes or nested headings, nothing changes; per §9 this does not change the version.)
+(Revised 2026-09-26; see §9.1 for what changed and why the version did not.)
 
 ```
 ## Description
@@ -370,6 +370,14 @@ Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.
 - Additive changes (new optional frontmatter keys, new Log verbs, new recognized sections, new config keys) do not change the version; v1 readers already tolerate them.
 - Any change that alters the meaning of an existing key, adds a required key, or changes derived-state rules increments the version.
 - A reader MUST refuse to write a `.todopi/` whose `version` is greater than the highest it implements, and SHOULD still read it.
+
+### 9.1 Revisions of version 1
+
+The version number protects files and implementations that exist. Until the first release of a tool implementing this document, revisions that fill gaps in version 1 are recorded here instead of incrementing the version; after that, §9 applies without exception.
+
+**2026-09-26** — §5.3 (body structure). The 2026-09-16 text said the four headings are recognized "exactly and case-sensitively" and left undefined: headings inside code blocks, HTML blocks and containers; repeated headings; code fences and HTML blocks that are never closed. This revision defines them: section headings and top-level list items are located by CommonMark; setext headings are not section headings; repeated `## Acceptance Criteria` sections are all read; a block not ended by a terminator its author wrote does not hide what follows it, and writers do not rewrite a body containing one.
+
+Migration: none. A body that uses none of those constructs reads exactly as before. A body that uses them had no defined meaning; under this revision every change of reading is in the stricter direction — more criteria are seen, never fewer — so no task that was correctly closed becomes invalid, and doctor reports nothing new for it. No file needs to be rewritten.
 
 ## 10. Complete example
 
