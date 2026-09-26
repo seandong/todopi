@@ -2072,3 +2072,26 @@ Node 用 spec reporter，整层被判 blocked。
   专用的扩展注册一个 echo provider——它把收到的系统提示里的相关行原样回答。这样压缩、事件、扩展、系统提示全走 pi 的真实
   代码路径，不联网、确定。它证明「todopi 的内容进了 pi 发给模型的系统提示」；「真模型会读系统提示」不在我们的边界内。
   （回头看，OpenCode 的压缩后注入也许能用同样的办法验证——插件 SDK 同样支持自定义 provider；记在 tp-1ssqrw。）
+
+## D038 — Cursor / Gemini：不在压缩前「交给摘要」，改用始终在的上下文与下一轮前注入
+
+- 日期：2026-09-26（F17）。事实与实测见 PRD §17；FR-A2a 随之改写（规格在发布前修订，不升版本）。
+- FR-A2a 原方案是在 `preCompact` / `PreCompress` 把 prime 输出交给待生成的摘要。两家的一手来源都否定了它：Cursor 的
+  preCompact 只能观察；Gemini 的压缩服务不用 PreCompress 的返回值。验收标准 #7 / #8 按事实改写。
+- **Cursor**：会话开始用 `sessionStart` 的 `additional_context`；压缩后没有钩子可用（beforeSubmitPrompt 不能注入），靠
+  `alwaysApply: true` 的规则文件——它也是 FR-A2b 要的回退。规则文件是静态指针，不是 prime 的输出（内容会过期）。
+  hooks.json 是另一种结构（`{version: 1, hooks: {事件: [{command}]}}`），单独的合并器，判据仍按 D035：只认标准形状
+  `{command}`（可带正数 timeout），别的原样保留。规则文件的标记放在 frontmatter 的 description 行（第二行），
+  generated-file 的标记行号因此参数化。用户级规则不是文件，`--user` 只写钩子。
+- **Gemini**：`PreCompress` 只能打标记；`BeforeAgent` 每轮开头取标记、有就注入。只装 `manual` 的 PreCompress：自动的
+  PreCompress 在每次「尝试」时都触发，据它打标记等于每轮注入。自动压缩之后，靠系统指令里的 AGENTS.md 协议行——所以
+  setup 同时确保 `context.fileName` 含 AGENTS.md（保留 GEMINI.md）。这是与 Claude / Codex / pi 不等价的地方，写明，不掩饰。
+- 标记是运行时状态，与 prime 记录同目录、同键（会话 id，没有就 actor），不进 `.todopi/`。
+- `--hook` 的项目目录：没用 `-C` 时取 Cursor 载荷的 `workspace_roots[0]`（用户级钩子不在项目里运行）。只认这一个字段，
+  别家的钩子本来就在项目里运行。
+- **验证方式**：Gemini 用本地假 API 服务器（`GOOGLE_GEMINI_BASE_URL`）记录请求体，在真实 Gemini 运行时里看注入落在哪——
+  与 D037 的 echo provider 同一个思路，不联网、不需要凭据。Cursor 需要登录，实机验证拆出。
+- 评审（F17）：`context: null` 当成缺失会覆盖用户的显式值——改为拒绝；多根工作区的账本不一定在第一个根——取第一个
+  找得到账本的根。评审还要求把 Gemini 运行时验证做成自动门禁：没做，`/compress` 要交互式终端，与 F14–F16 一样手工实测、
+  记在 PRD §17；假服务器进了 `tools/probes/`，让这次实测可以照做。
+

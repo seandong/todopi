@@ -13,7 +13,8 @@ import { EXIT, CliError } from "../exit.ts";
 
 export type GeneratedFileResult = "created" | "updated" | "unchanged";
 
-export function ensureGeneratedFile(path: string, content: string, marker: string): GeneratedFileResult {
+/** `markerLine`：标记在第几行（从 0 起）。Cursor 的 .mdc 第一行必须是 frontmatter 的 `---`，标记放在第二行。 */
+export function ensureGeneratedFile(path: string, content: string, marker: string, markerLine = 0): GeneratedFileResult {
   const link = lstatOrNull(path);
   if (link?.isSymbolicLink() === true) throw new CliError(EXIT.usage, `${path} is a symbolic link; left untouched.`);
   if (link === null) {
@@ -23,8 +24,8 @@ export function ensureGeneratedFile(path: string, content: string, marker: strin
   }
   const current = readFileSync(path, "utf8");
   if (current === content) return "unchanged";
-  if (current.split("\n", 1)[0] !== marker) {
-    throw new CliError(EXIT.usage, `${path} exists and its first line is not todopi's marker, so it is not ours; left untouched. Move it aside, then run setup again.`);
+  if (current.split("\n")[markerLine] !== marker) {
+    throw new CliError(EXIT.usage, `${path} exists and it does not carry todopi's marker line, so it is not ours; left untouched. Move it aside, then run setup again.`);
   }
   writeFileAtomic(path, content, lstatSync(path).mode);
   return "updated";

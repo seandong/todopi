@@ -17,7 +17,8 @@ import { dirname } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { EXIT, CliError } from "../exit.ts";
 
-export type HookList = readonly (readonly [event: string, command: string])[];
+/** 第三项是组的 matcher：不给就是「匹配全部」的标准组；给了就只认 matcher 恰好等于它的组（Gemini 的 PreCompress）。 */
+export type HookList = readonly (readonly [event: string, command: string, matcher?: string])[];
 
 export const CLAUDE_HOOKS: HookList = [
   ["SessionStart", "todopi prime --hook"],
@@ -30,6 +31,21 @@ export const CLAUDE_HOOKS: HookList = [
  * 所以只装 SessionStart（PRD §17）。
  */
 export const CODEX_HOOKS: HookList = CLAUDE_HOOKS;
+
+/**
+ * Gemini CLI（0.26.0 源码为准，D038）：settings.json 的钩子结构与 Claude 同构，但注入要以 JSON 返回
+ * `hookSpecificOutput.additionalContext`；没有「压缩后」事件，PreCompress 的返回值被压缩服务丢弃——所以压缩前只打标记，
+ * 下一轮之前的 BeforeAgent 取走标记、重新注入（它的 additionalContext 追加进这一轮的请求）。
+ * PreCompress 在每一次**尝试**时都触发，包括没到阈值、根本不压缩的自动检查（历史非空就每轮一次）；只有 `manual`
+ * （/compress，强制压缩）一定真压缩了。所以这一组限定 matcher `manual`（对 PreCompress，matcher 与 trigger 精确
+ * 比较）。自动压缩没有可靠的信号：靠系统指令里的 AGENTS.md 协议行「察觉到被压缩就跑 todopi prime」。
+ */
+export const GEMINI_HOOKS: HookList = [
+  ["SessionStart", "todopi prime --hook --hook-json gemini:SessionStart"],
+  ["PreCompress", "todopi prime --hook --mark-compacted", "manual"],
+  ["BeforeAgent", "todopi prime --hook --if-compacted --hook-json gemini:BeforeAgent"],
+  ["SessionEnd", "todopi handoff --check --hook"],
+];
 
 export type SettingsResult = { status: "created" | "updated" | "unchanged"; notes: string[] };
 
@@ -52,8 +68,9 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
  *     `statusMessage`（字符串）。带 `if`（非工具事件上永不运行）、`async`（输出不进上下文）或任何陌生键的不算。
  * **不校验用户别的钩子**：那是 Claude Code 的事，我们只往数组末尾加一组，不会让它们变得更糟（D035）。
  */
-function isOurGroup(g: unknown, command: string): boolean {
-  if (!isObject(g) || !(g["matcher"] === undefined || g["matcher"] === "" || g["matcher"] === "*")) return false;
+function isOurGroup(g: unknown, command: string, matcher?: string): boolean {
+  if (!isObject(g)) return false;
+  if (matcher !== undefined ? g["matcher"] !== matcher : !(g["matcher"] === undefined || g["matcher"] === "" || g["matcher"] === "*")) return false;
   return Array.isArray(g["hooks"]) && g["hooks"].some((h) => isObject(h) && h["type"] === "command" && h["command"] === command
     && Object.keys(h).every((k) => ["type", "command", "timeout", "statusMessage"].includes(k))
     && (h["timeout"] === undefined || (typeof h["timeout"] === "number" && h["timeout"] > 0))
@@ -61,8 +78,8 @@ function isOurGroup(g: unknown, command: string): boolean {
 }
 
 /** 用户自己限定过的同名组：不算装好，也不改它；提示一下它可能与我们的组重复注入。 */
-function isNarrowedCopy(g: unknown, command: string): boolean {
-  return isObject(g) && Array.isArray(g["hooks"]) && !isOurGroup(g, command)
+function isNarrowedCopy(g: unknown, command: string, matcher?: string): boolean {
+  return isObject(g) && Array.isArray(g["hooks"]) && !isOurGroup(g, command, matcher)
     && g["hooks"].some((h) => isObject(h) && h["command"] === command);
 }
 
@@ -75,7 +92,8 @@ export function ensureClaudeHooks(path: string): SettingsResult {
 }
 
 /** Claude Code 与 Codex 共用：往它们的 hooks JSON 里合并 `list` 里的钩子。 */
-export function ensureHookConfig(path: string, list: HookList): SettingsResult {
+export function ensureHookConfig(path: string, list: HookList,
+  extra?: (settings: Record<string, unknown>) => boolean): SettingsResult {
   // 用 lstat 判断存在：existsSync 对悬空符号链接返回 false，会把链接本身当空位替换掉（F15 评审）。
   const link = lstatOrNull(path);
   if (link?.isSymbolicLink() === true) refuse(path, "is a symbolic link (replacing it would break the link)");
@@ -103,20 +121,94 @@ export function ensureHookConfig(path: string, list: HookList): SettingsResult {
 
   const notes: string[] = [];
   let changed = false;
-  for (const [event, command] of list) {
+  for (const [event, command, matcher] of list) {
     if (event in hooks && !Array.isArray(hooks[event])) refuse(path, `hooks.${event} is not a list`);
     const groups: unknown[] = Array.isArray(hooks[event]) ? hooks[event] : [];
-    if (groups.some((g) => isOurGroup(g, command))) continue;
-    hooks[event] = [...groups, { hooks: [{ type: "command", command }] }];
+    if (groups.some((g) => isOurGroup(g, command, matcher))) continue;
+    const group = { hooks: [{ type: "command", command }] };
+    hooks[event] = [...groups, matcher === undefined ? group : { matcher, ...group }];
     changed = true;
-    if (groups.some((g) => isNarrowedCopy(g, command))) {
+    if (groups.some((g) => isNarrowedCopy(g, command, matcher))) {
       notes.push(`${path}: an existing ${event} group also runs \`${command}\` but with a matcher or extra settings; `
         + "left as you configured it and added the standard group. If both match, it runs twice — remove one.");
     }
   }
+  if (extra !== undefined && extra(settings)) changed = true;
   if (!changed) return { status: "unchanged", notes };
   settings["hooks"] = hooks;
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(path, `${JSON.stringify(settings, null, 2)}\n`, mode);
   return { status: existed ? "updated" : "created", notes };
+}
+
+/**
+ * Gemini CLI 默认只读 GEMINI.md；协议段在 AGENTS.md 里（init 写的）。确保 `context.fileName` 含 AGENTS.md——
+ * 没设过就设成 ["AGENTS.md", "GEMINI.md"]（保留默认的 GEMINI.md），是字符串或数组就补上。上下文文件进系统指令，
+ * 活过压缩；协议里「察觉到被压缩就跑 todopi prime」因此一直在（D038）。
+ */
+function includeAgentsMd(path: string): (settings: Record<string, unknown>) => boolean {
+  return (settings) => {
+    // 缺失与显式 null 不是一回事（与 hooks 同理，F17 评审）。
+    const context = "context" in settings ? settings["context"] : {};
+    if (!isObject(context)) refuse(path, "has a \"context\" entry that is not an object");
+    const names = context["fileName"];
+    let next: string[];
+    if (names === undefined) next = ["AGENTS.md", "GEMINI.md"];
+    else if (typeof names === "string") next = [names, "AGENTS.md"];
+    else if (Array.isArray(names) && names.every((n) => typeof n === "string")) next = names.includes("AGENTS.md") ? names : [...names, "AGENTS.md"];
+    else refuse(path, "has a context.fileName that is neither a string nor a list of strings");
+    if (JSON.stringify(next) === JSON.stringify(names) || (typeof names === "string" && names === "AGENTS.md")) return false;
+    settings["context"] = { ...context, fileName: next };
+    return true;
+  };
+}
+
+export function ensureGeminiSettings(path: string): SettingsResult {
+  return ensureHookConfig(path, GEMINI_HOOKS, includeAgentsMd(path));
+}
+
+/**
+ * Cursor 的 hooks.json 结构不同（官方文档）：`{"version": 1, "hooks": {"<事件>": [{"command": …}]}}`，没有 matcher 组。
+ * sessionStart 的 `additional_context` 进初始上下文。preCompact 只能观察（不能改摘要）、beforeSubmitPrompt 不能注入——
+ * 压缩后的指针靠始终生效的规则文件（D038）。判据与 D035 同：只认标准形状 `{command}`（只允许 timeout），别的原样保留。
+ */
+export const CURSOR_HOOKS: HookList = [
+  ["sessionStart", "todopi prime --hook --hook-json cursor"],
+  ["sessionEnd", "todopi handoff --check --hook"],
+];
+
+export function ensureCursorHooks(path: string): SettingsResult {
+  const link = lstatOrNull(path);
+  if (link?.isSymbolicLink() === true) refuse(path, "is a symbolic link (replacing it would break the link)");
+  let settings: Record<string, unknown> = { version: 1, hooks: {} };
+  let mode: number | undefined;
+  if (link !== null) {
+    const bytes = readFileSync(path);
+    const text = bytes.toString("utf8");
+    if (!bytes.equals(Buffer.from(text, "utf8"))) refuse(path, "is not valid UTF-8");
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); } catch (err) { refuse(path, `is not valid JSON (${err instanceof Error ? err.message : String(err)})`); }
+    if (!isObject(parsed)) refuse(path, "is not a JSON object");
+    if (parsed["version"] !== 1) refuse(path, "does not declare \"version\": 1");
+    settings = parsed;
+    mode = link.mode;
+  }
+  if ("hooks" in settings && !isObject(settings["hooks"])) refuse(path, "has a \"hooks\" entry that is not an object");
+  const hooks: Record<string, unknown> = isObject(settings["hooks"]) ? settings["hooks"] : {};
+  let changed = false;
+  for (const [event, command] of CURSOR_HOOKS) {
+    if (event in hooks && !Array.isArray(hooks[event])) refuse(path, `hooks.${event} is not a list`);
+    const entries: unknown[] = Array.isArray(hooks[event]) ? hooks[event] : [];
+    const ours = entries.some((h) => isObject(h) && h["command"] === command
+      && Object.keys(h).every((k) => ["command", "timeout"].includes(k))
+      && (h["timeout"] === undefined || (typeof h["timeout"] === "number" && h["timeout"] > 0)));
+    if (ours) continue;
+    hooks[event] = [...entries, { command }];
+    changed = true;
+  }
+  if (!changed) return { status: "unchanged", notes: [] };
+  settings["hooks"] = hooks;
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileAtomic(path, `${JSON.stringify(settings, null, 2)}\n`, mode);
+  return { status: link === null ? "created" : "updated", notes: [] };
 }
