@@ -1,7 +1,8 @@
 ---
 id: "tp-lxj04s"
 title: "todopi edit / move / dep 修改字段、顺序与依赖，形成环时被拒绝并打印环"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "seandong"
 blocked_by: ["tp-9h2aj9"]
 rank: "i9"
@@ -11,7 +12,7 @@ external:
   harness:
     legacy_id: "F10"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-24T04:33:53Z"
+updated: "2026-09-26T01:44:01Z"
 ---
 
 ## Description
@@ -45,3 +46,4 @@ edit 修改 title/description/verify/labels/parent 并记 edited fields=…；mo
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F10
 - 2026-09-24T04:33:53Z seandong claimed
+- 2026-09-26T01:44:01Z seandong done verify=pass commit=21565db dirty=false
