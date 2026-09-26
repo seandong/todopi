@@ -13,6 +13,7 @@ import { discoverLedger } from "../../src/format/discover.ts";
 import { readTasks } from "../../src/format/read.ts";
 import { leaseDirFor } from "../../src/format/lease.ts";
 import { logEntries } from "../../src/domain/validate.ts";
+import { sortTasks } from "../../src/domain/order.ts";
 
 const ME = "me@host";
 const ROOT = join(import.meta.dirname, "../..");
@@ -146,4 +147,64 @@ test("读不出来的文件不碰，照常报告；未知键（含嵌套的 x-*�
   assert.equal(r.after.ok, false);
   assert.deepEqual(fm(d, t)["x-meta"], { k: [1, 2] });
   assert.equal(fm(d, t)["future_key"], "yes", "YAML 1.2：yes 是字符串，原样保留");
+});
+
+test("非规范的 updated 连写法都不动（§6.3：修复 MUST NOT 改 updated），照常报告（评审一轮）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t", actor: ME }).id;
+  edit(d, t, (s) => s.replace(/^created: ".*"$/m, 'created: "2020-01-01T00:00:00Z"')
+    .replace(/^updated: ".*"$/m, 'updated: "2020-01-02T08:00:00+08:00"'));
+  const r = runDoctorFix({ directory: d });
+  assert.equal(fm(d, t)["updated"], "2020-01-02T08:00:00+08:00");
+  assert.equal(r.after.ok, false);
+  assert.ok(r.after.findings.some((f) => /updated must be an RFC 3339/.test(f.message)));
+});
+
+test("文件里有非法 UTF-8 字节：不重写（重写会把它们换成 U+FFFD，Log 就不是原来的字节了）（评审一轮）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t", actor: ME }).id;
+  edit(d, t, (s) => s.replace(/^rank: ".*"\n/m, ""));
+  const p = taskPath(d, t);
+  const bytes = Buffer.concat([readFileSync(p), Buffer.from([0x2d, 0x20, 0x62, 0x61, 0x64, 0x20, 0xff, 0x0a])]);
+  writeFileSync(p, bytes);
+  const r = runDoctorFix({ directory: d });
+  assert.ok(readFileSync(p).equals(bytes), "文件字节变了");
+  assert.deepEqual(r.skipped.map((s) => s.path), [`tasks/${t}.md`]);
+  assert.match(r.skipped[0]!.reason, /not valid UTF-8/);
+});
+
+test("无 rank 段里有回填不了的任务（rank 是数字、文件读不出来）：整体不回填，顺序不变，报告原因（评审一轮）", () => {
+  for (const blocker of ["numeric", "broken"] as const) {
+    const d = repo();
+    const ranked = runAdd({ directory: d, title: "ranked", actor: ME }).id;
+    const odd = runAdd({ directory: d, title: "odd", actor: ME }).id;
+    const missing = runAdd({ directory: d, title: "missing", actor: ME }).id;
+    void ranked;
+    edit(d, odd, (s) => blocker === "numeric" ? s.replace(/^rank: ".*"$/m, "rank: 7").replace(/^created: ".*"$/m, 'created: "2020-01-02T00:00:00Z"')
+      : "---\ntitle: [broken\n---\n");
+    edit(d, missing, (s) => s.replace(/^rank: ".*"\n/m, "").replace(/^created: ".*"$/m, 'created: "2020-01-03T00:00:00Z"'));
+    const order = () => sortTasks(readTasks(discoverLedger(d))).map((t) => t.idFromFilename);
+    const before = order();
+    const r = runDoctorFix({ directory: d });
+    assert.deepEqual(order(), before, blocker);
+    assert.equal("rank" in fm(d, missing), false, `${blocker}：不该回填`);
+    assert.ok(r.skipped.some((s) => s.path === "(rank backfill)" && s.reason.includes(`tasks/${odd}.md`)), blocker);
+  }
+});
+
+test("形状对但日期不存在（2 月 30 日）：不规范化——那是猜，不是换个写法（评审一轮）", () => {
+  assert.equal(canonicalTimestamp("2026-02-30T12:34:56+00:00"), null);
+  assert.equal(canonicalTimestamp("2026-02-28T24:00:00+00:00"), null);
+  assert.equal(canonicalTimestamp("2026-02-28T12:00:00+25:00"), null);
+  assert.equal(canonicalTimestamp("2024-02-29T12:00:00+00:00"), "2024-02-29T12:00:00Z", "闰日是真的");
+});
+
+test("未知键给警告、不让 doctor 失败；x- 扩展键不警告", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t", actor: ME }).id;
+  edit(d, t, (s) => s.replace(/^---\n/, "---\nfuture_key: \"hi\"\nx-ours: \"ok\"\n"));
+  const r = runDoctor({ directory: d });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.warnings.map((w) => [w.rule, w.path]), [["unknown-key", `tasks/${t}.md`]]);
+  assert.match(r.warnings[0]!.message, /"future_key"/);
 });

@@ -16,11 +16,13 @@ export function renderJson(r: DoctorReport): string {
   * （没有问题就没什么要报的）；发现问题时的每一条都是结果，quiet 不得吞掉它们。
   */
 export function renderText(r: DoctorReport, opts: { quiet?: boolean } = {}): string {
+  // 警告是结果，不是提示：quiet 也照出（它们不让 doctor 失败，但人得看见）。
+  const warn = r.warnings.map((w) => `warning ${w.path}: ${w.message}\n`).join("");
   if (r.ok) {
-    if (opts.quiet) return "";
-    return r.scanned === 0
+    if (opts.quiet) return warn;
+    return warn + (r.scanned === 0
       ? "doctor: the ledger is empty; no tasks to check.\n"
-      : `doctor: ${r.scanned} task(s), no problems found.\n`;
+      : `doctor: ${r.scanned} task(s), no problems found.\n`);
   }
   const lines: string[] = [];
   const byPath = new Map<string, FindingDto[]>();
@@ -35,7 +37,7 @@ export function renderText(r: DoctorReport, opts: { quiet?: boolean } = {}): str
   }
   lines.push("");
   lines.push(`doctor: ${r.scanned} task(s), ${r.findings.length} problem(s).`);
-  return lines.join("\n") + "\n";
+  return warn + lines.join("\n") + "\n";
 }
 
 /** `doctor --fix`：先列修了什么，再是修完之后的 doctor 结果。 */

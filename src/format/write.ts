@@ -1,6 +1,7 @@
 // src/format/write.ts
 import { headingIndex, sectionEnd, structure } from "../markdown/sections.ts";
 import { existsSync, readFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import { join } from "node:path";
 import { withLock } from "../fs/lock.ts";
 import { writeFileAtomic } from "../fs/atomic.ts";
@@ -312,4 +313,39 @@ function appendLogLine(body: string, line: string): string {
     }
   }
   return out;
+}
+
+/**
+ * `doctor --fix` 的规范化重写。与 prepareUpdate **有意不同**：不刷新 `updated`、不追加 Log（规格 §6.3 的
+ * 例外，D034）。调用方必须已持有账本锁。
+ *
+ * 写之前三道核对，任何一道不过就不写、返回原因：
+ *   1. 文件的原始字节就是它的 UTF-8 解码再编码——否则那里有非法字节，整文件重写会把它们换成 U+FFFD，
+ *      Log 就不再是原来的字节了（F13 评审：`\xff` 被写成 `ef bf bd`）；
+ *   2. 新 frontmatter 读回来恰好是 `want`；
+ *   3. 正文只在 `changedLines` 这几行不同。
+ */
+export function rewriteNormalized(
+  ledger: Ledger, t: TaskFile, want: Record<string, unknown>, body: string, changedLines: Set<number>,
+): { written: boolean } | { error: string } {
+  const path = join(ledger.dir, "tasks", `${t.idFromFilename}.md`);
+  const bytes = readFileSync(path);
+  const decoded = bytes.toString("utf8");
+  if (!bytes.equals(Buffer.from(decoded, "utf8")) || decoded !== t.raw) {
+    return { error: "the file is not valid UTF-8 (or changed while reading); rewriting it would alter bytes" };
+  }
+  const env = splitEnvelope(t.raw);
+  const text = `---\n${emitFrontmatter(want)}---\n${body}`;
+  const back = splitEnvelope(text);
+  const parsed = back === null ? null : parseFrontmatter(back.head);
+  if (env === null || back === null || parsed === null || !parsed.ok || !isDeepStrictEqual(parsed.data, want)) {
+    return { error: "the normalized frontmatter would not read back as the same data" };
+  }
+  const before = env.body.split("\n"), after = back.body.split("\n");
+  if (before.length !== after.length || before.some((l, i) => l !== after[i] && !changedLines.has(i))) {
+    return { error: "the body would change outside the lines being normalized" };
+  }
+  if (text === t.raw) return { written: false };
+  writeFileAtomic(path, text);
+  return { written: true };
 }

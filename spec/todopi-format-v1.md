@@ -439,6 +439,6 @@ remains the fallback.
 - [ ] Assign a `rank` when creating a task.
 - [ ] Normalize actor strings (§5.4); never emit one containing whitespace or `:`.
 - [ ] Append to Log; never rewrite earlier lines, and never append for a refused transition.
-- [ ] Bump `updated` on every write.
+- [ ] Bump `updated` on every write, except a normalizing repair (`doctor --fix`), which leaves `updated` and the Log unchanged (§6.3).
 - [ ] Hold the write lock; write via temp file and rename.
 - [ ] Refuse to write when `config.yml` `version` is unknown.

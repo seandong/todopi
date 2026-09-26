@@ -1,7 +1,7 @@
 // src/domain/validate.ts
 // 单文件不变量。纯函数：不 import node:fs，用例直接构造对象即可（src/ARCHITECTURE.md）。
 import {
-  ACTOR_RE, ID_RE, LABEL_RE, RANK_RE, RESOLUTIONS, STATUSES, TIMESTAMP_RE,
+  ACTOR_RE, ID_RE, KNOWN_FIELDS, LABEL_RE, RANK_RE, RESOLUTIONS, STATUSES, TIMESTAMP_RE,
   type TaskFile,
 } from "./types.ts";
 import type { Finding } from "./findings.ts";
@@ -266,4 +266,13 @@ export function validateWrite(candidate: TaskFile, existing: TaskFile[]): string
   const introduced = validateGraph([...existing, candidate]).filter((f) => !before.has(key(f)));
   const findings = [...validateFile(candidate), ...introduced];
   return findings.length === 0 ? null : findings.map((f) => `${f.rule}: ${f.message}`).join("; ");
+}
+
+/**
+ * spec §5.2：不认识的键（不是 `x-` 开头的扩展键）写入端必须保留，读取端 SHOULD 警告——多半是后来的
+ * 次版本加的字段，或者拼错了。只是警告：它不让 doctor 失败（FR-Q1 的「未知键」检查）。
+ */
+export function unknownKeys(t: TaskFile): string[] {
+  const known = new Set<string>(KNOWN_FIELDS);
+  return Object.keys(t.frontmatter).filter((k) => !known.has(k) && !k.startsWith("x-"));
 }

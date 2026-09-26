@@ -16,13 +16,16 @@ export type DoctorReport = {
   ok: boolean;
   scanned: number;
   findings: FindingDto[];
+  /** 不让 doctor 失败的提示（目前只有 spec §5.2 的未知键）。ok 只看 findings */
+  warnings: FindingDto[];
 };
 
-export function toDoctorReport(scanned: number, findings: Finding[]): DoctorReport {
+export function toDoctorReport(scanned: number, findings: Finding[], warnings: FindingDto[] = []): DoctorReport {
   return {
     ok: findings.length === 0,
     scanned,
     findings: findings.map((f) => ({ rule: f.rule, path: f.path, message: f.message })),
+    warnings,
   };
 }
 

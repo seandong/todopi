@@ -31,3 +31,12 @@ export type TaskFile = {
   /** 信封或 YAML 解析失败时的原因；非空时 frontmatter 是空对象 */
   parseError?: string;
 };
+
+/**
+ * spec §5.2 的字段（按表格顺序）。format/emit.ts 的 FIELD_ORDER 是同一张表——两份各自维护是因为
+ * format/ 不能从 domain/ 引用值（ARCH-018）；tests/domain/known-fields.test.ts 断言两者相同。
+ */
+export const KNOWN_FIELDS = [
+  "id", "title", "status", "resolution", "assignee", "parent",
+  "blocked_by", "rank", "verify", "labels", "external", "created", "updated",
+] as const;
