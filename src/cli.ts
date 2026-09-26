@@ -171,16 +171,20 @@ program
 /**
  * `--hook`：钩子调用时，会话 id 从 stdin 的 JSON 里取；没有账本就静默退出 0（用户级钩子在每个项目里都会
  * 触发）。stdin 是终端时不读——手动试跑 `--hook` 不该卡住等输入。
+ *
+ * 目录：没用 -C 指定时，载荷里有 Cursor 的 `workspace_roots` 就用它的第一项——Cursor 的用户级钩子在
+ * `~/.cursor/` 里运行，不在项目根（官方文档），按工作目录找账本永远找不到（F17）。
  */
-async function hookContext(directory: string): Promise<{ skip: boolean; session?: string }> {
+async function hookContext(explicit: string | undefined): Promise<{ skip: boolean; session?: string; directory: string }> {
   const { findLedger } = await import("./format/discover.ts");
-  if (findLedger(directory) === null) return { skip: true };
-  const { sessionFromHookPayload } = await import("./commands/hook.ts");
+  const { sessionFromHookPayload, directoryFromHookPayload } = await import("./commands/hook.ts");
   let payload = "";
   if (process.stdin.isTTY !== true) {
     try { payload = readFileSync(0, "utf8"); } catch { payload = ""; }
   }
-  return { skip: false, session: sessionFromHookPayload(payload) };
+  const directory = explicit ?? directoryFromHookPayload(payload) ?? process.cwd();
+  if (findLedger(directory) === null) return { skip: true, directory };
+  return { skip: false, session: sessionFromHookPayload(payload), directory };
 }
 
 program
@@ -190,24 +194,32 @@ program
   .option("--full", "print the full picture: your tasks, others', ready, counts, recently closed")
   .option("--session <id>", "the agent session this prime belongs to (for handoff); defaults to the actor")
   .option("--hook", "called from an agent hook: read the session id from the JSON on stdin; stay silent without a ledger")
-  .action(async (cmdOpts: { budget?: string; full?: boolean; session?: string; hook?: boolean }) => {
+  .option("--hook-json <shape>", "wrap the output as the hook JSON an agent expects: cursor, gemini:SessionStart, gemini:BeforeAgent")
+  .option("--mark-compacted", "record that this session was just compacted, print nothing (for a pre-compaction hook)")
+  .option("--if-compacted", "print only if --mark-compacted was recorded for this session since, and clear it (for a before-turn hook)")
+  .action(async (cmdOpts: { budget?: string; full?: boolean; session?: string; hook?: boolean; hookJson?: string; markCompacted?: boolean; ifCompacted?: boolean }) => {
     const { runPrime, runPrimeFull, parseBudget } = await import("./commands/prime.ts");
     const { renderPrime, renderPrimeFull } = await import("./output/render/prime.ts");
+    const { compactionGate, wrapHookOutput } = await import("./commands/hook.ts");
     const opts = program.opts();
-    const directory = (opts["directory"] as string | undefined) ?? process.cwd();
-    const hook = cmdOpts.hook === true ? await hookContext(directory) : { skip: false, session: undefined };
+    const explicit = opts["directory"] as string | undefined;
+    const hook = cmdOpts.hook === true ? await hookContext(explicit) : { skip: false, session: undefined, directory: explicit ?? process.cwd() };
+    const directory = hook.directory;
     if (hook.skip) return;
     const base = {
       directory,
       session: cmdOpts.session ?? hook.session,
       actor: opts["as"] as string | undefined,
     };
+    // 压缩标记（D038）：压缩前的钩子只打标记；每轮之前的钩子只在标记在时才往下走。
+    if (cmdOpts.markCompacted === true) { compactionGate(directory, "mark", base.session, base.actor); return; }
+    if (cmdOpts.ifCompacted === true && !compactionGate(directory, "take", base.session, base.actor)) return;
     const json = opts["json"] === true;
     const { text, warnings } = cmdOpts.full === true
       ? ((r) => ({ text: json ? JSON.stringify(r.report, null, 2) + "\n" : renderPrimeFull(r.report), warnings: r.warnings }))(runPrimeFull(base))
       : ((r) => ({ text: json ? JSON.stringify(r.report, null, 2) + "\n" : renderPrime(r.report), warnings: r.warnings }))(
         runPrime({ ...base, budget: cmdOpts.budget === undefined ? undefined : parseBudget(cmdOpts.budget) }));
-    process.stdout.write(text);
+    process.stdout.write(cmdOpts.hookJson === undefined ? text : wrapHookOutput(cmdOpts.hookJson, text));
     for (const w of warnings) process.stderr.write(`${w}\n`);
   });
 
@@ -221,8 +233,9 @@ program
     const { runHandoff } = await import("./commands/handoff.ts");
     const { renderHandoff } = await import("./output/render/handoff.ts");
     const opts = program.opts();
-    const directory = (opts["directory"] as string | undefined) ?? process.cwd();
-    const hook = cmdOpts.hook === true ? await hookContext(directory) : { skip: false, session: undefined };
+    const explicit = opts["directory"] as string | undefined;
+    const hook = cmdOpts.hook === true ? await hookContext(explicit) : { skip: false, session: undefined, directory: explicit ?? process.cwd() };
+    const directory = hook.directory;
     if (hook.skip) return;
     const report = runHandoff({
       directory,
@@ -238,7 +251,7 @@ program
 program
   .command("setup")
   .description("install the agent's hooks and rule-file import so every session starts with `todopi prime`")
-  .argument("<agent>", "which agent: claude, codex, opencode, pi")
+  .argument("<agent>", "which agent: claude, codex, opencode, pi, cursor, gemini")
   .option("--user", "write user-level hooks (in your home directory) instead of the project's")
   .action(async (agent: string, cmdOpts: { user?: boolean }) => {
     const { runSetup } = await import("./commands/setup.ts");

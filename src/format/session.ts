@@ -8,7 +8,7 @@
 // 任意字符串，所以文件名用它的哈希；原键写在文件内容里，排查时看得出是谁。
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { leaseDirFor } from "./lease.ts";
@@ -78,4 +78,26 @@ export function readPrimeRecord(ledger: Ledger, key: PrimeKey): PrimeRecord | nu
 /** 上次 prime 的时间。 */
 export function readLastPrime(ledger: Ledger, key: PrimeKey): string | null {
   return readPrimeRecord(ledger, key)?.primedAt ?? null;
+}
+
+/**
+ * 「这个会话刚压缩过」的标记（D038）。给没有「压缩后」钩子、却有「每轮之前」钩子的 agent 用（Gemini CLI）：压缩前的
+ * 钩子只打标记，下一轮之前的钩子取走标记、重新注入 prime。与 prime 记录同一个目录、同一个键，文件名后缀区分。
+ */
+function compactedPath(ledger: Ledger, key: PrimeKey): string {
+  return pathFor(ledger, key).replace(/\.json$/, ".compacted");
+}
+
+export function markCompacted(ledger: Ledger, key: PrimeKey): void {
+  const path = compactedPath(ledger, key);
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileAtomic(path, `${keyText(key)}\n`);
+}
+
+/** 取走标记：有就删掉并返回 true。 */
+export function takeCompacted(ledger: Ledger, key: PrimeKey): boolean {
+  const path = compactedPath(ledger, key);
+  if (!existsSync(path)) return false;
+  rmSync(path, { force: true });
+  return true;
 }

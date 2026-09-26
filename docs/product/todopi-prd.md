@@ -168,10 +168,13 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
   | Codex | `SessionStart`（`source`：`startup` `resume` `clear` `compact`） | `SessionStart` 的 `compact` 来源（`PostCompact` 也会触发，两个都装会注入两遍；见 §17 2026-09-26 实测） | `SessionEnd` | `.codex/hooks.json`（项目级钩子要在 Codex 里信任后才运行） |
   | OpenCode | `event` 钩子订阅 `session.created`（id 在 `properties.info.id`）；输出经 `experimental.chat.system.transform` 进系统提示 | 同上订阅 `session.compacted`（`properties.sessionID`），刷新缓存 | `session.idle` 兜底（未装） | `.opencode/plugins/` |
   | pi | `session_start`；输出经 `before_agent_start` 追加进系统提示 | **`session_compact`**（压缩后）刷新；`session_before_compact` 是压缩前 | `session_shutdown`（未装） | `.pi/extensions/`（项目要先被信任） |
-  | Cursor | `sessionStart`（返回 `additional_context`） | **无 post 事件**，只有 `preCompact` | `sessionEnd` | `.cursor/hooks.json` |
-  | Gemini CLI | `SessionStart`（返回 `hookSpecificOutput.additionalContext`） | **无 post 事件**，只有 `PreCompress` | `SessionEnd` | `settings.json` |
+  | Cursor | `sessionStart`（返回 `additional_context`，进初始系统上下文；会话 id 是 `conversation_id`） | **无 post 事件**；`preCompact` 只能观察。压缩后靠始终生效的规则文件 `.cursor/rules/todopi.mdc`（FR-A2a） | `sessionEnd` | `.cursor/hooks.json`（用户级 `~/.cursor/hooks.json` 在 `~/.cursor/` 里运行，项目目录取载荷的 `workspace_roots`） |
+  | Gemini CLI | `SessionStart`（返回 `hookSpecificOutput.additionalContext`） | **无 post 事件**；`PreCompress`（matcher `manual`）打标记，下一轮的 `BeforeAgent` 取走标记、把 prime 追加进这一轮的请求（FR-A2a） | `SessionEnd` | `.gemini/settings.json`（同时确保 `context.fileName` 含 AGENTS.md） |
 
-- **FR-A2a** 无 post-compaction 事件的两家（Cursor、Gemini CLI）改用**压缩前注入**：在 `preCompact` / `PreCompress` 时把 `prime --budget 400` 的输出交给待生成的摘要，使账本指针**成为摘要的一部分**，从而按定义活过压缩。这不是等价替代——它注入的是压缩发生**那一刻**的状态，此后到下一次会话开始之间的变化不会反映。协议文本因此要求 agent 在察觉上下文被压缩后主动跑一次 `todopi prime`，这一条对所有 agent 都写，对这两家是必需的。
+- **FR-A2a** 无 post-compaction 事件的两家（Cursor、Gemini CLI）：账本指针靠**不会被压缩掉的上下文**与（Gemini）**下一轮前重新注入**活过压缩。1.2 版写的「压缩前把 prime 输出交给待生成的摘要」前提不成立（2026-09-26 核实，§17）：Cursor 的 `preCompact` 文档明言只能观察、不能改压缩；Gemini CLI 的压缩服务丢弃 `PreCompress` 的返回值。改为：
+  - **Cursor**：`setup cursor` 写一份 `alwaysApply: true` 的规则文件 `.cursor/rules/todopi.mdc`——指针（`todopi prime`）与「察觉到被压缩就跑 `todopi prime`」始终在上下文里。`beforeSubmitPrompt` 不能注入，所以没有「下一轮前」的钩子可用。
+  - **Gemini CLI**：`setup gemini` 让 `context.fileName` 含 AGENTS.md（协议进系统指令，活过压缩）；`PreCompress` 只在 `manual`（`/compress`）时打「刚压缩过」标记，下一轮之前的 `BeforeAgent` 取走标记、把 prime 追加进这一轮的请求。**自动压缩不打标记**：`PreCompress` 在每一次压缩**尝试**时都触发，包括没到阈值、并不压缩的检查（历史非空就每轮一次），据它打标记会让每一轮都重新注入、在历史里越积越多。自动压缩之后靠系统指令里的协议行。手动 `/compress` 判定「不划算」而没压缩时，下一轮会多注入一次，代价是一份 prime。
+  协议文本要求 agent 在察觉上下文被压缩后主动跑一次 `todopi prime`，这一条对所有 agent 都写，对这两家是必需的。
 - **FR-A2b** Cursor 的 CLI（`cursor-agent`）对钩子的支持一直在变动：2026-01 只有 `beforeShellExecution` / `afterShellExecution` 触发，2026-04 扩展到含 `sessionStart`，官方论坛记录显示仍未与 IDE 完全对齐。因此 Cursor 接入包 MUST 同时提供规则文件作为回退路径，且 MUST 在首发前于 CLI 与 IDE 两种形态下各手工验证一次（MVP 验收第 5 条）。
 - **FR-A3** 所有 agent 收到同一份 ≤ 800 token 的说明文本（「协议」，§9）；各家打包只是包装。
 - **FR-A4** 接入的**能力**在首发时必须完整：六家各自 `todopi setup <agent>` 一条命令装好，README 给出六家安装说明。市场/注册表上架（Claude Code plugin、Codex plugin、OpenCode plugin、pi package、Cursor、Gemini 扩展）是首发后一周内的跟进动作，**不阻塞发布**。
@@ -379,6 +382,7 @@ Cursor 只有 `preCompact`、Gemini CLI 只有 `PreCompress`，都没有压缩�
 FR-A2a 给出的替代路径是压缩**前**注入摘要，让指针成为摘要的一部分；这不是等价
 替代，差异写在 FR-A2a 里。这个约束应当影响首发叙事：核心演示用有 post 事件的
 agent 录，而不是假设六家表现一致。
+（2026-09-26：这条替代路径的前提不成立——两家的压缩前钩子都不能改摘要。见下方 F17 实测与改写后的 FR-A2a。）
 
 ### 2026-09-26 重核（F14 `setup claude`）
 
@@ -424,6 +428,27 @@ agent 录，而不是假设六家表现一致。
   `todopi prime --hook --session <id>`、输出进了系统提示；交互式 `/compact`（测试仓库把 `compaction.keepRecentTokens` 调成
   10）之后扩展用同一个会话 id 再调 prime，下一轮系统提示里出现了压缩前刚记下的新标记。模型是假的，但事件、扩展加载、
   系统提示注入走的都是 pi 的真实代码路径；真模型读系统提示是 provider 的事，不在 todopi 的边界内。
+
+### 2026-09-26 实测（F17 `setup cursor / gemini`）
+
+- **FR-A2a 的前提不成立**，已改写。Cursor 官方 hooks 文档：`preCompact`「is an observational hook that cannot block or
+  modify the compaction behavior」，输出只有 `user_message`；`beforeSubmitPrompt` 只能放行或拦截，不能注入；没有压缩后事件。
+  `sessionStart` 的 `additional_context` 进「the conversation's initial system context」。公共输入字段含 `conversation_id`、
+  `workspace_roots`；项目级钩子在项目根运行，**用户级钩子在 `~/.cursor/` 里运行**——所以 `--hook` 在没用 `-C` 时按
+  载荷的 `workspace_roots[0]` 找账本。
+- **Gemini CLI 0.26.0**（本机安装，源码为一手来源）：钩子结构与 Claude Code 同构；注入字段 `hookSpecificOutput.additionalContext`。
+  `SessionStart` 的注入成为历史里的一条用户消息（会被压缩掉）；`BeforeAgent` 的注入追加在这一轮用户消息之后；
+  `PreCompress` 的返回值不被使用；它在 `ChatCompressionService.compress` 里、阈值检查**之前**触发，trigger 为 `manual`
+  （`/compress`）或 `auto`；对 PreCompress，组的 matcher 与 trigger **精确比较**。`BeforeAgent` 在每轮开头触发，早于这一轮的
+  自动压缩。上下文文件默认只有 GEMINI.md，`context.fileName` 可改；上下文文件进系统指令。0.61.0（当前最新，npm 包源码
+  核对，未实跑）这几点相同。
+- **实测**（Gemini CLI 0.26.0，交互式，`GOOGLE_GEMINI_BASE_URL` 指向本地假 API 服务器、记录每个请求体；模型是假的，
+  钩子、压缩、请求组装走的都是 Gemini 的真实代码路径）：第一轮请求里 SessionStart 注入的 `## tp-…` 是一条独立的用户消息，
+  系统指令里含 AGENTS.md 的协议段（含「You notice your context was compacted → `todopi prime`」）；`/compress` 真压缩后
+  （50000 → 299 tokens）那条注入被摘要替掉，下一轮请求在用户消息之后出现 BeforeAgent 追加的 prime；再下一轮不再注入，
+  标记已消费。另见：token 数太小时 `/compress` 报「Compression was not beneficial」但 PreCompress 照样触发。
+- **Cursor 未实测**：`cursor-agent status` 显示已登录，但无头 `-p` 报「Authentication required」，交互式要求浏览器登录。
+  CLI 与 IDE 的手工验证（FR-A2b）拆到单独的任务。
 
 ### 顺带确认
 
