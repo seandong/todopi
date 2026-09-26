@@ -1,7 +1,8 @@
 ---
 id: "tp-wj9u76"
 title: "todopi doctor --fix 规范化可修复的偏差，且永不修改 Log"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "seandong"
 blocked_by: ["tp-lxj04s"]
 rank: "ic"
@@ -11,7 +12,7 @@ external:
   harness:
     legacy_id: "F13"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T05:34:41Z"
+updated: "2026-09-26T06:05:39Z"
 ---
 
 ## Description
@@ -45,3 +46,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F13
 - 2026-09-26T05:34:41Z seandong claimed
+- 2026-09-26T06:05:39Z seandong done verify=pass commit=04df358 dirty=false
