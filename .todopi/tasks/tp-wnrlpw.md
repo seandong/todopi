@@ -10,7 +10,7 @@ external:
   harness:
     legacy_id: "F14"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-23T09:40:27Z"
+updated: "2026-09-26T06:21:53Z"
 ---
 
 ## Description
@@ -22,12 +22,15 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-**这一段是散文，不是勾选项。** 勾选要 `check`（F09，尚未实现），
-写成 checkbox 就意味着每次关闭都得手改 markdown。代价是验收门禁对这条
-任务不生效：`done` 通过**不等于**下面这些判据已被机器核对过，关闭前由人
-对着它们逐条看。
+- [ ] 全新克隆上跑一次 `setup claude`，Claude Code 会话开始时收到 prime 输出（标题）
+- [ ] 写入项目级 `.claude/settings.json`：SessionStart 与 PostCompact 钩子调用 `prime`
+- [ ] SessionEnd 钩子调用 `handoff --check`
+- [ ] 确保存在含 `@AGENTS.md` 导入的 CLAUDE.md（FR-Q5a：Claude Code 读 CLAUDE.md 而不读 AGENTS.md，只跑 init 的用户读不到协议）
+- [ ] 幂等：重复运行不产生第二份钩子
+- [ ] 打印写入的每个文件
+- [ ] `--user` 切到用户级
 
-写入项目级 .claude/settings.json 的 SessionStart 与 PostCompact 钩子调用 prime、SessionEnd 调用 handoff --check；确保存在含 @AGENTS.md 导入的 CLAUDE.md（FR-Q5a——Claude Code 读 CLAUDE.md 而不读 AGENTS.md，只跑 init 的用户读不到协议）；幂等，重复运行不产生第二份钩子；打印写入的每个文件；--user 切到用户级。
+（2026-09-26 由散文拆成勾选项，原文见 git 历史；标「标题」的一条取自任务标题。）
 
 ## Repair
 
@@ -43,3 +46,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 ## Log
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F14
+- 2026-09-26T06:21:53Z seandong note: 验收判据由散文拆成勾选项（用户 2026-09-26 定）：逐条对应原文，不增不减；任务标题本身是验收结果的，另列一条并标「标题」。原文见 git 历史。

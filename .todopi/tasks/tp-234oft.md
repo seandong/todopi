@@ -10,7 +10,7 @@ external:
   harness:
     legacy_id: "F21"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-23T09:40:27Z"
+updated: "2026-09-26T06:21:54Z"
 ---
 
 ## Description
@@ -22,12 +22,17 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-**这一段是散文，不是勾选项。** 勾选要 `check`（F09，尚未实现），
-写成 checkbox 就意味着每次关闭都得手改 markdown。代价是验收门禁对这条
-任务不生效：`done` 通过**不等于**下面这些判据已被机器核对过，关闭前由人
-对着它们逐条看。
+- [ ] 干净环境里 `npm i -g todopi` 与 curl 安装器都能装上并跑通第一条命令（标题）
+- [ ] npm 包是纯 JS、跑在 Node ≥ 20、不 bundle（D006 决策 10）
+- [ ] 运行时依赖限定在 ARCH-010 的白名单内（原文「只有三个且都零传递依赖」已被 D031 引入 commonmark 改变）
+- [ ] curl 安装器先探测 Node ≥ 20：有则装 npm 包，无则下载二进制
+- [ ] 安装器含 SHA-256 校验，不通过拒绝安装
+- [ ] 解压前拒绝绝对路径与 `..`
+- [ ] 装到 `~/.local/bin`，不在 PATH 时提示
+- [ ] 支持环境变量钉版本（D008 决策 3）
+- [ ] CI 在「有 Node」与「无 Node」两种容器里各跑一次
 
-npm 包是纯 JS、跑在 Node ≥ 20、依赖只有三个且都零传递依赖、不 bundle（D006 决策 10）；curl 安装器先探测 Node ≥ 20：有则装 npm 包，无则下载二进制；安装器含 SHA-256 校验（不通过拒绝安装）、解压前拒绝绝对路径与 ..、装到 ~/.local/bin 并在不在 PATH 时提示、支持环境变量钉版本（D008 决策 3）；CI 在「有 Node」与「无 Node」两种容器里各跑一次。
+（2026-09-26 由散文拆成勾选项，原文见 git 历史；标「标题」的一条取自任务标题。）
 
 ## Repair
 
@@ -43,3 +48,4 @@ npm 包是纯 JS、跑在 Node ≥ 20、依赖只有三个且都零传递依赖�
 ## Log
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F21
+- 2026-09-26T06:21:54Z seandong note: 验收判据由散文拆成勾选项（用户 2026-09-26 定）：逐条对应原文，任务标题另列一条。唯一改动：原文「依赖只有三个且都零传递依赖」已被 D031（引入 commonmark，用户定）改变，改为「限定在 ARCH-010 的白名单内」——照抄会留下一条永远勾不上的标准。原文见 git 历史。
