@@ -31,7 +31,8 @@ export function assertSupportedVersionIfPresent(dir: string): number | null {
 }
 
 /** 从 startDir 向上走，直到找到含 .todopi/ 的目录或到达文件系统根。 */
-export function discoverLedger(startDir: string): Ledger {
+/** 从 startDir 往上找 `.todopi/`；找不到返回 null（钩子据此静默退出，见 commands/hook.ts）。 */
+export function findLedger(startDir: string): Ledger | null {
   let cur = resolve(startDir);
   for (;;) {
     const candidate = join(cur, ".todopi");
@@ -39,9 +40,14 @@ export function discoverLedger(startDir: string): Ledger {
       return { root: cur, dir: candidate, config: readConfig(candidate) };
     }
     const parent = dirname(cur);
-    if (parent === cur) break;
+    if (parent === cur) return null;
     cur = parent;
   }
+}
+
+export function discoverLedger(startDir: string): Ledger {
+  const found = findLedger(startDir);
+  if (found !== null) return found;
   throw new CliError(
     EXIT.usage,
     `No .todopi/ directory found at or above ${resolve(startDir)}. Run "todopi init" first.`,

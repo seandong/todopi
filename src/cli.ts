@@ -168,19 +168,38 @@ program
     process.stdout.write(opts["json"] === true ? renderShowJson(report) + "\n" : renderShow(report));
   });
 
+/**
+ * `--hook`：钩子调用时，会话 id 从 stdin 的 JSON 里取；没有账本就静默退出 0（用户级钩子在每个项目里都会
+ * 触发）。stdin 是终端时不读——手动试跑 `--hook` 不该卡住等输入。
+ */
+async function hookContext(directory: string): Promise<{ skip: boolean; session?: string }> {
+  const { findLedger } = await import("./format/discover.ts");
+  if (findLedger(directory) === null) return { skip: true };
+  const { sessionFromHookPayload } = await import("./commands/hook.ts");
+  let payload = "";
+  if (process.stdin.isTTY !== true) {
+    try { payload = readFileSync(0, "utf8"); } catch { payload = ""; }
+  }
+  return { skip: false, session: sessionFromHookPayload(payload) };
+}
+
 program
   .command("prime")
   .description("print what you are working on, and one line pointing at everything else")
   .option("--budget <tokens>", "approximate token budget for the output (default 600)")
   .option("--full", "print the full picture: your tasks, others', ready, counts, recently closed")
   .option("--session <id>", "the agent session this prime belongs to (for handoff); defaults to the actor")
-  .action(async (cmdOpts: { budget?: string; full?: boolean; session?: string }) => {
+  .option("--hook", "called from an agent hook: read the session id from the JSON on stdin; stay silent without a ledger")
+  .action(async (cmdOpts: { budget?: string; full?: boolean; session?: string; hook?: boolean }) => {
     const { runPrime, runPrimeFull, parseBudget } = await import("./commands/prime.ts");
     const { renderPrime, renderPrimeFull } = await import("./output/render/prime.ts");
     const opts = program.opts();
+    const directory = (opts["directory"] as string | undefined) ?? process.cwd();
+    const hook = cmdOpts.hook === true ? await hookContext(directory) : { skip: false, session: undefined };
+    if (hook.skip) return;
     const base = {
-      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
-      session: cmdOpts.session,
+      directory,
+      session: cmdOpts.session ?? hook.session,
       actor: opts["as"] as string | undefined,
     };
     const json = opts["json"] === true;
@@ -197,19 +216,36 @@ program
   .description("report what this session did and log a handoff on your tasks; keeps your claims")
   .option("--check", "only print the report; write nothing and exit 0")
   .option("--session <id>", "the agent session to compare against (its last prime); defaults to the actor")
-  .action(async (cmdOpts: { check?: boolean; session?: string }) => {
+  .option("--hook", "called from an agent hook: read the session id from the JSON on stdin; stay silent without a ledger")
+  .action(async (cmdOpts: { check?: boolean; session?: string; hook?: boolean }) => {
     const { runHandoff } = await import("./commands/handoff.ts");
     const { renderHandoff } = await import("./output/render/handoff.ts");
     const opts = program.opts();
+    const directory = (opts["directory"] as string | undefined) ?? process.cwd();
+    const hook = cmdOpts.hook === true ? await hookContext(directory) : { skip: false, session: undefined };
+    if (hook.skip) return;
     const report = runHandoff({
-      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
-      session: cmdOpts.session,
+      directory,
+      session: cmdOpts.session ?? hook.session,
       actor: opts["as"] as string | undefined,
       check: cmdOpts.check,
     });
     process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderHandoff(report));
     // 有任务没写成：以第一个失败的退出码退出（报告已经打印了哪些成功、哪些没有）。
     if (report.failed.length > 0) process.exitCode = report.failed[0]!.code;
+  });
+
+program
+  .command("setup")
+  .description("install the agent's hooks and rule-file import so every session starts with `todopi prime`")
+  .argument("<agent>", "which agent: claude")
+  .option("--user", "write user-level hooks (~/.claude/settings.json) instead of the project's")
+  .action(async (agent: string, cmdOpts: { user?: boolean }) => {
+    const { runSetup } = await import("./commands/setup.ts");
+    const { renderSetup } = await import("./output/render/setup.ts");
+    const opts = program.opts();
+    const report = runSetup({ directory: (opts["directory"] as string | undefined) ?? process.cwd(), agent, user: cmdOpts.user });
+    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderSetup(report));
   });
 
 program
