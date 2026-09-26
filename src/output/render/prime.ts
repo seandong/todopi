@@ -27,19 +27,6 @@ function taskLines(t: PrimeTask): string[] {
   return out;
 }
 
-/** 指针行与它提到的命令。命令与 prime 共用一份，--json 里的 `commands` 就是它们。 */
-export function pointer(ready: number, heldByOthers: number, held: boolean): { line: string; commands: string[] } {
-  const others = heldByOthers > 0 ? ` · ${heldByOthers} held by others` : "";
-  return held
-    ? { line: `${ready} ready (\`todopi ls --ready\`)${others} · everything else: \`todopi prime --full\``,
-      commands: ["todopi ls --ready", "todopi prime --full"] }
-    : { line: `No task in progress · ${ready} ready: \`todopi ls --ready\`${others}`, commands: ["todopi ls --ready"] };
-}
-
-export function moreHeldLine(n: number): string | null {
-  return n > 0 ? `+ ${n} more task${n === 1 ? "" : "s"} you hold: \`todopi ls --mine\`` : null;
-}
-
 export function renderPrime(r: PrimeReport): string {
   const blocks = r.held.map((t) => taskLines(t).join("\n"));
   if (r.moreHeldLine !== null) blocks.push(r.moreHeldLine);

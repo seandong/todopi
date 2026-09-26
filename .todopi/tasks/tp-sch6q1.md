@@ -1,7 +1,9 @@
 ---
 id: "tp-sch6q1"
 title: "todopi handoff 报告本会话的产出并刷新心跳，但不释放认领"
-status: "open"
+status: "closed"
+resolution: "done"
+assignee: "seandong"
 blocked_by: ["tp-7o45xj"]
 rank: "ib"
 verify: "make check && make test && bash tools/e2e/f12-handoff.sh"
@@ -10,7 +12,7 @@ external:
   harness:
     legacy_id: "F12"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-23T09:40:27Z"
+updated: "2026-09-26T05:25:25Z"
 ---
 
 ## Description
@@ -43,3 +45,5 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 ## Log
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F12
+- 2026-09-26T04:06:41Z seandong claimed
+- 2026-09-26T05:25:25Z seandong done verify=pass commit=ed8adeb dirty=false

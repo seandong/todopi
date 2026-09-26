@@ -251,6 +251,26 @@
       "what": "src/markdown/（含子目录）在运行时依赖了 commonmark 之外的模块，或出现了动态加载（import(…)、require、createRequire、getBuiltinModule）。",
       "why": "markdown/ 是读取端（domain/）与写入端（format/）共用的叶子层，回答「哪一行是标题、一节从哪到哪」。它一旦依赖了两边中的任何一边，另一边就引用不了它，同一个判断又会被复制成两份——F09 的 trim 缺陷（D029）与 F10 的代码围栏缺陷都出自那种复制。 2026-09-24 评审：第一版只匹配行首的 `import `，缩进的 import、`export … from`、动态 import 都能引入依赖而不触发。 2026-09-25：这一层改用 commonmark 判定正文结构（D031），允许依赖它；检查器改成问 Node 自己的模块加载器——grep 版本连着两轮被合法语法绕过（`import{join}from\"node:path\"` 等）。 第四轮评审：子目录不扫、`import /* c */ (…)` 不报——改为递归，动态加载的判据允许中间夹注释，并加上 createRequire / getBuiltinModule。不防刻意混淆：这条规则防的是分层被无意打破。",
       "fix": "把依赖挪回调用方，markdown/ 只收字符串、只回字符串与行号。"
+    },
+    {
+      "id": "ARCH-026",
+      "description": "prime / handoff 文本里的命令与任务行都能在 JSON 里对上",
+      "applies_when": "test -f src/commands/prime.ts",
+      "check": "node tools/check-injected-output.mjs commands",
+      "expect": "empty",
+      "what": "prime 或 handoff 的文本里，有一段以 `todopi` 起头、到反引号 / 右括号 / 换行为止的文字（空白规范化后）在 JSON 里找不到；或一行 `- tp-…` / `## tp-…` 的 id 不在 JSON 里、紧跟的标题不是 JSON 里这个 id 的标题、或同一个 id 的行比 JSON 里的对象多。",
+      "why": "FR-P2 要求 `prime --json` 与文本是同样的内容，handoff 同理。F11 评审一、三轮两次因为命令只在渲染层现拼、JSON 里没有而 No-Go；F12 评审一轮用多行 verify 在报告里伪造出一行任务。第一版这条规则是一条 grep（渲染层里不许出现 `todopi ` 字面量），F12 评审六轮用 `[\"todopi\",\"show\"].join(\" \")` 就绕过了——**检查代码的形状，比它宣称要守的东西窄**（第十次）。现在检查输出本身：造一个账本，跑 prime（默认、--full）与 handoff（--check、真的写）的文本与 JSON，逐条比对，并自检夹具确实进了输出。 评审七轮又给出两个假绿（`todopi  show` 两个空格；借一个真 id 伪造标题任意的一行），于是比较前规范化空白、核对任务行的标题与行数。**这条规则不证明文本是 DTO 的纯函数**：渲染层自己拼出的普通文字（标签、标点）它不核对，那靠「渲染只引用 DTO 字段」的约定与用例——措辞只宣称检查真正验证的东西（措辞宽于检查的第十一次）。 评审八轮：命令按「`todopi` + 子命令」的语法形状去认，被前置全局选项（`todopi --json show …`、`todopi --help`）绕过；改为不猜语法，取到分隔符为止的整段比对。",
+      "fix": "命令在 commands/ 里拼进 DTO（pointer、commands、seeAlso、readyMore），渲染只拼 DTO 的值；单行字段经 visibleLine()。"
+    },
+    {
+      "id": "ARCH-027",
+      "description": "注入模型上下文的输出（prime、handoff）不含原始控制字符",
+      "applies_when": "test -f src/commands/prime.ts",
+      "check": "node tools/check-injected-output.mjs controls",
+      "expect": "empty",
+      "what": "prime 或 handoff（任一输出形态）的文本里有换行以外的控制字符，或 JSON 里有控制字符，或 `log` 之外的字段里有换行 / Tab。",
+      "why": "这些输出会进模型的上下文，也会打到终端上：一条验收标准或一个 assignee 不该能改终端颜色、挪光标，多行 verify 不该在报告里伪造出一行任务。F11 评审一、二轮与 F12 评审一轮四次找到漏网的字段（标准、assignee、只在渲染时转义导致 JSON 里仍带 ESC、多行 verify）。第一版检查器允许 JSON 字符串里有换行、也没跑不带 --check 的 handoff（F12 评审六轮两个假绿）；现在只有 `log` 条目可以多行，四种输出形态都跑，并自检带控制字符的字段确实进了输出。",
+      "fix": "在 commands/ 的投影里经 visible()（多行字段）或 visibleLine()（单行字段）处理，见 src/commands/view.ts。"
     }
   ]
 }

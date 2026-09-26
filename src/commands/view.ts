@@ -42,3 +42,21 @@ export function staleInputFor(ledger: Ledger): StaleInput {
     heartbeatAt: (id) => heartbeats.get(id) ?? null,
   };
 }
+
+/**
+ * 进输出的任务内容把控制字符（ESC 之类）换成可见的 `\xNN`：这段文字要进模型的上下文，也会打到
+ * 终端上，一条标准或一个 assignee 不该能改颜色或挪光标（F11 评审一、二轮；prime 与 handoff 共用）。换行与 Tab 保留——
+ * 多行 Log 的续行靠换行。**在投影时做，不在渲染时做**：DTO 里就是展示值，--json 与文本才是同一份
+ * 内容（第二轮：只在渲染时转义，JSON 解码出来仍带 ESC）。原值要看 `todopi show --json`。
+ */
+export function visible(s: string): string {
+  return s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+}
+
+/**
+ * 单行字段（标题、verify、assignee……）连换行与 Tab 也转义：它们在报告里各占一行，里面的换行会让
+ * 后半截看起来像另一条列表项（F12 评审：`--verify $'ok\n- tp-aaaaaa forged'` 在报告里伪造出一个任务）。
+ */
+export function visibleLine(s: string): string {
+  return visible(s).replace(/[\n\t]/g, (c) => (c === "\n" ? "\\n" : "\\t"));
+}

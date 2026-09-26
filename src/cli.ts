@@ -184,6 +184,26 @@ program
   });
 
 program
+  .command("handoff")
+  .description("report what this session did and log a handoff on your tasks; keeps your claims")
+  .option("--check", "only print the report; write nothing and exit 0")
+  .option("--session <id>", "the agent session to compare against (its last prime); defaults to the actor")
+  .action(async (cmdOpts: { check?: boolean; session?: string }) => {
+    const { runHandoff } = await import("./commands/handoff.ts");
+    const { renderHandoff } = await import("./output/render/handoff.ts");
+    const opts = program.opts();
+    const report = runHandoff({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      session: cmdOpts.session,
+      actor: opts["as"] as string | undefined,
+      check: cmdOpts.check,
+    });
+    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderHandoff(report));
+    // 有任务没写成：以第一个失败的退出码退出（报告已经打印了哪些成功、哪些没有）。
+    if (report.failed.length > 0) process.exitCode = report.failed[0]!.code;
+  });
+
+program
   .command("note")
   .description("append a line to a task's log; the text may span several lines")
   .argument("<id>", "the task to note on")

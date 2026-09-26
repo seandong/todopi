@@ -441,7 +441,9 @@ cmd_test() {
     # 版本：--test-timeout 要 Node 20.11+。它不引入新约束——harness 直接跑 .ts，
     # 靠的是 Node 22.6+ 的类型剥离（.tool-versions 钉 22.22.0），比它严格得多。
     # package.json 的 engines ">=20" 管的是 npm 包的使用者，不是开发环境。
-    node --test --test-timeout=120000 2>&1 | tee "$_tlog"
+    # **显式指定 TAP reporter**：下面按 `# skipped N` 读跳过数，那是 TAP 的写法；Node 在 stdout 是终端时
+    # 默认用 spec reporter，这一行就读不到、整层被判 blocked（F12 评审七轮在交互终端里撞上）。
+    node --test --test-reporter=tap --test-timeout=120000 2>&1 | tee "$_tlog"
     _rc="${PIPESTATUS[0]}"
     if [ "$_rc" -eq 0 ]; then
       emit unit-test pass "node --test 通过"
