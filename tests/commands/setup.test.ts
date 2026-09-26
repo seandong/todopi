@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync, chmodSync, symlinkSync, lstatSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync, chmodSync, symlinkSync, lstatSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
@@ -338,4 +338,121 @@ test("opencode 插件：prime 失败（todopi 还不在 PATH 上）时不缓存�
   const second = { system: ["base"] };
   await hooks["experimental.chat.system.transform"]({ sessionID: "s1" }, second);
   assert.deepEqual(second.system, ["base", "## tp-aaaaaa: ok"], "装好之后下一轮就注入上了");
+});
+
+test("pi：写 .pi/extensions/todopi.ts（--user：~/.pi/agent/extensions/），提示信任项目；带标记才替换", async () => {
+  const { PI_EXTENSION, PI_MARKER } = await import("../../src/format/pi-extension.ts");
+  const d = repo();
+  const p = join(d, ".pi", "extensions", "todopi.ts");
+  const r = runSetup({ directory: d, agent: "pi" });
+  assert.deepEqual(r.files.map((f) => [f.path, f.status]), [[p, "created"]]);
+  assert.ok(r.notes.some((n) => /trust the project/.test(n)));
+  assert.equal(readFileSync(p, "utf8"), PI_EXTENSION);
+  const again = runSetup({ directory: d, agent: "pi" });
+  assert.deepEqual([again.files[0]!.status, again.notes], ["unchanged", []]);
+  writeFileSync(p, `${PI_MARKER}\nexport default function () {}\n`);
+  assert.equal(runSetup({ directory: d, agent: "pi" }).files[0]!.status, "updated");
+  writeFileSync(p, "export default function mine() {}\n");
+  assert.throws(() => runSetup({ directory: d, agent: "pi" }), code(EXIT.usage));
+  const home = tmp();
+  assert.deepEqual(runSetup({ directory: d, agent: "pi", user: true, home }).files.map((f) => f.path),
+    [join(home, ".pi", "agent", "extensions", "todopi.ts")]);
+});
+
+test("pi 扩展：session_start / session_compact 跑 prime（--session 取自 sessionManager）并缓存，before_agent_start 追加系统提示；失败不缓存", async () => {
+  const { PI_EXTENSION } = await import("../../src/format/pi-extension.ts");
+  const dir = tmp();
+  const file = join(dir, "ext.mjs");
+  writeFileSync(file, PI_EXTENSION);
+  const { default: factory } = await import(file);
+  const handlers = new Map<string, (e: unknown, ctx: unknown) => Promise<unknown>>();
+  const calls: string[][] = [];
+  let code = 0;
+  let n = 0;
+  const pi = {
+    on: (name: string, fn: (e: unknown, ctx: unknown) => Promise<unknown>) => handlers.set(name, fn),
+    exec: async (cmd: string, args: string[]) => { calls.push([cmd, ...args]); return { code, stdout: `## tp-aaaaaa: call ${++n}\n`, stderr: "" }; },
+  };
+  factory(pi);
+  const ctx = (id: string) => ({ cwd: dir, sessionManager: { getSessionId: () => id } });
+  const turn = async (id: string) => handlers.get("before_agent_start")!({ systemPrompt: "BASE" }, ctx(id));
+  await handlers.get("session_start")!({ reason: "startup" }, ctx("s1"));
+  assert.deepEqual(calls, [["todopi", "prime", "--hook", "--session", "s1"]]);
+  assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" });
+  assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" }, "缓存：不是每一轮都跑 prime");
+  await handlers.get("session_compact")!({ reason: "manual" }, ctx("s1"));
+  assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 2" }, "压缩后刷新");
+  code = 127;
+  assert.equal(await turn("s2"), undefined, "prime 失败：不注入");
+  code = 0;
+  assert.deepEqual(await turn("s2"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 4" }, "失败不缓存，下一轮重试");
+});
+
+test("pi / opencode：没有账本时的空结果只在同一会话里出现 .todopi/ 后才重跑，不每轮都跑（F16 评审）", async () => {
+  const { PI_EXTENSION } = await import("../../src/format/pi-extension.ts");
+  const { OPENCODE_PLUGIN } = await import("../../src/format/opencode-plugin.ts");
+  // pi
+  {
+    const dir = tmp();
+    const file = join(dir, "ext.mjs");
+    writeFileSync(file, PI_EXTENSION);
+    const { default: factory } = await import(file);
+    const handlers = new Map<string, (e: unknown, ctx: unknown) => Promise<unknown>>();
+    let calls = 0;
+    const pi = {
+      on: (n: string, fn: (e: unknown, ctx: unknown) => Promise<unknown>) => handlers.set(n, fn),
+      exec: async () => { calls++; return { code: 0, stdout: existsSync(join(dir, ".todopi")) ? "## tp-aaaaaa: now\n" : "", stderr: "" }; },
+    };
+    factory(pi);
+    const ctx = { cwd: dir, sessionManager: { getSessionId: () => "s1" } };
+    await handlers.get("session_start")!({}, ctx);
+    assert.equal(await handlers.get("before_agent_start")!({ systemPrompt: "B" }, ctx), undefined);
+    assert.equal(calls, 1, "没有账本：不每轮都重跑");
+    mkdirSync(join(dir, ".todopi"));
+    assert.deepEqual(await handlers.get("before_agent_start")!({ systemPrompt: "B" }, ctx), { systemPrompt: "B\n\n## tp-aaaaaa: now" });
+    assert.equal(calls, 2);
+  }
+  // opencode
+  {
+    const dir = tmp();
+    const file = join(dir, "plugin.mjs");
+    writeFileSync(file, OPENCODE_PLUGIN);
+    const { TodopiPlugin } = await import(file);
+    let calls = 0;
+    const $ = () => {
+      calls++;
+      const out = { exitCode: 0, stdout: Buffer.from(existsSync(join(dir, ".todopi")) ? "## tp-aaaaaa: now\n" : "") };
+      const chain = { cwd: () => chain, quiet: () => chain, nothrow: () => Promise.resolve(out) };
+      return chain;
+    };
+    const hooks = await TodopiPlugin({ $, directory: dir });
+    await hooks.event({ event: { type: "session.created", properties: { info: { id: "s1" } } } });
+    const o1 = { system: ["B"] };
+    await hooks["experimental.chat.system.transform"]({ sessionID: "s1" }, o1);
+    assert.deepEqual([o1.system, calls], [["B"], 1]);
+    mkdirSync(join(dir, ".todopi"));
+    const o2 = { system: ["B"] };
+    await hooks["experimental.chat.system.transform"]({ sessionID: "s1" }, o2);
+    assert.deepEqual([o2.system, calls], [["B", "## tp-aaaaaa: now"], 2]);
+  }
+});
+
+test("项目级：路径上的目录是指向项目外的符号链接时拒绝（不越过显示的项目路径写入）；--user 不查（F16 评审）", () => {
+  for (const [agent, dirName] of [["pi", ".pi"], ["opencode", ".opencode"], ["claude", ".claude"], ["codex", ".codex"]] as const) {
+    const d = repo();
+    const outside = tmp();
+    symlinkSync(outside, join(d, dirName));
+    assert.throws(() => runSetup({ directory: d, agent }), (e: unknown) => code(EXIT.usage)(e) && /outside the project/.test((e as Error).message), agent);
+    assert.deepEqual(readdirSync(outside), [], `${agent}：项目外的目录里什么都没写`);
+  }
+  // 指向项目内的链接照常。
+  const d = repo();
+  mkdirSync(join(d, "real-pi"));
+  symlinkSync(join(d, "real-pi"), join(d, ".pi"));
+  assert.equal(runSetup({ directory: d, agent: "pi" }).files[0]!.status, "created");
+  // --user：home 下的配置目录是符号链接也照常。
+  const home = tmp();
+  const elsewhere = tmp();
+  symlinkSync(elsewhere, join(home, ".pi"));
+  assert.equal(runSetup({ directory: d, agent: "pi", user: true, home }).files[0]!.status, "created");
 });
