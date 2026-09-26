@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `22dc272` —— F09 note/check 经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `21565db` —— F10 edit/move/dep 经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,16 +19,16 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 21 个任务，9 个 `closed/done`（F01–F09）、12 个 `open`。
+- 账本: `.todopi/` 21 个任务，10 个 `closed/done`（F01–F10）、11 个 `open`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F09 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
-  `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check`
-  可用。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
+- 代码状态：**F01–F10 已完成**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+  `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check` /
+  `edit` / `move` / `dep` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
   身份解析（FR-C4 前三级）在 `domain/actor.ts` + `commands/actor.ts`，`ls` 与
-  `add` 共用。运行时依赖三个：`commander`、`yaml`、`fractional-indexing`
+  `add` 共用。运行时依赖四个：`commander`、`yaml`、`fractional-indexing`、`commonmark`（F10，D031）
 
 ## In Progress
 
@@ -135,7 +135,14 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     新命令第一次走到的**旧**缺陷（写入端找 `## Log` 用 trim、`- [ ]x` 被当成标准）。
     `todopi done`：`verify=pass commit=22dc272 dirty=false`。见 D029。
     它给了勾选的**机制**；但自举任务的散文判据**不会因此自动有去处**——见下一条。
-30. **待决：要不要把 12 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
+31. ~~F10 `edit` / `move` / `dep`~~ 已完成（2026-09-26）。**十四轮评审**，大部分花在同一个类上：
+    正文里某种 Markdown 结构让未勾的验收标准从 done 门禁里消失。手写 CommonMark 近似三轮被绕过后
+    引入 commonmark（D031）；之后按机制论证「只有三类块能吞掉后面的行」并用暴力枚举验证；再之后是
+    CLI 自己的入口（edit -d、add --ac）能造出这种正文——加了写后读回；最后三轮是规格版本与迁移说明
+    （用户决定：发布前的修订记在 spec §9.1、不升版），用旧实现对照差分核实迁移断言。ARCH-024 从手写
+    bash 词法退回文字判据（DECISIONS，F10 第七轮）。`todopi done`：verify=pass dirty=false。
+    教训：**后置条件加在一个入口上，要问其余入口；迁移说明也是断言，要拿旧实现对照跑过再写。**
+30. **待决：要不要把 11 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
     谁来写、写多细、改完之后验收门禁开始对它们生效（`done` 会被没勾完的挡下）。
     不在 F09 里做。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；

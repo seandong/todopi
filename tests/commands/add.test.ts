@@ -170,3 +170,22 @@ test("账本原本就坏时，无关的 add 照常工作，doctor 仍报出既�
   assert.ok(after.findings.some((f) => f.path.includes("tp-aaaaaa")), "报的是那个坏任务");
   assert.ok(!after.findings.some((f) => f.path.includes(t.id)), "新任务本身是干净的");
 });
+
+test("--ac 带换行：拒绝，什么都不写（第九轮评审：换行后的 `## Plan` 把下一条标准挤出了门禁）", () => {
+  const d = repo();
+  assert.throws(() => runAdd({ directory: d, title: "T", acceptance: ["decoy\n\n## Plan\n", "real must pass"] }),
+    (e: unknown) => e instanceof CliError && e.code === EXIT.usage && /single line/.test(e.message));
+  assert.deepEqual(readdirSync(join(d, ".todopi", "tasks")), []);
+});
+
+test("描述会改变正文读法时拒绝；放进闭合围栏的照常允许（与 edit -d 同一个后置条件）", () => {
+  const d = repo();
+  for (const description of ["why\n\n## Acceptance Criteria\n\n- [x] decoy", "why\n\n```"]) {
+    assert.throws(() => runAdd({ directory: d, title: "T", description, acceptance: ["real"] }),
+      (e: unknown) => e instanceof CliError && e.code === EXIT.usage && /change how the task body is read/.test(e.message),
+      JSON.stringify(description));
+  }
+  assert.deepEqual(readdirSync(join(d, ".todopi", "tasks")), []);
+  runAdd({ directory: d, title: "T", description: "why\n\n```\n## Plan\n```", acceptance: ["real"] });
+  assert.equal(runDoctor({ directory: d }).ok, true);
+});

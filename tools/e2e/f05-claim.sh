@@ -223,7 +223,7 @@ holder=$(grep '^assignee:' "$W/.todopi/tasks/$E.md" | sed 's/assignee: "\(.*\)"/
 if grep -q "\"actor\": \"$holder\"" "$LEASES/$E.json"; then
   ok "任务文件与租约指向同一个赢家"
 else
-  fail "任务文件说 $holder，租约说的是别人"
+  fail "任务文件说 ${holder}，租约说的是别人"
 fi
 
 [ "$FAILED" -eq 0 ] && { echo "f05-claim: pass"; exit 0; } || { echo "f05-claim: fail"; exit 1; }

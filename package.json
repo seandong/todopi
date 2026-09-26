@@ -17,10 +17,12 @@
   },
   "dependencies": {
     "commander": "15.0.0",
+    "commonmark": "0.31.2",
     "fractional-indexing": "^4.0.0",
     "yaml": "2.9.1"
   },
   "devDependencies": {
+    "@types/commonmark": "0.27.10",
     "@types/node": "22.20.3",
     "typescript": "7.0.2"
   }

@@ -1,6 +1,6 @@
 # The `.todopi/` Format, Version 1
 
-Status: Stable · 2026-09-16
+Status: Stable · 2026-09-16 · revised 2026-09-26 (see §9.1)
 Applies to: `version: 1` in `.todopi/config.yml`
 
 This document specifies the on-disk format that todopi reads and writes. It is written so that a third-party tool can read and write a `.todopi/` directory without the todopi CLI. The key words MUST, MUST NOT, SHOULD, and MAY are to be interpreted as described in RFC 2119.
@@ -129,6 +129,12 @@ Fields intentionally absent, and why:
 ### 5.3 Body
 
 The body is Markdown. Four H2 headings are recognized, exactly and case-sensitively. Writers SHOULD emit them in this order. Any other content (other headings, paragraphs before the first heading) MUST be preserved by writers and ignored by readers.
+
+What counts as one of those headings is determined by [CommonMark](https://spec.commonmark.org/): a section heading is an ATX level-2 heading at the **top level** of the document — not inside a list item, block quote, code block or HTML block — whose source line is exactly `## <name>`. A section runs until the next top-level ATX level-2 heading, of any name, whose source line begins with `## ` (two number signs and a space, in the first column); any other level-2 heading — indented by one to three spaces, `##` followed by a tab, an empty `##`, or a setext heading (text underlined with `---`) — is content of the section it appears in. If `## Acceptance Criteria` appears more than once, readers MUST read every such section, in document order, as one list of criteria numbered consecutively, so that a repeated heading cannot hide a criterion; for the other recognized headings the first occurrence is the section. A line such as `## Log` inside a fenced code block is text, not a heading. Likewise, only top-level list items are acceptance criteria (§5.3.2) or Log entries (§5.3.3); a `- [ ] …` or `- <timestamp> …` line inside a top-level code block or HTML block is neither.
+
+One deliberate exception to CommonMark: a block that is **not ended by a terminator its author wrote** must not hide what follows it. Under CommonMark three kinds of block can swallow later lines that would otherwise start a heading or list item: a fenced code block (ended by a closing fence, else runs to the end of the body), an HTML block of CommonMark kinds 1–5 (`<pre`, `<script`, `<style`, `<textarea`, `<!--`, `<?`, `<!` + letter, `<![CDATA[`; ended by its end marker, else runs to the end), and an HTML block of kinds 6–7 (any other tag; ended only by a blank line). Readers MUST treat the opening line of such a block as plain text — a fenced or kind 1–5 block with no closing fence or end marker, or a kind 6–7 block whose lines include one that begins an ATX heading or a list item — and parse again, so that later sections, criteria and Log entries stay visible. Writers MUST NOT rewrite the content of any section in such a body, including appending a Log entry.
+
+(Revised 2026-09-26; see §9.1 for what changed and why the version did not.)
 
 ```
 ## Description
@@ -364,6 +370,19 @@ Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.
 - Additive changes (new optional frontmatter keys, new Log verbs, new recognized sections, new config keys) do not change the version; v1 readers already tolerate them.
 - Any change that alters the meaning of an existing key, adds a required key, or changes derived-state rules increments the version.
 - A reader MUST refuse to write a `.todopi/` whose `version` is greater than the highest it implements, and SHOULD still read it.
+
+### 9.1 Revisions of version 1
+
+The version number protects files and implementations that exist. Until the first release of a tool implementing this document, revisions that fill gaps in version 1 are recorded here instead of incrementing the version; after that, §9 applies without exception.
+
+**2026-09-26** — §5.3 (body structure). The 2026-09-16 text said the four headings are recognized "exactly and case-sensitively" and left undefined: headings and list items inside code blocks, HTML blocks and containers; repeated headings; code fences and HTML blocks that are never closed. This revision defines them:
+
+- Section headings and top-level list items are located by CommonMark. A section heading is a top-level ATX level-2 heading whose source line is exactly `## <name>`. A section ends only at a top-level ATX level-2 heading whose source line begins with `## `; other level-2 headings (indented, `##` followed by a tab, empty, setext) are content of the section they appear in — the same boundary the 2026-09-16 text's "exactly" implied for unindented lines.
+- A `## …`, `- [ ] …` or `- <timestamp> …` line inside a top-level code block or HTML block is text: not a heading, not a criterion, not a Log entry.
+- Repeated `## Acceptance Criteria` sections are all read, as one list numbered consecutively. For the other recognized headings the first occurrence is the section.
+- A block not ended by a terminator its author wrote does not hide what follows it; writers do not rewrite a body containing one.
+
+Migration. A body that contains none of those constructs — no code block, HTML block, block quote, nested or setext heading, or repeated heading — reads exactly as before, and no file needs to be rewritten. A body that does contain them may read differently, **in either direction**: a `- [ ]` inside a code block that an earlier reader counted is no longer a criterion (so `done` may now pass where it was refused), while criteria in a repeated `## Acceptance Criteria` section or after an unclosed block are now counted (so `done` may now be refused where it passed). Likewise a Log section that an earlier reader located inside a code block is no longer the Log, so `doctor` may report findings it did not report before, or stop reporting some. Tasks already closed stay closed; their status is not re-derived. After upgrading, run `doctor` and review any task whose body contains code blocks, HTML or repeated headings.
 
 ## 10. Complete example
 

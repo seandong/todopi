@@ -19,14 +19,21 @@ import { EXIT, CliError } from "../exit.ts";
 
 /** 调用方的决定：写一次（正文变换 + 一行 Log），或者什么都不写并说明为什么。 */
 export type WorkerWrite =
-  | { body?: (body: string) => string; appendLog: string }
+  | {
+    /** 新的完整 frontmatter（不是补丁，理由同 updateTask）；不给就原样带回 */
+    frontmatter?: Record<string, unknown>;
+    body?: (body: string) => string;
+    appendLog: string;
+  }
   | { noop: string };
 
 export type WorkerWriteResult = { task: TaskFile; actor: string; wrote: boolean; noop?: string };
 
 export function writeAsWorker(
-  opts: { directory: string; id: string; actor?: string },
-  decide: (task: TaskFile, ctx: { now: string; actor: string }) => WorkerWrite,
+  opts: {
+    directory: string; id: string; actor?: string;
+  },
+  decide: (task: TaskFile, ctx: { now: string; actor: string; all: TaskFile[] }) => WorkerWrite,
 ): WorkerWriteResult {
   const ledger = discoverLedger(opts.directory);
   const actor = currentActor(ledger.root, opts.actor);
@@ -56,11 +63,11 @@ export function writeAsWorker(
     }
 
     const now = nowStamp();
-    const decision = decide(task, { now, actor });
+    const decision = decide(task, { now, actor, all: existing });
     if ("noop" in decision) return { task, actor, wrote: false, noop: decision.noop };
 
     const prepared = prepareUpdate(ledger, existing, opts.id, {
-      frontmatter: { ...task.frontmatter },
+      frontmatter: decision.frontmatter ?? { ...task.frontmatter },
       body: decision.body,
       appendLog: decision.appendLog,
     }, validateWrite, now);

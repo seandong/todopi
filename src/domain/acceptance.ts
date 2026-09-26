@@ -1,8 +1,10 @@
 // src/domain/acceptance.ts
 // spec §5.3.2 的验收标准。纯函数：不 import node:fs，用例直接给正文字符串即可。
 
-/** 正文里的一行，带它在原文中的行号。 */
-export type BodyLine = { index: number; text: string };
+import { headingIndex, sectionEnd, structure } from "../markdown/sections.ts";
+
+/** 正文里的一行，带它在原文中的行号，以及它是否在一个顶层代码围栏里。 */
+export type BodyLine = { index: number; text: string; fenced: boolean };
 
 /**
  * 取某个 H2 小节下的所有行（不含标题行本身），到下一个 `## ` 为止。
@@ -13,19 +15,25 @@ export type BodyLine = { index: number; text: string };
  *
  * 标题精确匹配：spec §5.3 说四个 H2 标题是「exactly and case-sensitively」认的。
  */
-export function sectionLines(body: string, heading: string): BodyLine[] {
+export function sectionLines(body: string, heading: string, every = false): BodyLine[] {
   // 行尾的 \r 要去掉。spec §5.1 要求 LF，所以 CRLF 文件本就不合规；
   // 但**静默放行比报错危险得多**——实测一份 CRLF 正文会让标题匹配失败、
   // 验收标准被解析成空集，于是 `done` 悄悄越过门禁而 doctor 还报一切正常
   // （Codex 评审复现）。这里按容错读取处理，写回时自然回到 LF。
   const lines = body.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
-  const start = lines.findIndex((l) => l === heading);
-  if (start < 0) return [];
+  // 标题与小节边界由 CommonMark 判定（markdown/sections.ts，写入端用的是同一份）。
+  const st = structure(lines);
   const out: BodyLine[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    const text = lines[i]!;
-    if (text.startsWith("## ")) break;
-    out.push({ index: i, text });
+  // `every`：同名小节出现不止一次时全部读（spec §5.3：验收标准就这么读——重复的标题藏不住标准）。
+  for (let start = headingIndex(lines, st, heading); start >= 0;) {
+    const end = sectionEnd(lines, st, start);
+    for (let i = start + 1; i < end; i++) {
+      // fenced 只标**顶层**代码块与 HTML 块：那是示例或原样文字。列表项里的代码块是那一项的内容
+      // （比如 forced done 的输出尾部），不能被当成别的东西丢掉。
+      out.push({ index: i, text: lines[i]!, fenced: st.code[i]! });
+    }
+    if (!every) break;
+    start = lines.findIndex((l, i) => i >= end && l === heading && st.h2.has(i));
   }
   return out;
 }
@@ -61,7 +69,11 @@ const ITEM_RE = /^- \[([ xX])\](?:[ \t]+(.*))?$/;
  */
 export function parseAcceptance(body: string): Criterion[] {
   const out: Criterion[] = [];
-  for (const { index, text } of sectionLines(body, "## Acceptance Criteria")) {
+  // 每个 `## Acceptance Criteria` 小节都读，编号跨小节连续。只读第一个时，第二个同名小节里的未勾标准
+  // 就从门禁里消失了（F10 第八轮评审经 edit -d 实测；手改文件也能造出来）。
+  for (const { index, text, fenced } of sectionLines(body, "## Acceptance Criteria", true)) {
+    // 围栏里的 `- [ ] x` 是示例代码，不是标准，也不占编号。
+    if (fenced) continue;
     const m = ITEM_RE.exec(text);
     if (m === null) continue;
     out.push({

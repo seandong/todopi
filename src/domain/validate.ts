@@ -161,7 +161,7 @@ export function validateFile(t: TaskFile): Finding[] {
  * 而 F09 的勾选写入端还要靠它定位具体行。两份实现迟早会漂。
  */
 export function logLines(body: string): string[] {
-  return sectionLines(body, "## Log").map((l) => l.text).filter((t) => t.startsWith("- "));
+  return sectionLines(body, "## Log").filter((l) => !l.fenced).map((l) => l.text).filter((t) => t.startsWith("- "));
 }
 
 /** Log 的一条：第一行（含 `- `）加上紧随其后的续行（已去掉两格缩进）。 */
@@ -184,7 +184,9 @@ export type LogEntry = { head: string; continuation: string[] };
 export function logEntries(body: string): LogEntry[] {
   const out: LogEntry[] = [];
   let current: LogEntry | null = null;
-  for (const { text } of sectionLines(body, "## Log")) {
+  for (const { text, fenced } of sectionLines(body, "## Log")) {
+    // 顶层围栏里的是示例，不是事件（F10 第二轮评审：围栏里一行假 done 曾被读成真事件）。
+    if (fenced) { current = null; continue; }
     if (text.startsWith("- ")) {
       current = { head: text, continuation: [] };
       out.push(current);

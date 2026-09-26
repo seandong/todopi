@@ -1,4 +1,5 @@
 // src/format/write.ts
+import { headingIndex, sectionEnd, structure } from "../markdown/sections.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { withLock } from "../fs/lock.ts";
@@ -257,29 +258,58 @@ export function nowStamp(): string {
  * 续行（缩进两格）属于前一项，所以「末尾」是整个小节的末尾，
  * 不是最后一个 `- ` 行的后面。
  */
+/** 正文里有没闭合的块时的报错；edit -d 用同一句。 */
+export const UNCLOSED = (at: number) =>
+  `the task body has a code fence or HTML block opened at body line ${at + 1} that is never closed, so the `
+  + "lines after it cannot be placed safely (spec §5.3). Close it (for a tag like <div>, a blank line after its "
+  + "content ends it), then retry.";
+
 function appendLogLine(body: string, line: string): string {
   const lines = body.split("\n");
   // **顶格精确匹配，与读取端（sectionLines）同一个判据。** 曾用 .trim()：一段缩进
   // 的 `   ## Log`（合法的未识别正文）被当成 Log 往里追加，读者却看不见——note 成功、
   // doctor 通过、show 一条都没有（F09 评审实测）。找不到真正的小节就在末尾新建一节，
   // 那段缩进的文字按 spec §5.3 原样保留。
-  const start = lines.findIndex((l) => l === "## Log");
+  const st = structure(lines);
+  // 正文里有没闭合的块（围栏，或吞掉了后面几行的 HTML 块）时不写。读取端把它的开头当普通文字，所以
+  // 此刻追加的事件看得见；可一旦有人补上结束标记，事件就落进了块里、从 Log 里消失（F10 第四轮评审）。
+  // spec §5.3：这样的正文，写入端不改写任何小节。
+  if (st.reparsedAt >= 0) throw new CliError(EXIT.usage, `Refusing to append to the Log: ${UNCLOSED(st.reparsedAt)}`);
+  const start = headingIndex(lines, st, "## Log");
   // 多行文本按 §5.3.3 的续行规则：第一行是列表项，后面每行缩进两格。
   // FR-D4a 的「强制关闭时记录输出尾部」就走这条路。
   const [first, ...rest] = line.split("\n");
   const item = [`- ${first}`, ...rest.map((l) => `  ${l}`)].join("\n");
+  let out: string;
+  let at: number;
   if (start < 0) {
     // **原正文一个字节都不动，只补分隔所需的换行。** 曾先 `replace(/\s*$/, "")` 再拼，
     // 于是末尾那段未识别小节的尾随空格与空行被削掉了（spec §5.3：writers MUST
     // preserve；F09 第二轮评审实测）。
     const sep = body === "" || body.endsWith("\n\n") ? "" : body.endsWith("\n") ? "\n" : "\n\n";
-    return `${body}${sep}## Log\n\n${item}\n`;
+    out = `${body}${sep}## Log\n\n${item}\n`;
+    at = `${body}${sep}## Log\n\n`.split("\n").length - 1;
+  } else {
+    let end = start + 1;
+    for (let i = start + 1; i < sectionEnd(lines, st, start); i++) {
+      if (lines[i]!.trim() !== "") end = i + 1;
+    }
+    // 紧贴在一个顶层 HTML 块（如 `<div>`）下面的行属于那个块，只有空行才结束它——事件得隔一个空行。
+    const glue = st.code[end - 1] === true ? ["", item] : [item];
+    lines.splice(end, 0, ...glue);
+    out = lines.join("\n");
+    at = end + glue.length - 1;
   }
-  let end = start + 1;
-  for (let i = start + 1; i < lines.length; i++) {
-    if (lines[i]!.startsWith("## ")) break;
-    if (lines[i]!.trim() !== "") end = i + 1;
+  // **写完问一遍解析器：新事件的每一行都不在代码块或 HTML 块里。** 上面两条是已知的情形；这一条兜住
+  // 没想到的——判定者是同一个解析器，而不是再写一份「什么会吞掉下一行」的近似。
+  const after = structure(out.split("\n"));
+  const span = item.split("\n").length;
+  for (let k = at; k < at + span; k++) {
+    if (after.code[k] === true || after.reparsedAt >= 0) {
+      throw new CliError(EXIT.usage,
+        "Refusing to append to the Log: the new entry would land inside a code or HTML block, where readers "
+        + "cannot see it. Check the end of the ## Log section, then retry.");
+    }
   }
-  lines.splice(end, 0, item);
-  return lines.join("\n");
+  return out;
 }

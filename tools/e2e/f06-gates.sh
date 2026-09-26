@@ -244,7 +244,7 @@ for(const a of r.actions){
     code=$?
     # 1 = 用法错误，说明我们给了一条本身就写错的命令；2/3 是门禁没过，那是对的
     [ "$code" -eq 1 ] && fail "[$label] 命令是用法错误：$cmd"
-    [ "$code" -gt 3 ] && fail "[$label] 命令退出 $code：$cmd"
+    [ "$code" -gt 3 ] && fail "[$label] 命令退出 ${code}：$cmd"
   done < "$TMP/acts"
   ok "[$label] $n 条 command 全部可执行"
 }

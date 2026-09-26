@@ -30,7 +30,7 @@ case "$out" in *"first task"*) ok "列出了任务" ;; *) fail "没列出任务�
 
 # 2. 顺序：创建顺序即 rank 顺序
 first_line="$(cli -C "$W" ls | head -1)"
-case "$first_line" in *"$A"*) ok "顺序符合 spec §7.4" ;; *) fail "第一行应是 $A：$first_line" ;; esac
+case "$first_line" in *"$A"*) ok "顺序符合 spec §7.4" ;; *) fail "第一行应是 ${A}：$first_line" ;; esac
 
 # 3. --ready 排除被阻塞的
 out="$(cli -C "$W" ls --ready 2>&1)"
