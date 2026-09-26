@@ -30,8 +30,9 @@ export function runSetup(opts: SetupOptions): SetupReport {
   const settings = opts.user === true
     ? join(opts.home ?? homedir(), ".claude", "settings.json")
     : join(ledger!.root, ".claude", "settings.json");
-  files.push({ path: settings, status: ensureClaudeHooks(settings) });
-  const notes: string[] = [];
+  const hooks = ensureClaudeHooks(settings);
+  files.push({ path: settings, status: hooks.status });
+  const notes: string[] = [...hooks.notes];
   if (ledger !== null) {
     const claudeMd = join(ledger.root, "CLAUDE.md");
     files.push({ path: claudeMd, status: ensureAgentsImport(claudeMd) });

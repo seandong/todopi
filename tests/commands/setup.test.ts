@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync, chmodSync, symlinkSync, lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
@@ -51,18 +51,20 @@ test("已有的 settings.json：别的键、别的钩子原样保留，只补我
     hooks: { SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "echo hi" }] }],
       PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "guard.sh" }] }] },
   }));
-  assert.equal(ensureClaudeHooks(p), "updated");
+  assert.equal(ensureClaudeHooks(p).status, "updated");
   const s = json(p);
   assert.equal(s.model, "opus");
   assert.deepEqual(s.permissions, { allow: ["Bash(ls)"] });
   assert.deepEqual(commands(s, "SessionStart"), ["echo hi", "todopi prime --hook"]);
   assert.deepEqual(commands(s, "PreToolUse"), ["guard.sh"]);
-  // 我们的钩子已经在（哪怕在别的 matcher 组里）：不再加。
-  assert.equal(ensureClaudeHooks(p), "unchanged");
+  assert.equal(ensureClaudeHooks(p).status, "unchanged");
 });
 
 test("settings.json 不是合法 JSON、不是对象、hooks 形状不对：拒绝，文件不动", () => {
-  for (const content of ["{ not json", "[1, 2]", JSON.stringify({ hooks: [] }), JSON.stringify({ hooks: { SessionStart: {} } })]) {
+  for (const content of ["{ not json", "[1, 2]", JSON.stringify({ hooks: [] }), JSON.stringify({ hooks: { SessionStart: {} } }),
+    // 显式的 null 不是「没有」；组与处理器的形状也要对（F14 评审）。
+    JSON.stringify({ hooks: null }), JSON.stringify({ hooks: { SessionStart: null } }),
+    JSON.stringify({ hooks: { SessionStart: [42] } }), JSON.stringify({ hooks: { SessionEnd: [{ hooks: "x" }] } })]) {
     const d = tmp();
     const p = join(d, "settings.json");
     writeFileSync(p, content);
@@ -115,4 +117,62 @@ test("钩子载荷里的会话 id：session_id、sessionID、sessionId；取不�
     assert.equal(sessionFromHookPayload(bad), undefined, bad);
   }
   mkdirSync(join(tmp(), "x"));
+});
+
+test("更新已有的 settings.json 与 CLAUDE.md：权限位不变（用户的设置可能含密钥）（F14 评审）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  writeFileSync(p, JSON.stringify({ apiKey: "private" }));
+  chmodSync(p, 0o600);
+  ensureClaudeHooks(p);
+  assert.equal(statSync(p).mode & 0o777, 0o600);
+  const m = join(d, "CLAUDE.md");
+  writeFileSync(m, "# mine\n");
+  chmodSync(m, 0o640);
+  ensureAgentsImport(m);
+  assert.equal(statSync(m).mode & 0o777, 0o640);
+});
+
+test("我们的命令已在、但 matcher 只覆盖 startup：不改用户的组、不再加一组，如实提示压缩后不会注入（F14 评审）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  const narrow = { hooks: { SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "todopi prime --hook" }] }],
+    SessionEnd: [{ hooks: [{ type: "command", command: "todopi handoff --check --hook" }] }] } };
+  writeFileSync(p, JSON.stringify(narrow));
+  const before = readFileSync(p, "utf8");
+  const r = ensureClaudeHooks(p);
+  assert.equal(r.status, "unchanged");
+  assert.equal(readFileSync(p, "utf8"), before);
+  assert.equal(r.notes.length, 1);
+  assert.match(r.notes[0]!, /will not be re-injected after compaction/);
+  // 覆盖 compact 的写法（正则、*）算装好，不提示。
+  for (const matcher of ["startup|compact|resume", "*", ".*"]) {
+    writeFileSync(p, JSON.stringify({ hooks: { ...narrow.hooks, SessionStart: [{ matcher, hooks: narrow.hooks.SessionStart[0]!.hooks }] } }));
+    assert.deepEqual(ensureClaudeHooks(p).notes, [], matcher);
+  }
+});
+
+test("符号链接：拒绝，不把链接换成普通文件（F14 评审）", () => {
+  const d = tmp();
+  writeFileSync(join(d, "target.json"), "{}");
+  symlinkSync(join(d, "target.json"), join(d, "link.json"));
+  assert.throws(() => ensureClaudeHooks(join(d, "link.json")), code(EXIT.usage));
+  assert.equal(lstatSync(join(d, "link.json")).isSymbolicLink(), true);
+  writeFileSync(join(d, "t.md"), "# x\n");
+  symlinkSync(join(d, "t.md"), join(d, "CLAUDE.md"));
+  assert.throws(() => ensureAgentsImport(join(d, "CLAUDE.md")), code(EXIT.usage));
+  assert.equal(readFileSync(join(d, "t.md"), "utf8"), "# x\n");
+});
+
+test("CLAUDE.md 有非法 UTF-8 字节：拒绝、字节不动；围栏里的 @AGENTS.md 不算导入（F14 评审）", () => {
+  const d = tmp();
+  const m = join(d, "CLAUDE.md");
+  const bytes = Buffer.from([0x61, 0x80, 0x62, 0x0a]);
+  writeFileSync(m, bytes);
+  assert.throws(() => ensureAgentsImport(m), code(EXIT.usage));
+  assert.ok(readFileSync(m).equals(bytes));
+  assert.equal(hasAgentsImport("```md\n@AGENTS.md\n```\n"), false);
+  writeFileSync(m, "```md\n@AGENTS.md\n```\n");
+  assert.equal(ensureAgentsImport(m), "appended");
+  assert.equal(readFileSync(m, "utf8"), "```md\n@AGENTS.md\n```\n\n@AGENTS.md\n");
 });

@@ -164,7 +164,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
   | Agent | 会话开始 | 压缩 | 会话结束 | 配置位置 |
   |---|---|---|---|---|
-  | Claude Code | `SessionStart`（matcher：`startup` `resume` `clear` `compact` `fork`） | `SessionStart` 的 `compact` 来源（`PostCompact` 存在，但输出不进上下文，见 §17 2026-09-26 重核） | `SessionEnd` | `.claude/settings.json` |
+  | Claude Code | `SessionStart`（matcher：`startup` `resume` `clear` `compact` `fork`） | `SessionStart` 的 `compact` 来源（`PostCompact` 存在，但它不在文档列出的「纯文本 stdout 进上下文」事件里；`additionalContext` 是否生效文档不清。见 §17 2026-09-26 重核） | `SessionEnd` | `.claude/settings.json` |
   | Codex | `SessionStart` | `PostCompact` | `SessionEnd` | `.codex/hooks.json` |
   | OpenCode | `event` 钩子订阅 `session.created` | 同上订阅 `session.compacted` | `session.idle` 兜底 | `.opencode/plugins/` |
   | pi | `session_start` | **`session_compact`**（压缩后）；`session_before_compact` 是压缩前 | `session_shutdown` | `.pi/extensions/`，`pi install` |
