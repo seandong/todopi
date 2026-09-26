@@ -219,3 +219,12 @@ test("CLAUDE.md 有非法 UTF-8 字节：拒绝、字节不动；围栏里的 @A
   assert.equal(ensureAgentsImport(m), "appended");
   assert.equal(readFileSync(m, "utf8"), "```md\n@AGENTS.md\n```\n\n@AGENTS.md\n");
 });
+
+test("settings.json 有非法 UTF-8 字节：拒绝、字节不动（评审五轮）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  const bytes = Buffer.concat([Buffer.from('{"model":"a'), Buffer.from([0x80]), Buffer.from('b"}')]);
+  writeFileSync(p, bytes);
+  assert.throws(() => ensureClaudeHooks(p), code(EXIT.usage));
+  assert.ok(readFileSync(p).equals(bytes));
+});

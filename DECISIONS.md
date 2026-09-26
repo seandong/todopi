@@ -2042,5 +2042,9 @@ Node 用 spec reporter，整层被判 blocked。
   statusMessage）。这样的组覆盖 startup / resume / clear / compact / fork 全部来源。其余同名组（限定了 matcher、
   带 `if` / `async` / 陌生键）一律不算装好：原样保留，末尾补一组标准的，并提示「两组都匹配时会注入两遍，删掉一个」。
   宁可多一组、说清楚，也不把一个可能不跑、或只覆盖一部分来源的组当成装好。
+- 「原样保留」指 **JSON 值**：整份 settings.json 经 JSON.parse / stringify 重写，缩进与数字的原始写法不保留；
+  超出双精度的数字写回的是 Claude Code 自己（同样用 JS 的 JSON.parse）读到的值——对它这个唯一的读者，值不变。
+  为了字节级保留而在源码层面拼接，就又得手写一个 JSON 定位器（评审五轮后收窄承诺，而不是再写一个）。
+  非法 UTF-8 的 settings.json 拒绝。
 - 用户文件的权限位不变（writeFileAtomic 新增 mode）；CLAUDE.md 按字节追加；导入判定按纯 CommonMark
   （markdown 层新增 commonmarkCodeLines——不带为验收门禁做的偏离）。

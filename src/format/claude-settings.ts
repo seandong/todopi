@@ -6,7 +6,10 @@
 //     PostCompact 虽然存在，却不在那张「stdout 进上下文」的事件表里。
 //   - SessionEnd → `todopi handoff --check --hook`。
 //
-// 文件是用户的：别的键、别的钩子原样保留（不校验、不改）；权限位不变；我们的标准组已经在就什么都不写（幂等）。要往里加东西的容器不对就拒绝、一个字节都不写：不是
+// 文件是用户的：别的键、别的钩子按 **JSON 值**原样保留（不校验、不改）；权限位不变；我们的标准组已经在就什么都
+// 不写（幂等）。整份文件经 JSON.parse / JSON.stringify 重写：缩进与数字的原始写法不保留，超出双精度的数字会变成
+// Claude Code 自己（同样用 JS 的 JSON.parse）读到的那个值——对它这个唯一的读者而言值不变（D035）。
+// 要往里加东西的容器不对就拒绝、一个字节都不写：不是
 // JSON 对象、`hooks` 不是对象（含显式 null）、要动的事件不是列表；文件是符号链接（原子替换会拆断链接）。
 
 import { existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
@@ -56,9 +59,13 @@ export function ensureClaudeHooks(path: string): SettingsResult {
   let settings: Record<string, unknown> = {};
   let mode: number | undefined;
   if (existed) {
+    // 先核对字节：解码会把非法 UTF-8 静默换成 U+FFFD，写回就改掉了用户原来的内容（F14 评审五轮）。
+    const bytes = readFileSync(path);
+    const text = bytes.toString("utf8");
+    if (!bytes.equals(Buffer.from(text, "utf8"))) refuse(path, "is not valid UTF-8");
     let parsed: unknown;
     try {
-      parsed = JSON.parse(readFileSync(path, "utf8"));
+      parsed = JSON.parse(text);
     } catch (err) {
       refuse(path, `is not valid JSON (${err instanceof Error ? err.message : String(err)})`);
     }
