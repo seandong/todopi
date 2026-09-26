@@ -1,7 +1,8 @@
 ---
 id: "tp-thtkze"
 title: "todopi setup codex / opencode 装好：Codex 会话开始与压缩后、OpenCode 会话开始都能收到注入（OpenCode 压缩后见 tp-1ssqrw）"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "seandong"
 blocked_by: ["tp-wnrlpw"]
 rank: "ie"
@@ -11,7 +12,7 @@ external:
   harness:
     legacy_id: "F15"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T08:52:21Z"
+updated: "2026-09-26T08:53:10Z"
 ---
 
 ## Description
@@ -78,3 +79,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - 2026-09-26T08:52:20Z seandong check ac=14: OpenCode 的会话 id 能取到：`session.compacted` 事件的 `properties.sessionID`
 - 2026-09-26T08:52:20Z seandong check ac=15: 幂等
 - 2026-09-26T08:52:21Z seandong note: 勾选依据：Codex 会话开始与压缩后（标记法）、OpenCode 会话开始为真机实测（PRD §17）；「session.compacted 的 properties.sessionID」依据 SDK 类型与单元用例，真机压缩见 tp-1ssqrw；其余由单元用例与 e2e 覆盖。
+- 2026-09-26T08:53:10Z seandong done verify=pass commit=b95fd80 dirty=false

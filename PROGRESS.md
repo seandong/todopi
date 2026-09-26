@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `48747b1` —— F14 setup claude 经 todopi done 关闭（verify=pass dirty=false，验收门禁 9/9）。
+- Last commit: `b95fd80` —— F15 setup codex / opencode 经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,12 +19,12 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 21 个任务，14 个 `closed/done`（F01–F14）、7 个 `open`。
+- 账本: `.todopi/` 21 个任务，15 个 `closed/done`（F01–F15）、7 个 `open`（含从 F15 拆出的 tp-1ssqrw）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F14 已完成（M1、M2 收齐，M3 开始）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+- 代码状态：**F01–F15 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
   `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check` /
-  `edit` / `move` / `dep` / `prime` / `handoff` / `doctor --fix` / `setup claude` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
+  `edit` / `move` / `dep` / `prime` / `handoff` / `doctor --fix` / `setup claude|codex|opencode` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
   身份解析（FR-C4 前三级）在 `domain/actor.ts` + `commands/actor.ts`，`ls` 与
@@ -158,6 +158,11 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+37. ~~F15 `setup codex / opencode`~~ 已完成（2026-09-26）。两家都在本机实测（PRD §17）：Codex 与 Claude 同构，
+    但压缩后 PostCompact 与 SessionStart(compact) 都触发，只装 SessionStart；项目级钩子要在 Codex 里信任。
+    OpenCode 的 event 钩子不能注入，插件经 experimental.chat.system.transform 进系统提示（D036）。
+    **OpenCode 压缩后注入没能实测**（免费模型不能压缩，其余凭据不可用）——拆到 tp-1ssqrw（用户定），等凭据。
+    实测在你的 ~/.codex/config.toml 里留下了临时目录的信任记录（projects / hooks.state 各几条），可删。
 36. harness：`clean-check` 的 state-updated 在 `--no-ff` 合并提交上改看被合并分支的末端（合并提交本身在
     `git show --name-only` 下是空的，以前每次合入 main 后都判失败；上一次我补了一个空的状态提交凑数）。
 35. ~~F14 `setup claude`~~ 已完成（2026-09-26）。外部事实先重核：查文档的子 agent 说「PostCompact 不存在」，
