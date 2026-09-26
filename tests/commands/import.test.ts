@@ -229,6 +229,8 @@ test("来源：项目内是相对路径；项目外是绝对路径；空白与 %
   assert.equal(sourceFor(d, join(d, "a b", "p%.md")), "a%20b/p%25.md");
   assert.equal(sourceFor(d, "/elsewhere/p.md"), "/elsewhere/p.md");
   assert.equal(encodeSource("x\ty"), "x%09y");
+  assert.equal(sourceFor(d, join(d, "..notes.md")), "..notes.md", "以两个点开头的文件名仍在项目里（F19 评审）");
+  assert.equal(sourceFor(d, join(d, "..", "x.md")), join(d, "..", "x.md").split("\\").join("/"));
   const a = runImport({ directory: d, file: plan(d, "a b/p.md", "- [ ] same\n"), actor: ME });
   assert.equal(a.source, "a%20b/p.md");
   const b = runImport({ directory: d, file: plan(d, "q.md", "- [ ] same\n"), actor: ME });
@@ -270,4 +272,11 @@ test("spec-kit 与 OpenSpec 的 tasks.md", () => {
     ["1. Implementation", "closed"], ["1.1 Create database schema", "closed"], ["1.2 Implement API endpoint", "closed"],
     ["2. Testing", "open"], ["2.1 Write tests", "open"]]);
   assert.equal(runDoctor({ directory: d }).findings.length, 0);
+});
+
+test("同名序号与标题里本来就有的 #n 不会撞（F19 评审）", () => {
+  const d = repo();
+  const r = runImport({ directory: d, file: plan(d, "p.md", "- [ ] A#2\n- [ ] A\n- [ ] A\n"), actor: ME });
+  assert.deepEqual(r.created.map((t) => t.title), ["A#2", "A", "A"]);
+  assert.equal(runImport({ directory: d, file: join(d, "p.md"), actor: ME }).created.length, 0);
 });

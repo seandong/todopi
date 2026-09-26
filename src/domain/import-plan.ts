@@ -29,8 +29,6 @@ export type PlannedTask = {
 
 export type ImportPlan = { tasks: PlannedTask[]; warnings: { line: number; message: string }[] };
 
-const SEP = "\u0000";
-
 function titleOf(text: string): { title: string; description?: string } {
   // 按字符（码点）数，不按 UTF-16 单元：一个 emoji 不该被劈成两半
   const chars = [...text];
@@ -42,7 +40,8 @@ function titleOf(text: string): { title: string; description?: string } {
 function keyed(parentKey: string | undefined, title: string, seen: Map<string, number>): string {
   const n = (seen.get(title) ?? 0) + 1;
   seen.set(title, n);
-  return `${parentKey ?? ""}${SEP}${title}${n > 1 ? `#${n}` : ""}`;
+  // 结构化编码，不拼字符串：拼成 `标题#2` 会与本来就叫「A#2」的条目撞上（F19 评审）
+  return JSON.stringify([parentKey ?? null, title, n]);
 }
 
 export function planImport(tree: ChecklistNode[]): ImportPlan {

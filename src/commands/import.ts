@@ -30,7 +30,8 @@ export function encodeSource(path: string): string {
 /** 来源：相对项目根的 POSIX 路径；在项目外就用绝对路径。 */
 export function sourceFor(root: string, file: string): string {
   const rel = relative(root, file);
-  const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  // `..notes.md` 是项目里的文件：只有 `..` 本身或 `../` 开头才出了项目（F19 评审）
+  const inside = rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
   return encodeSource((inside ? rel : file).split(sep).join("/"));
 }
 
