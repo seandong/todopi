@@ -200,28 +200,35 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
   // ① 只按 parent 与 blocked_by 做 DFS，回边（这两种引用合起来成环）丢掉——没有一个建的顺序能让两头都先存在；
   // ② from 按 priority 顺序逐条判断：目标能经已有的边走回源，加上就成环，丢掉；否则保留；
   // ③ 在合起来已无环的图上排拓扑序。
+  // 显式栈，不递归：一条上万个任务的 blocks 链会爆调用栈（F20 复审三轮）
+  const edgesOf = (t: BeadsPlanned): [string, "parent" | "blocks"][] =>
+    [...(t.parent !== undefined ? [[t.parent, "parent"] as [string, "parent"]] : []), ...t.blockedBy.map((b) => [b, "blocks"] as [string, "blocks"])];
   const hardVisit = new Map<string, 1 | 2>();
-  const hard = (id: string): void => {
-    const t = planned.get(id);
-    if (t === undefined || hardVisit.get(id) === 2) return;
-    hardVisit.set(id, 1);
-    const edges: [string, "parent" | "blocks", () => void][] = [
-      ...(t.parent !== undefined ? [[t.parent, "parent", () => { t.parent = undefined; }] as [string, "parent", () => void]] : []),
-      ...t.blockedBy.map((b) => [b, "blocks", () => { t.blockedBy = t.blockedBy.filter((x) => x !== b); }] as [string, "blocks", () => void]),
-    ];
-    for (const [target, kind, drop] of edges) {
+  for (const root of byPriority) {
+    if (hardVisit.has(root.id)) continue;
+    const stack: { id: string; edges: [string, "parent" | "blocks"][]; at: number }[] = [];
+    const enter = (id: string): void => {
+      hardVisit.set(id, 1);
+      stack.push({ id, edges: edgesOf(planned.get(id)!), at: 0 });
+    };
+    enter(root.id);
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1]!;
+      if (top.at === top.edges.length) { hardVisit.set(top.id, 2); stack.pop(); continue; }
+      const [target, kind] = top.edges[top.at++]!;
+      if (!planned.has(target) || hardVisit.get(target) === 2) continue;
       if (hardVisit.get(target) === 1) {
-        drop();
+        const t = planned.get(top.id)!;
+        if (kind === "parent") t.parent = undefined;
+        else t.blockedBy = t.blockedBy.filter((x) => x !== target);
         dropped.cycleEdges += 1;
-        warnings.push(`${id}: its ${kind} reference to ${target} cannot be kept: together with the other parent and blocks `
+        warnings.push(`${top.id}: its ${kind} reference to ${target} cannot be kept: together with the other parent and blocks `
           + "references it forms a loop, so no creation order has both tasks exist first; dropped");
         continue;
       }
-      hard(target);
+      enter(target);
     }
-    hardVisit.set(id, 2);
-  };
-  for (const i of byPriority) hard(i.id);
+  }
 
   const next = (t: BeadsPlanned): string[] => [...(t.parent !== undefined ? [t.parent] : []), ...t.blockedBy, ...(t.from !== undefined ? [t.from] : [])];
   /** 从 start 沿「要先建的」边走，能不能走到 goal */
@@ -238,27 +245,40 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
     }
     return false;
   };
+  // 先把所有 from 拿下来，再逐条放回：判断时只算已经决定保留的 from，否则一条注定要丢的 from 会把本可保留的连带丢掉
+  // （F20 复审三轮）
+  const wanted = new Map<string, string>();
   for (const i of byPriority) {
     const t = planned.get(i.id)!;
-    if (t.from === undefined) continue;
-    const target = t.from;
+    if (t.from !== undefined) wanted.set(t.beadsId, t.from);
     t.from = undefined;
+  }
+  for (const i of byPriority) {
+    const target = wanted.get(i.id);
+    if (target === undefined) continue;
+    const t = planned.get(i.id)!;
     if (planned.has(target) && reaches(target, t.beadsId)) {
       dropped.fromEdges += 1;
       warnings.push(`${t.beadsId}: its discovered-from reference to ${target} cannot be kept: ${target} must itself be `
-        + `created after ${t.beadsId} (parent or blocks), so no creation order has it exist first; dropped`);
+        + `created after ${t.beadsId} (through parent, blocks or other kept discovered-from references), so no creation order has it exist first; dropped`);
     } else t.from = target;
   }
 
+  // 合起来已无环：后序放置（显式栈）
   const out: BeadsPlanned[] = [];
-  const done = new Set<string>();
-  const place = (id: string): void => {
-    const t = planned.get(id);
-    if (t === undefined || done.has(id)) return;
-    done.add(id);
-    for (const target of next(t)) place(target);
-    out.push(t);
-  };
-  for (const i of byPriority) place(i.id);
+  const placed = new Set<string>();
+  for (const root of byPriority) {
+    if (placed.has(root.id)) continue;
+    const stack: { id: string; targets: string[]; at: number }[] = [{ id: root.id, targets: next(planned.get(root.id)!), at: 0 }];
+    placed.add(root.id);
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1]!;
+      if (top.at === top.targets.length) { out.push(planned.get(top.id)!); stack.pop(); continue; }
+      const target = top.targets[top.at++]!;
+      if (!planned.has(target) || placed.has(target)) continue;
+      placed.add(target);
+      stack.push({ id: target, targets: next(planned.get(target)!), at: 0 });
+    }
+  }
   return { tasks: out, skipped, dropped, warnings };
 }

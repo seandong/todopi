@@ -314,3 +314,27 @@ test("描述第一行的缩进保留（只去首尾空行）", () => {
   const r = runImportBeads({ directory: d, actor: ME });
   assert.equal(runShow({ directory: d, id: r.created[0]!.id, actor: ME }).description, "  indented first line\nsecond");
 });
+
+test("一条注定要丢的 from 不连带丢掉本可保留的 from（F20 复审三轮 P3-a）", () => {
+  // c discovered-from b；b discovered-from a；a 被 b 挡着（a blocked_by b）且 a 的 parent 是 c
+  const p = planBeadsImport([
+    { id: "c", title: "C", priority: 0, dependencies: [dep("c", "b", "discovered-from")] },
+    { id: "b", title: "B", priority: 1, dependencies: [dep("b", "a", "discovered-from")] },
+    { id: "a", title: "A", priority: 2, dependencies: [dep("a", "b", "blocks"), dep("a", "c", "parent-child")] },
+  ] as BeadsIssue[], new Set(), () => true);
+  const t = (id: string) => p.tasks.find((x) => x.beadsId === id)!;
+  assert.equal(t("c").from, "b", "c 的 from 保住");
+  assert.equal(t("b").from, undefined, "b 的 from 丢掉（a 要在 b 之后）");
+  assert.equal(p.dropped.fromEdges, 1);
+  const at = (id: string) => p.tasks.findIndex((x) => x.beadsId === id);
+  assert.ok(at("b") < at("c") && at("c") < at("a") && at("b") < at("a"));
+});
+
+test("一万五千个任务的 blocks 链：不爆栈，建的顺序正确", () => {
+  const n = 15000;
+  const issues = Array.from({ length: n }, (_, i) => ({ id: `x${i}`, title: `X${i}`, priority: 2,
+    ...(i > 0 ? { dependencies: [dep(`x${i}`, `x${i - 1}`, "blocks")] } : {}) })) as BeadsIssue[];
+  const p = planBeadsImport(issues.reverse(), new Set(), () => true);
+  assert.equal(p.tasks.length, n);
+  assert.deepEqual(p.tasks.slice(0, 3).map((t) => t.beadsId), ["x0", "x1", "x2"]);
+});
