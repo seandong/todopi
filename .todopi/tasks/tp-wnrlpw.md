@@ -1,7 +1,8 @@
 ---
 id: "tp-wnrlpw"
 title: "todopi setup claude 一条命令装好，全新克隆上 Claude Code 会话开始时收到 prime 输出"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "seandong"
 blocked_by: ["tp-sch6q1"]
 rank: "id"
@@ -11,7 +12,7 @@ external:
   harness:
     legacy_id: "F14"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T07:51:58Z"
+updated: "2026-09-26T07:53:03Z"
 ---
 
 ## Description
@@ -61,3 +62,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - 2026-09-26T07:51:58Z seandong check ac=7: 幂等：重复运行不产生第二份钩子
 - 2026-09-26T07:51:58Z seandong check ac=8: 打印写入的每个文件
 - 2026-09-26T07:51:58Z seandong check ac=9: `--user` 切到用户级
+- 2026-09-26T07:53:03Z seandong done verify=pass commit=48747b1 dirty=false

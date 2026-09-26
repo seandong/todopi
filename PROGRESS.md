@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `c415490` —— 8 个 open 自举任务的验收判据拆成勾选项（用户定，评审四轮 Go）；此前 F13 经 todopi done 关闭。
+- Last commit: `48747b1` —— F14 setup claude 经 todopi done 关闭（verify=pass dirty=false，验收门禁 9/9）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,12 +19,12 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 21 个任务，13 个 `closed/done`（F01–F13）、8 个 `open`。
+- 账本: `.todopi/` 21 个任务，14 个 `closed/done`（F01–F14）、7 个 `open`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F13 已完成（M1、M2 收齐）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+- 代码状态：**F01–F14 已完成（M1、M2 收齐，M3 开始）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
   `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check` /
-  `edit` / `move` / `dep` / `prime` / `handoff` / `doctor --fix` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
+  `edit` / `move` / `dep` / `prime` / `handoff` / `doctor --fix` / `setup claude` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
   身份解析（FR-C4 前三级）在 `domain/actor.ts` + `commands/actor.ts`，`ls` 与
@@ -158,6 +158,11 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+35. ~~F14 `setup claude`~~ 已完成（2026-09-26）。外部事实先重核：查文档的子 agent 说「PostCompact 不存在」，
+    直查官方页面发现它错了——它存在，但 stdout 不进上下文；压缩后注入走 SessionStart 的 compact 来源。
+    **真 Claude Code 会话实测**：会话开始、交互式 /compact 之后、退出，三次钩子都触发且注入生效（PRD §17）。
+    七轮评审，后五轮在「合并用户的 settings.json」上：最后收成 D035——不校验用户别的钩子、连 matcher 语义都
+    不猜，只认我们写出的标准组；「原样保留」收窄为 JSON 值。第一个经过验收门禁（9/9 勾选）关闭的自举任务。
 30. ~~要不要把 open 自举任务的散文判据回填成勾选项~~ 已做（2026-09-26，用户定「改」）。8 个任务逐条
     拆分，一条对应一项核对，不增不减；任务标题本身是验收结果的另列一条并标「标题」。唯一改动：安装器任务的「依赖只有三个
     且都零传递依赖」已被 D031 改变，改为「限定在 ARCH-010 白名单内」。每个任务都记了一条 note。
