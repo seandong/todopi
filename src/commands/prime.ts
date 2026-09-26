@@ -6,11 +6,11 @@
 
 import { hostname } from "node:os";
 import { currentActor } from "./actor.ts";
-import { isDisplayable, staleInputFor } from "./view.ts";
+import { isDisplayable, staleInputFor, visible } from "./view.ts";
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { nowStamp } from "../format/write.ts";
-import { recordPrime } from "../format/session.ts";
+import { recordPrime, verifyPrint } from "../format/session.ts";
 import { indexTasks, isBlocked, isReady, statusOf } from "../domain/derive.ts";
 import { parseAcceptance } from "../domain/acceptance.ts";
 import { logEntries, validateFile } from "../domain/validate.ts";
@@ -45,15 +45,6 @@ const str = (t: TaskFile, k: string): string => {
   return typeof v === "string" ? v : "";
 };
 
-/**
- * 进输出的任务内容把控制字符（ESC 之类）换成可见的 `\xNN`：这段文字要进模型的上下文，也会打到
- * 终端上，一条标准或一个 assignee 不该能改颜色或挪光标（F11 评审一、二轮）。换行与 Tab 保留——
- * 多行 Log 的续行靠换行。**在投影时做，不在渲染时做**：DTO 里就是展示值，--json 与文本才是同一份
- * 内容（第二轮：只在渲染时转义，JSON 解码出来仍带 ESC）。原值要看 `todopi show --json`。
- */
-export function visible(s: string): string {
-  return s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
-}
 const shown = (t: TaskFile, k: string): string => visible(str(t, k));
 
 /**
@@ -85,7 +76,7 @@ type View = {
   others: TaskFile[];
 };
 
-function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLedger>; actor: string } {
+function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLedger>; actor: string; all: TaskFile[] } {
   const ledger = discoverLedger(opts.directory);
   const read = readTasks(ledger);
   // 图建在磁盘上的全部任务之上（ls 的同一条理由：排除一个任务是有派生后果的）；显示只用读得通的。
@@ -99,7 +90,7 @@ function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLe
   const held = inProgress.filter((t) => isMine(t.frontmatter["assignee"], who))
     .sort((a, b) => (str(a, "updated") < str(b, "updated") ? 1 : str(a, "updated") > str(b, "updated") ? -1 : 0));
   const others = inProgress.filter((t) => !isMine(t.frontmatter["assignee"], who));
-  return { ledger, actor, tasks, index, stale, held, others };
+  return { ledger, actor, all: read, tasks, index, stale, held, others };
 }
 
 /**
@@ -108,7 +99,13 @@ function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLe
  */
 function record(v: ReturnType<typeof view>, opts: PrimeOptions): string[] {
   try {
-    recordPrime(v.ledger, opts.session !== undefined ? { session: opts.session } : { actor: v.actor }, nowStamp());
+    // 快照取磁盘上**全部**读得出的任务（含 doctor 不认的），handoff 才能发现任何一个的 verify 变了。
+    const verify: Record<string, string> = {};
+    for (const t of v.all) {
+      const raw = t.frontmatter["verify"];
+      verify[t.idFromFilename] = verifyPrint(typeof raw === "string" ? raw : undefined);
+    }
+    recordPrime(v.ledger, opts.session !== undefined ? { session: opts.session } : { actor: v.actor }, nowStamp(), verify);
     return [];
   } catch (err) {
     return [`Could not record this prime for handoff: ${err instanceof Error ? err.message : String(err)}`];
