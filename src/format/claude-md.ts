@@ -5,7 +5,7 @@
 
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { writeFileAtomic } from "../fs/atomic.ts";
-import { structure } from "../markdown/sections.ts";
+import { commonmarkCodeLines } from "../markdown/sections.ts";
 import { EXIT, CliError } from "../exit.ts";
 
 export type ImportResult = "created" | "appended" | "unchanged";
@@ -13,12 +13,14 @@ export type ImportResult = "created" | "appended" | "unchanged";
 /**
  * 已经导入了吗：正文里（不在代码块或 HTML 块里）有一行，去掉首尾空白后恰好是 `@AGENTS.md` 或
  * `@./AGENTS.md`。Claude Code 解析导入时跳过代码块（官方文档），围栏里的那一行不是导入（F14 评审）——
- * 代码块的判定交给 markdown 层，不自己数围栏。混在句子里的 `@AGENTS.md` 不去猜。
+ * 代码块的判定交给 markdown 层的纯 CommonMark 版本，不自己数围栏。混在句子里的 `@AGENTS.md` 不去猜。
  */
 export function hasAgentsImport(text: string): boolean {
   const lines = text.split("\n");
-  const st = structure(lines);
-  return lines.some((l, i) => st.code[i] !== true && /^@(?:\.\/)?AGENTS\.md$/.test(l.trim()));
+  // 纯 CommonMark：没闭合的围栏延伸到文末（Claude Code 就这么读）。markdown 层的 structure() 为验收门禁把它
+  // 当普通文字，在这里用它就会把围栏里的 `@AGENTS.md` 当成导入（F14 评审二轮）。
+  const code = commonmarkCodeLines(lines);
+  return lines.some((l, i) => !code[i] && /^@(?:\.\/)?AGENTS\.md$/.test(l.trim()));
 }
 
 export function ensureAgentsImport(path: string): ImportResult {

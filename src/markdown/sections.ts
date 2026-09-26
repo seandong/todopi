@@ -157,3 +157,19 @@ export function sectionEnd(lines: string[], st: BodyStructure, start: number): n
   while (end < lines.length && !st.h2.has(end)) end += 1;
   return end;
 }
+
+/**
+ * 按**纯** CommonMark 标出属于代码块（围栏或缩进，任何嵌套层级）的行——不带上面那处为 todopi 验收门禁做的
+ * 偏离：没闭合的围栏在这里照 CommonMark 一直延伸到文末。给「别的工具怎么读这份 Markdown」用：Claude Code
+ * 解析 CLAUDE.md 的 `@导入` 时跳过代码块（官方文档），没闭合的围栏里的 `@AGENTS.md` 它不会导入（F14 评审）。
+ */
+export function commonmarkCodeLines(lines: string[]): boolean[] {
+  const code = lines.map(() => false);
+  const walker = new Parser().parse(lines.join("\n")).walker();
+  for (let ev = walker.next(); ev !== null; ev = walker.next()) {
+    if (!ev.entering || ev.node.type !== "code_block" || ev.node.sourcepos == null) continue;
+    const [[start], [end]] = ev.node.sourcepos;
+    for (let k = start - 1; k <= end - 1 && k < code.length; k++) code[k] = true;
+  }
+  return code;
+}

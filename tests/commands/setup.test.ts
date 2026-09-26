@@ -133,22 +133,35 @@ test("更新已有的 settings.json 与 CLAUDE.md：权限位不变（用户的�
   assert.equal(statSync(m).mode & 0o777, 0o640);
 });
 
-test("我们的命令已在、但 matcher 只覆盖 startup：不改用户的组、不再加一组，如实提示压缩后不会注入（F14 评审）", () => {
+test("我们的命令已在、但覆盖不全：只补缺的来源（不改用户的组、启动时不注入两遍）；多组并集覆盖就算装好（评审一、二轮）", () => {
   const d = tmp();
   const p = join(d, "settings.json");
-  const narrow = { hooks: { SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "todopi prime --hook" }] }],
-    SessionEnd: [{ hooks: [{ type: "command", command: "todopi handoff --check --hook" }] }] } };
-  writeFileSync(p, JSON.stringify(narrow));
-  const before = readFileSync(p, "utf8");
+  const end = [{ hooks: [{ type: "command", command: "todopi handoff --check --hook" }] }];
+  const ours = (matcher?: string) => ({ ...(matcher === undefined ? {} : { matcher }), hooks: [{ type: "command", command: "todopi prime --hook" }] });
+  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [ours("startup")], SessionEnd: end } }));
   const r = ensureClaudeHooks(p);
-  assert.equal(r.status, "unchanged");
-  assert.equal(readFileSync(p, "utf8"), before);
-  assert.equal(r.notes.length, 1);
-  assert.match(r.notes[0]!, /will not be re-injected after compaction/);
-  // 覆盖 compact 的写法（正则、*）算装好，不提示。
-  for (const matcher of ["startup|compact|resume", "*", ".*"]) {
-    writeFileSync(p, JSON.stringify({ hooks: { ...narrow.hooks, SessionStart: [{ matcher, hooks: narrow.hooks.SessionStart[0]!.hooks }] } }));
-    assert.deepEqual(ensureClaudeHooks(p).notes, [], matcher);
+  assert.equal(r.status, "updated");
+  assert.deepEqual(json(p).hooks.SessionStart.map((g: { matcher?: string }) => g.matcher), ["startup", "compact"]);
+  assert.match(r.notes[0]!, /added a group for compact/);
+  assert.equal(ensureClaudeHooks(p).status, "unchanged", "补过之后幂等");
+  // 两个组分别覆盖 startup 与 compact：并集覆盖，什么都不做、不提示。
+  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [ours("startup"), ours("compact")], SessionEnd: end } }));
+  assert.deepEqual(ensureClaudeHooks(p), { status: "unchanged", notes: [] });
+  // 正则、*、缺省：都算覆盖。
+  for (const matcher of ["startup|compact|resume", "*", ".*", undefined]) {
+    writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [ours(matcher)], SessionEnd: end } }));
+    assert.deepEqual(ensureClaudeHooks(p), { status: "unchanged", notes: [] }, String(matcher));
+  }
+});
+
+test("处理器缺 type、command 不是字符串、matcher 不是字符串：拒绝，文件不动（评审二轮）", () => {
+  for (const group of [{ hooks: [{}] }, { hooks: [{ type: "command" }] }, { matcher: 5, hooks: [] }]) {
+    const d = tmp();
+    const p = join(d, "settings.json");
+    const content = JSON.stringify({ hooks: { SessionStart: [group] } });
+    writeFileSync(p, content);
+    assert.throws(() => ensureClaudeHooks(p), code(EXIT.usage), content);
+    assert.equal(readFileSync(p, "utf8"), content);
   }
 });
 
@@ -172,6 +185,8 @@ test("CLAUDE.md 有非法 UTF-8 字节：拒绝、字节不动；围栏里的 @A
   assert.throws(() => ensureAgentsImport(m), code(EXIT.usage));
   assert.ok(readFileSync(m).equals(bytes));
   assert.equal(hasAgentsImport("```md\n@AGENTS.md\n```\n"), false);
+  assert.equal(hasAgentsImport("```md\n@AGENTS.md\n"), false, "没闭合的围栏照 CommonMark 延伸到文末（Claude Code 这么读）");
+  assert.equal(hasAgentsImport("- item\n\n      @AGENTS.md\n"), false, "列表项里的缩进代码块");
   writeFileSync(m, "```md\n@AGENTS.md\n```\n");
   assert.equal(ensureAgentsImport(m), "appended");
   assert.equal(readFileSync(m, "utf8"), "```md\n@AGENTS.md\n```\n\n@AGENTS.md\n");
