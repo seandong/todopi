@@ -62,7 +62,19 @@ export function createTask(
   make: (ctx: CreateContext) => NewTask,
   validate: Validate,
 ): TaskFile {
-  return withLock(lockPathFor(ledger), () => {
+  return withLock(lockPathFor(ledger), () => createTaskUnlocked(ledger, make, validate));
+}
+
+/**
+ * createTask 的锁内部分。**调用方必须已经持有账本的写锁**（withLedgerLock）：一次要建多个任务、且「建不建」取决于
+ * 锁内读到的账本时用（import：两个并发的导入各自判定「还没导入过」就会建出两份）。
+ */
+export function createTaskUnlocked(
+  ledger: Ledger,
+  make: (ctx: CreateContext) => NewTask,
+  validate: Validate,
+): TaskFile {
+  {
     const existing = readTasks(ledger);
     const takenIds = new Set(existing.map((t) => t.idFromFilename));
     const lastRank = existing
@@ -120,7 +132,7 @@ export function createTask(
       );
     }
     return candidate;
-  });
+  }
 }
 
 /** 把一段任务文本解析成 TaskFile。失败时返回说明问题的字符串。 */
