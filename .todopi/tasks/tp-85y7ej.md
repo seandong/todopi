@@ -1,7 +1,8 @@
 ---
 id: "tp-85y7ej"
 title: "todopi setup pi 装好，pi 的会话开始与压缩后都能收到注入"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "seandong"
 blocked_by: ["tp-thtkze"]
 rank: "if"
@@ -11,7 +12,7 @@ external:
   harness:
     legacy_id: "F16"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T10:49:45Z"
+updated: "2026-09-26T10:50:36Z"
 ---
 
 ## Description
@@ -61,3 +62,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - 2026-09-26T10:49:44Z seandong check ac=8: 上下文注入走 `before_agent_start`
 - 2026-09-26T10:49:44Z seandong check ac=9: 幂等
 - 2026-09-26T10:49:45Z seandong note: 勾选依据：会话开始与压缩后的注入在真实 pi 0.84.0 运行时里验证（测试专用的 echo provider 回显系统提示；/compact 后以同一会话 id 重新 prime，新标记出现在下一轮系统提示里；评审也用 RPC compact 复现），真模型未测——本机 pi 无凭据（D037）。其余由单元用例与 e2e 覆盖。
+- 2026-09-26T10:50:36Z seandong done verify=pass commit=f9e71ae dirty=false
