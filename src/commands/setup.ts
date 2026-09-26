@@ -12,6 +12,7 @@ import { findLedger } from "../format/discover.ts";
 import { CLAUDE_HOOKS, CODEX_HOOKS, ensureHookConfig } from "../format/claude-settings.ts";
 import { ensureOpencodePlugin } from "../format/opencode-plugin.ts";
 import { ensurePiExtension } from "../format/pi-extension.ts";
+import { assertInsideProject } from "../format/generated-file.ts";
 import { ensureAgentsImport } from "../format/claude-md.ts";
 import type { SetupReport } from "../output/dto/setup.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -29,7 +30,13 @@ export function runSetup(opts: SetupOptions): SetupReport {
     throw new CliError(EXIT.usage, "No .todopi/ directory found here or above. Run \"todopi init\" first, or use --user for user-level hooks.");
   }
   const home = opts.home ?? homedir();
-  const at = (project: string[], user: string[]) => (opts.user === true ? join(home, ...user) : join(ledger!.root, ...project));
+  // 项目级的目标必须真的落在项目里（路径上的目录可能是指向项目外的符号链接，F16 评审）。
+  const at = (project: string[], user: string[]) => {
+    if (opts.user === true) return join(home, ...user);
+    const path = join(ledger!.root, ...project);
+    assertInsideProject(ledger!.root, path);
+    return path;
+  };
   const files: SetupReport["files"] = [];
   const notes: string[] = [];
 
@@ -40,6 +47,7 @@ export function runSetup(opts: SetupOptions): SetupReport {
     // CLAUDE.md 的导入是项目的事（AGENTS.md 按项目存在）：在账本里就确保项目的 CLAUDE.md，不在就跳过并说明。
     if (ledger !== null) {
       const claudeMd = join(ledger.root, "CLAUDE.md");
+      assertInsideProject(ledger.root, claudeMd);
       files.push({ path: claudeMd, status: ensureAgentsImport(claudeMd) });
     } else {
       notes.push("Not inside a todopi project, so no CLAUDE.md was touched; run setup in a project to add its @AGENTS.md import.");

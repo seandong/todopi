@@ -5,8 +5,8 @@
 // 约定，不是证明——标记那一行本身写明了「首行是它的文件会被替换」（F15 评审）。符号链接（含悬空的）一律拒绝：
 // existsSync 对悬空链接返回 false，原子替换会把链接换成普通文件。
 
-import { lstatSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { lstatSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, sep } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { lstatOrNull } from "./claude-settings.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -28,4 +28,19 @@ export function ensureGeneratedFile(path: string, content: string, marker: strin
   }
   writeFileAtomic(path, content, lstatSync(path).mode);
   return "updated";
+}
+
+/**
+ * 项目级 setup 的目标必须真的落在项目目录里：路径上的某个目录（`.pi`、`.opencode`、`.claude`……）若是指向项目外的
+ * 符号链接，写入就越过了输出里显示的项目路径（F16 评审）。取目标路径上最近一个已存在的祖先，解析真实路径，要求它在
+ * 项目根的真实路径之内。用户级（--user）不查：home 下用符号链接管理配置目录很常见。
+ */
+export function assertInsideProject(root: string, path: string): void {
+  let probe = path;
+  while (lstatOrNull(probe) === null && dirname(probe) !== probe) probe = dirname(probe);
+  const real = realpathSync(probe);
+  const base = realpathSync(root);
+  if (real !== base && !real.startsWith(base + sep)) {
+    throw new CliError(EXIT.usage, `${path} would be written outside the project (${probe} resolves to ${real}); left untouched. Use --user, or point that link inside the project.`);
+  }
 }
