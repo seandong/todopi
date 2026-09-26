@@ -2181,3 +2181,38 @@ Node 用 spec reporter，整层被判 blocked。
 - 子代理复审三轮（Go，两条 P3 顺手修）：判断 from 能否保留时只算已决定保留的 from（先全拿下再逐条放回），否则一条注定要丢的会
   连带丢掉本可保留的；两处 DFS 改为显式栈，一万五千个任务的 blocks 链不再爆栈。
 
+## D042 — 分发：tsc 逐文件编译的 npm 包、main.ts 入口、install.sh 与两条 CI
+
+- 日期：2026-09-26（F21）。D006 决策 10 与 D008 决策 3 的落地。
+- **npm 包必须是能在 Node ≥ 20 上跑的 JS**。之前 `bin` 指向 `src/cli.ts`，靠的是 Node 22 的类型剥离，Node 20 根本跑不了。
+  `tsconfig.build.json` 逐文件编译到 `dist/`（不打包；`rewriteRelativeImportExtensions` 把 import 里的 `.ts` 改成 `.js`，
+  动态 import 也改），`prepack` 自动构建。开发照旧直接跑 `.ts`。
+- **Node 20.0 起就有的 API**：`import.meta.dirname`（20.11 起）换成 `fileURLToPath(import.meta.url)`；`readdirSync` 的
+  `recursive`（20.1 起）换成手写遍历。`node:20.0.0-slim` 干净容器里 `npm i -g` 这个包、init / add / ls / claim / done（走 verify 的
+  runner）都通过。engines 仍写 `>=20`。
+- **单二进制**（`bun build --compile src/main.ts`）有两处与磁盘文件相关的假设不成立：版本号从 `../package.json` 读（二进制里没有）
+  → 改为 `src/version.ts` 的常量，用例钉住与 package.json 一致；verify 的 runner 是另起一个进程跑磁盘上的 `runner.ts`（二进制里没有）
+  → `exec/run.ts` 找不到 runner 文件时把二进制自己再起一次，参数走内部环境变量，新入口 `src/main.ts` 据此只加载 runner 模块；
+  runner 读完立刻删掉这个变量，免得 verify 命令里再调 `todopi` 时也以为自己是 runner。
+- **整套 Layer-3 能换可执行文件跑**：e2e 脚本认 `TODOPI_E2E_BIN`。20 个脚本在 macOS arm64 的单二进制上、在 Node 20.19 装好的 npm 包上
+  全部通过（把它指向 `/usr/bin/false` 时 20 个全部失败，证明真的在用它）。
+- **install.sh**：D008 决策 3 的清单逐条实现——`/releases/latest` 的 302 解析版本；SHA-256 必须通过，跳过要显式设
+  `TODOPI_SKIP_CHECKSUM=1` 并告警；解压前逐条检查条目，拒绝绝对路径、`..`、以及除 `todopi` 之外的任何条目；装到 `~/.local/bin`
+  （npm 路径用 `--prefix ~/.local`），不在 PATH 时提示；`TODOPI_VERSION` 钉版本。下载地址与 npm 包规格可用环境变量覆盖，测试因此
+  能离线（file://）跑。`tools/e2e/f21-install.sh` 用假的「二进制」资产覆盖这些逻辑；畸形归档用 node 手写 tar 头生成（系统 tar 会
+  替你把开头的 / 与 .. 去掉，造不出恶意归档）。
+- **两条 CI**：`install.yml` 每次推送构建 npm 包与 Linux x64 二进制，在 `node:20-bookworm-slim`（有 Node，走 npm）与
+  `debian:bookworm-slim`（无 Node，走二进制并校验）里各装一次、跑第一条命令；本地用 docker（linux-arm64 二进制）照做通过。
+  `release.yml` 在推送 `v*` 标签时构建四个平台的二进制、SHA256SUMS、建 GitHub Release；`npm publish` 需要 `NPM_TOKEN`，没有就跳过。
+  **发布（打标签、npm 发包）是维护者的动作，本任务不做。**
+- **CI 自 2026-09-17 起一直是红的，没人发现**（F21 查安装 CI 时才看到）：`harness.yml` 从没装依赖（没有 `npm ci`），F01 引入第一个
+  运行时依赖后每次推送都失败；本地有 node_modules，三层一直绿，而我的流程只看本地结果。修：工作流加 setup-node 与 `npm ci`、给 e2e 的
+  临时仓库配 git 身份。用 `node:22-bookworm` 容器（非 root、全新 `npm ci`、没有 git 身份）模拟整套 CI 找出另外三个只在那种环境出现的问题：
+  ① **runner 的真实竞态**：结果 JSON 在子进程退出时就序列化了，而打开日志文件是异步的——秒退的命令在「日志打不开」的 error 到来之前
+  结束，报告里 logProblem 是 null。负载高（12 个测试文件并行）时稳定复现（两次两挂），修后三次全过：JSON 挪到真正输出时再拼，
+  `end` 回调带错误时也记下；② **ARCH-014 与 6 个 e2e 用 grep 的 `[一-鿿]` 认中文**，依赖 locale：POSIX 下按字节比，把 —、…、· 也算进去；
+  GNU grep 在某些 UTF-8 locale 下直接报错返回 2，被 `if grep -q` 当成「没有」而**悄悄放行**。都改成 node 按码点判断
+  （`tools/check-cjk.mjs`，语义与原规则逐条一致，补了与 locale 无关的反例）；③ 两条权限用例要求非 root，容器里 root 跑会红——那是
+  设计如此（「无从验证」必须和「通过」长得不一样），GitHub 的 runner 不是 root。
+- 流程上的教训：合并推送之后要看远端 CI 的结果，不能只看本地三层。
+

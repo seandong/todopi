@@ -1,0 +1,76 @@
+# F21：安装路径在干净容器里各跑一次（验收标准「CI 在有 Node / 无 Node 的容器里跑一次」）。
+# 构建本次提交的 npm 包与 Linux x64 单二进制，照发布的样子摆好（v<version>/todopi-<version>-linux-x64.tar.gz + SHA256SUMS），
+# 再用 install.sh 离线（file://）安装：有 Node 的容器走 npm 包，无 Node 的容器走二进制。装好后跑第一条命令。
+name: Install
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - name: Build npm package and Linux binary
+        run: |
+          npm ci
+          VERSION=$(node -p 'require("./package.json").version')
+          mkdir -p out/v$VERSION
+          npm pack --pack-destination out
+          mv out/todopi-$VERSION.tgz out/todopi.tgz
+          bun build --compile --target=bun-linux-x64 src/main.ts --outfile build/todopi
+          tar -czf out/v$VERSION/todopi-$VERSION-linux-x64.tar.gz -C build todopi
+          (cd out/v$VERSION && sha256sum todopi-$VERSION-linux-x64.tar.gz > SHA256SUMS)
+          echo "$VERSION" > out/VERSION
+          cp install.sh out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: install-artifacts
+          path: out/
+
+  with-node:
+    needs: artifacts
+    runs-on: ubuntu-latest
+    container: node:20-bookworm-slim
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: install-artifacts
+          path: /artifacts
+      - name: install.sh takes the npm path, then the first command runs
+        run: |
+          apt-get update -qq && apt-get install -y -qq curl git >/dev/null
+          cd /artifacts
+          out=$(TODOPI_VERSION=$(cat VERSION) TODOPI_NPM_SPEC=/artifacts/todopi.tgz sh install.sh 2>&1); echo "$out"
+          echo "$out" | grep -q "installing the npm package"
+          export PATH="$HOME/.local/bin:$PATH"
+          mkdir /tmp/w && cd /tmp/w && git init -q
+          todopi init && todopi add "First task" && todopi ls | grep -q "First task" && todopi doctor
+
+  without-node:
+    needs: artifacts
+    runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - name: Tools only (no Node)
+        run: apt-get update -qq && apt-get install -y -qq curl ca-certificates git >/dev/null && ! command -v node
+      - uses: actions/download-artifact@v4
+        with:
+          name: install-artifacts
+          path: /artifacts
+      - name: install.sh takes the binary path (checksum verified), then the first command runs
+        run: |
+          cd /artifacts
+          out=$(TODOPI_VERSION=$(cat VERSION) TODOPI_DOWNLOAD_BASE=file:///artifacts sh install.sh 2>&1); echo "$out"
+          echo "$out" | grep -q "no Node.js >= 20 found"
+          echo "$out" | grep -q "checksum verified"
+          export PATH="$HOME/.local/bin:$PATH"
+          mkdir /tmp/w && cd /tmp/w && git init -q
+          todopi init && todopi add "First task" --verify "true" && todopi ls | grep -q "First task" && todopi doctor
+          ID=$(todopi ls | cut -d' ' -f1)
+          todopi --as ci claim "$ID" && todopi --as ci done "$ID" --yes

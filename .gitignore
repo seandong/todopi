@@ -12,3 +12,6 @@ dist/
 *.swo
 *~
 .*.sw[a-p]
+
+# npm pack 的产物
+*.tgz

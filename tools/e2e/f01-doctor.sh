@@ -28,7 +28,7 @@ write_task() {                     # write_task <dir> <id> [extra-frontmatter-li
   } > "$1/.todopi/tasks/$2.md"
 }
 
-cli() { node "$ROOT/src/cli.ts" "$@"; }
+cli() { if [ -n "${TODOPI_E2E_BIN:-}" ]; then "$TODOPI_E2E_BIN" "$@"; else node "$ROOT/src/cli.ts" "$@"; fi; }
 
 # 1. 干净的账本 → 0
 mk_ledger "$TMP/clean"; write_task "$TMP/clean" "tp-a1b2c3"
@@ -78,7 +78,7 @@ case "$out" in *"tp-000001 -> tp-000002"*|*"tp-000002 -> tp-000001"*) ok "输出
 
 # 8. 输出是英文 —— CLI 的 stdout 是产品表面（AGENTS.md）
 out="$(cli -C "$TMP/bad" doctor 2>&1)"
-if printf '%s' "$out" | grep -q '[一-鿿]'; then
+if printf '%s' "$out" | node -e 'process.exit(/[\u4e00-\u9fff]/u.test(require("fs").readFileSync(0, "utf8")) ? 0 : 1)'; then
   fail "doctor 输出含中文（CLI 的 stdout 是产品表面，MUST 是英文）：$out"
 else
   ok "doctor 输出是英文"

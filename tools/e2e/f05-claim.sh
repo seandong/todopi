@@ -13,7 +13,7 @@ fail() { printf '  FAIL  %s\n' "$1"; FAILED=1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-cli() { node "$ROOT/src/cli.ts" "$@"; }
+cli() { if [ -n "${TODOPI_E2E_BIN:-}" ]; then "$TODOPI_E2E_BIN" "$@"; else node "$ROOT/src/cli.ts" "$@"; fi; }
 jfield() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s)[process.argv[1]])))' "$1"; }
 
 W="$TMP/w"
@@ -114,7 +114,7 @@ cli -C "$W" --as "bad actor" claim "$A" >/dev/null 2>&1
 
 # 11. 输出是英文，--json 可解析
 out="$(cli -C "$W" claim "$A" 2>&1; cli -C "$W" release "$A" 2>&1)"
-if printf '%s' "$out" | grep -q '[一-鿿]'; then
+if printf '%s' "$out" | node -e 'process.exit(/[\u4e00-\u9fff]/u.test(require("fs").readFileSync(0, "utf8")) ? 0 : 1)'; then
   fail "claim/release 输出含中文（CLI 的 stdout 是产品表面，MUST 是英文）"
 else
   ok "输出是英文"

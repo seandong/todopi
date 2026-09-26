@@ -76,10 +76,15 @@ Node 的异步 spawn 支持。
   `erasableSyntaxOnly`，让类型检查阶段就拦下来。用 `as const` 数组加
   `typeof X[number]` 代替。
 - **不用 `Bun.*`**（ARCH-007）。Bun 只在发布二进制时作为编译器出现。
-- **ESM，没有 `require`**。`package.json` 的 `type` 是 `module`；取当前文件目录用
-  `import.meta.dirname`。
+- **ESM，没有 `require`**。`package.json` 的 `type` 是 `module`；取当前文件的路径用
+  `fileURLToPath(import.meta.url)`——`import.meta.dirname` 要 Node 20.11 起，npm 包承诺 Node ≥ 20（F21）。
 - **import 路径写全 `.ts` 后缀**。Node 的 ESM 解析要求如此，`tsconfig.json` 的
-  `allowImportingTsExtensions` 与之对应。
+  `allowImportingTsExtensions` 与之对应。发 npm 包时 `tsconfig.build.json` 逐文件编译到 `dist/`（不打包），
+  `rewriteRelativeImportExtensions` 把 `.ts` 改写成 `.js`。
+- **只用 Node 20.0 就有的 API**（npm 包的 `engines`）：新 API 进来之前先查它从哪个版本起有。发布前的检查在
+  `tools/e2e/f21-install.sh` 里：打出来的包在 Node 20 上装上、跑一遍命令。
+- **入口是 `src/main.ts`**：它先判断这次是不是 verify 的 runner（单二进制里 runner 没有独立的文件，见 exec/run.ts），
+  不是再加载 `src/cli.ts`。
 - **不直接调用 `process.exit()`**。抛 `CliError`，由 `src/cli.ts` 的顶层 catch
   统一映射到 `process.exitCode`——`process.exit()` 会截断尚未 flush 的 stdout。
 

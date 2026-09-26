@@ -34,11 +34,22 @@ function identity(dir: string): string | null {
   }
 }
 
+/** 目录下全部条目的相对路径。不用 readdirSync 的 recursive 选项：它要 Node 20.1 起，npm 包承诺 Node ≥ 20（F21）。 */
+function listTree(dir: string, prefix = ""): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(join(dir, prefix), { withFileTypes: true })) {
+    const rel = prefix === "" ? e.name : join(prefix, e.name);
+    out.push(rel);
+    if (e.isDirectory()) out.push(...listTree(dir, rel));
+  }
+  return out;
+}
+
 /** 目录下全部文件的签名；目录没了返回空串（会被当成一次变化）。 */
 export function signature(dir: string): string {
   let names: string[];
   try {
-    names = readdirSync(dir, { recursive: true, encoding: "utf8" }).sort();
+    names = listTree(dir).sort();
   } catch {
     return "";
   }

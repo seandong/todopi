@@ -13,7 +13,7 @@ fail() { printf '  FAIL  %s\n' "$1"; FAILED=1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-todopi() { node "$ROOT/src/cli.ts" "$@"; }
+todopi() { if [ -n "${TODOPI_E2E_BIN:-}" ]; then "$TODOPI_E2E_BIN" "$@"; else node "$ROOT/src/cli.ts" "$@"; fi; }
 
 W="$TMP/w"
 mkdir -p "$W/.beads"

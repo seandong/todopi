@@ -15,13 +15,18 @@ TMP="$(mktemp -d)"
 PIDS=""
 cleanup() { for p in $PIDS; do kill "$p" 2>/dev/null; done; wait 2>/dev/null; rm -rf "$TMP"; }
 trap cleanup EXIT
-todopi() { node "$ROOT/src/cli.ts" "$@"; }
+todopi() { if [ -n "${TODOPI_E2E_BIN:-}" ]; then "$TODOPI_E2E_BIN" "$@"; else node "$ROOT/src/cli.ts" "$@"; fi; }
 free_port() { node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'; }
 wait_for() { # wait_for <file> <pattern> <tries>
   local i=0
   while [ "$i" -lt "$3" ]; do grep -q "$2" "$1" 2>/dev/null && return 0; sleep 0.1; i=$((i + 1)); done
   return 1
 }
+
+# 起服务用的 shim：exec 替换掉 sh，后台时 $! 就是服务进程本身（SIGHUP 与 lsof 都要打在它身上）
+SERVE="$TMP/serve"
+if [ -n "${TODOPI_E2E_BIN:-}" ]; then printf '#!/bin/sh\nexec "%s" "$@"\n' "$TODOPI_E2E_BIN"; else printf '#!/bin/sh\nexec node "%s/src/cli.ts" "$@"\n' "$ROOT"; fi > "$SERVE"
+chmod +x "$SERVE"
 
 W="$TMP/w"
 mkdir -p "$W"
@@ -30,8 +35,7 @@ todopi -C "$W" init >/dev/null 2>&1
 todopi -C "$W" add "First board task" >/dev/null 2>&1
 
 PORT="$(free_port)"
-# 直接起 node（不经 shell 函数）：$! 才是服务进程本身，SIGHUP 与 lsof 都要打在它身上
-node "$ROOT/src/cli.ts" -C "$W" web --port "$PORT" > "$TMP/web.out" 2>&1 &
+"$SERVE" -C "$W" web --port "$PORT" > "$TMP/web.out" 2>&1 &
 WEB=$!
 PIDS="$PIDS $WEB"
 wait_for "$TMP/web.out" "todopi board: http://127.0.0.1:${PORT}/" 50 && ok "web 起来并打印地址" || fail "$(cat "$TMP/web.out")"
@@ -65,7 +69,7 @@ out="$(todopi -C "$TMP/none" web --port "$(free_port)" 2>&1)"; rc=$?
 
 # 轮询模式同样推送
 P2="$(free_port)"
-node "$ROOT/src/cli.ts" -C "$W" web --port "$P2" --poll > "$TMP/web2.out" 2>&1 &
+"$SERVE" -C "$W" web --port "$P2" --poll > "$TMP/web2.out" 2>&1 &
 WEB2=$!
 PIDS="$PIDS $WEB2"
 wait_for "$TMP/web2.out" "polling" 50 && ok "--poll 以轮询方式运行" || fail "$(cat "$TMP/web2.out")"

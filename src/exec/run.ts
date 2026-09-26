@@ -3,7 +3,9 @@
 // 与 fs/ 同级：只 import node:*，不认识 todopi 的格式。
 
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type RunResult = {
   /** 退出码；被信号杀死时为 null */
@@ -66,6 +68,9 @@ const DEFAULT_MAX_OUTPUT = 1024 * 1024;
  *    实际的 `verify`（`pnpm test`、`cargo test`）不会这么做；会这么做的是守护
  *    进程，而那类东西本来就不该出现在一条 `verify` 里。
  */
+/** 单二进制里把参数带给 runner 的环境变量（src/main.ts 认它）。runner 起 verify 命令之前会把它删掉。 */
+export const RUNNER_ENV = "TODOPI_INTERNAL_VERIFY_RUNNER";
+
 export function runCommand(command: string, opts: RunOptions): RunResult {
   if (process.platform === "win32") {
     // 不在没测过的情况下声称支持树终止。CI 只有 Ubuntu，Windows 是尽力而为，
@@ -86,9 +91,14 @@ export function runCommand(command: string, opts: RunOptions): RunResult {
     logPath: opts.logPath ?? null,
   });
 
-  const runner = join(import.meta.dirname, "runner.ts");
+  // runner 与本文件同目录、同扩展名（开发时 .ts，npm 包里 .js）。不存在就是在 Bun 编译的单二进制里（文件都在二进制内部）：
+  // 把二进制自己再起一次，参数走 RUNNER_ENV，由 src/main.ts 转给 runner（F21）。
+  const self = fileURLToPath(import.meta.url);
+  const runner = join(dirname(self), `runner${extname(self)}`);
+  const onDisk = existsSync(runner);
   const started = Date.now();
-  const r = spawnSync(process.execPath, [runner, payload], {
+  const r = spawnSync(process.execPath, onDisk ? [runner, payload] : [], {
+    env: onDisk ? process.env : { ...process.env, [RUNNER_ENV]: payload },
     encoding: "utf8",
     // runner 的输出是一行 JSON：一份不超过上限的尾部，最坏情况每个字节
     // 转义成 \uXXXX 六个字符

@@ -13,7 +13,7 @@ fail() { printf '  FAIL  %s\n' "$1"; FAILED=1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-cli() { node "$ROOT/src/cli.ts" "$@"; }
+cli() { if [ -n "${TODOPI_E2E_BIN:-}" ]; then "$TODOPI_E2E_BIN" "$@"; else node "$ROOT/src/cli.ts" "$@"; fi; }
 jfield() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s)[process.argv[1]])))' "$1"; }
 
 W="$TMP/w"
@@ -143,7 +143,7 @@ cli -C "$W" finish "$I" --force --reason "alias keeps every option" >/dev/null 2
 # 14. 输出是英文，--json 的拒绝报告可解析
 J=$(cli -C "$W" --json add "english check" --ac "x" | jfield id)
 out="$(cli -C "$W" done "$J" 2>&1)"
-if printf '%s' "$out" | grep -q '[一-鿿]'; then
+if printf '%s' "$out" | node -e 'process.exit(/[\u4e00-\u9fff]/u.test(require("fs").readFileSync(0, "utf8")) ? 0 : 1)'; then
   fail "门禁报告含中文（CLI 的 stdout 是产品表面，MUST 是英文）"
 else
   ok "门禁报告是英文"
@@ -239,7 +239,7 @@ for(const a of r.actions){
     [ -z "$cmd" ] && continue
     [ "$kind" = "TPL" ] && continue
     n=$((n + 1))
-    real=$(printf '%s' "$cmd" | sed "s|^todopi |node $ROOT/src/cli.ts -C $W |")
+    real=$(printf '%s' "$cmd" | sed "s|^todopi |cli -C $W |")
     eval "$real" >/dev/null 2>&1
     code=$?
     # 1 = 用法错误，说明我们给了一条本身就写错的命令；2/3 是门禁没过，那是对的

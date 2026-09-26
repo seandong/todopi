@@ -12,6 +12,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 运行时依赖与 tsc 要先装：没有这一步时，自 F01 引入依赖起（2026-09-17）CI 一直是红的——本地有 node_modules 所以三层都绿，
+      # 没人看远端（F21 发现）
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # e2e 里会建临时仓库并提交；runner 上没有 git 身份时提交失败，done 只能记 commit=unknown（f06 实测，F21）
+      - name: Git identity for the e2e repositories
+        run: git config --global user.name "todopi CI" && git config --global user.email "ci@todopi.invalid"
+
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 

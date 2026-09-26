@@ -1,7 +1,8 @@
 ---
 id: "tp-234oft"
 title: "npm i -g todopi 与 curl 安装器在干净环境里都能装上并跑通第一条命令"
-status: "open"
+status: "in_progress"
+assignee: "seandong"
 blocked_by: ["tp-0ca49n", "tp-66vnyl"]
 rank: "ik"
 verify: "make check && make test && bash tools/e2e/f21-install.sh"
@@ -10,7 +11,7 @@ external:
   harness:
     legacy_id: "F21"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-26T06:21:54Z"
+updated: "2026-09-26T15:04:53Z"
 ---
 
 ## Description
@@ -58,3 +59,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F21
 - 2026-09-26T06:21:54Z seandong note: 验收判据由散文拆成勾选项（用户 2026-09-26 定）：逐条对应原文，任务标题另列一条。唯一改动：原文「依赖只有三个且都零传递依赖」已被 D031（引入 commonmark，用户定）改变，改为「限定在 ARCH-010 的白名单内」——照抄会留下一条永远勾不上的标准。原文见 git 历史。
+- 2026-09-26T15:04:53Z seandong claimed

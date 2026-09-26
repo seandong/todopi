@@ -4,7 +4,7 @@ A durable task ledger for AI coding agents.
 
 Your agent's tasks, in your repo, in 12 fields. Survives compaction, sessions, and switching agents.
 
-Status: pre-alpha. Product definition is complete; implementation has not started.
+Status: pre-alpha. The CLI works end to end; it has not been released yet.
 
 ## What it is
 
@@ -14,7 +14,19 @@ No resident process, no database, no API key, no telemetry, no network access, n
 
 That is not a promise, it is a build rule: a check in this repository's CI rejects any outbound network call reaching `src/`, so a release that phoned home could not be produced without first deleting the rule in a visible commit. The one place todopi executes anything is your own `verify` command, and it prints that command before running it.
 
-Installing with npm pulls about 1.5 MB — todopi and three dependencies, each with no dependencies of its own. It is plain JavaScript on Node 20 or newer; the single-file binary is there for machines without Node, not as the default path.
+Installing with npm pulls about 3.3 MB: todopi (about 430 KB of JavaScript) and four dependencies — `yaml`, `commander`, `fractional-indexing`, and `commonmark`, which brings three small packages of its own. It is plain JavaScript on Node 20 or newer; the single-file binary is there for machines without Node, not as the default path.
+
+## Install
+
+Once the first version is released:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/seandong/todopi/main/install.sh | sh
+```
+
+With Node.js 20 or newer on your PATH, this installs the npm package; without it, it downloads the binary for your platform and verifies its SHA-256 before installing. Either way the command lands in `~/.local/bin`. Set `TODOPI_VERSION` to install a specific version. With Node you can also run `npm install --global todopi`.
+
+Then, in a repository: `todopi init`, and `todopi setup <agent>` for the coding agents you use.
 
 ## A note on `verify`
 

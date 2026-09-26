@@ -20,6 +20,9 @@ function run(id: string, files: Record<string, string>): string {
     mkdirSync(dirname(join(d, p)), { recursive: true });
     writeFileSync(join(d, p), text);
   }
+  // 规则里用到的 tools/*.mjs 一并放进临时目录：检查命令按仓库根的相对路径调用它们
+  mkdirSync(join(d, "tools"), { recursive: true });
+  for (const tool of ["check-cjk.mjs"]) writeFileSync(join(d, "tools", tool), readFileSync(join(import.meta.dirname, "../../tools", tool)));
   return execFileSync("bash", ["-c", check(id)], { cwd: d, encoding: "utf8" });
 }
 
@@ -40,7 +43,8 @@ test("ARCH-002：board 之外的监听、setInterval 被拦；注释里提到不
   assert.equal(run("ARCH-002", { "src/board/s.ts": "server.listen(port, \"127.0.0.1\");\nserver.listen(port, \"127.0.0.1\" , cb);\n" }), "");
 });
 
-test("ARCH-014：代码行里的中文被拦；整行注释不算；行尾 // 注释不算", () => {
+test("ARCH-014：代码行里的中文被拦；整行注释不算；行尾 // 注释不算；—、…、· 这类非中文字符不算（与 locale 无关）", () => {
+  assert.equal(run("ARCH-014", { "src/commands/x.ts": "const s = \"connecting\u2026 \u00b7 a \u2014 b\";\n" }), "");
   assert.match(run("ARCH-014", { "src/commands/x.ts": "throw new Error(\"出错了\");\n" }), /x\.ts:1:/);
   assert.equal(run("ARCH-014", { "src/commands/x.ts": "// 中文注释\n * 中文\n/* 中文 */\nconst a = 1; // 行尾中文\n" }), "");
   assert.match(run("ARCH-014", { "src/commands/x.ts": "f(); /* 行尾块注释 */\n" }), /x\.ts:1:/, "行尾块注释照规则的 fix 移到独立行");

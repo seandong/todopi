@@ -136,10 +136,10 @@
       "id": "ARCH-014",
       "description": "src/ 中面向用户的输出必须是英文",
       "applies_when": "test -d src",
-      "check": "grep -rn '[一-鿿]' src --include='*.ts' --include='*.tsx' | grep -vE ':[0-9]+:[[:space:]]*(//|\\*|/\\*)' | grep -vE '//[^\"'\"'\"'`]*[一-鿿]' || true",
+      "check": "node tools/check-cjk.mjs src",
       "expect": "empty",
       "what": "src/ 的代码（非注释）里出现了中文字符。",
-      "why": "CLI 的 stdout / stderr / help 是产品表面，MUST 是英文（AGENTS.md「用户可见文案 English-first」、engineering-rules「改动措辞等同改 UI，先写英文」）。注释保持中文是有意的——那是内部设计文档，英文是分发语言、中文是思考语言，混同会让其中一种长期失真。这条规则之所以需要，是因为 e2e 只断言退出码与 JSON 可解析性，从不检查语言：2026-09-21 的 Codex review 发现 F01 与 F02 的全部用户可见文案都是中文，而三层验证全绿。",
+      "why": "CLI 的 stdout / stderr / help 是产品表面，MUST 是英文（AGENTS.md「用户可见文案 English-first」、engineering-rules「改动措辞等同改 UI，先写英文」）。注释保持中文是有意的——那是内部设计文档，英文是分发语言、中文是思考语言，混同会让其中一种长期失真。这条规则之所以需要，是因为 e2e 只断言退出码与 JSON 可解析性，从不检查语言：2026-09-21 的 Codex review 发现 F01 与 F02 的全部用户可见文案都是中文，而三层验证全绿。 判断改由 tools/check-cjk.mjs 按码点做（F21）：原来的 grep 字符区间依赖 locale，容器里误报。",
       "fix": "把该行的字符串字面量改成英文。行尾的中文注释请移到独立的注释行——本规则按行首是否为注释判断，行尾注释会被误报。"
     },
     {

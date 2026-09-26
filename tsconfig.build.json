@@ -1,0 +1,11 @@
+{
+  "//": "npm 包的构建：逐文件把 src/ 编译到 dist/（不打包，D006 决策 10），import 里的 .ts 改写成 .js（F21）。",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src/**/*.ts"]
+}

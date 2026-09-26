@@ -1,0 +1,45 @@
+# 发布：推送 v<version> 标签时构建 npm 包与四个平台的单二进制，生成 SHA256SUMS，建 GitHub Release 并附上。
+# install.sh 从这里取二进制（/releases/latest 与 /releases/download/v<version>/...）。
+# 发 npm 需要仓库 secret NPM_TOKEN；没有就跳过那一步（发布是维护者的事，工作流不替人决定）。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: oven-sh/setup-bun@v2
+      - name: Tag matches package.json
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - name: Build
+        run: |
+          npm ci
+          VERSION=${GITHUB_REF_NAME#v}
+          mkdir -p out build
+          npm pack --pack-destination out
+          for t in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            bun build --compile --target=bun-$t src/main.ts --outfile build/$t/todopi
+            tar -czf out/todopi-$VERSION-$t.tar.gz -C build/$t todopi
+          done
+          (cd out && sha256sum todopi-$VERSION-*.tar.gz > SHA256SUMS)
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes
+      - name: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then echo "NPM_TOKEN is not set; skipping npm publish"; exit 0; fi
+          npm publish out/todopi-${GITHUB_REF_NAME#v}.tgz --access public
