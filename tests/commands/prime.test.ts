@@ -287,3 +287,24 @@ test("只省掉了一条 Log（没有已勾标准可丢）：truncated 为真，
   assert.equal(r.held[0]!.log.length, 1);
   assert.equal(r.truncated, true);
 });
+
+/** 文本里每个反引号里的 todopi 命令，都得在 JSON 里出现——「同一份内容」对导航命令的那一半。 */
+function assertCommandsInJson(out: string, dto: unknown): void {
+  const json = JSON.stringify(dto);
+  for (const [, c] of out.matchAll(/`(todopi [^`]*)`/g)) assert.ok(json.includes(JSON.stringify(c!)), `文本里的 ${c} 不在 JSON 里`);
+}
+
+test("文本里提到的每条命令都在 DTO 里：无勾选项的任务、--full 的 ready 超过 5 条（第三轮评审）", () => {
+  const d = repo();
+  const prose = runAdd({ directory: d, title: "prose", actor: ME }).id;
+  runClaim({ directory: d, id: prose, actor: ME });
+  for (let k = 0; k < 7; k++) runAdd({ directory: d, title: `r${k}`, actor: ME });
+  const r = prime(d);
+  assert.equal(r.held[0]!.seeAlso, `todopi show ${prose}`);
+  assert.deepEqual(r.commands, [`todopi show ${prose}`, "todopi ls --ready", "todopi prime --full"]);
+  assertCommandsInJson(renderPrime(r), r);
+  const full = runPrimeFull({ directory: d, actor: ME }).report;
+  assert.deepEqual(full.readyMore, { count: 2, command: "todopi ls --ready" });
+  assertCommandsInJson(renderPrimeFull(full), full);
+  assert.match(renderPrimeFull(full), /\n2 more: `todopi ls --ready`\n/);
+});

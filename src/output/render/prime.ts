@@ -1,8 +1,9 @@
 // src/output/render/prime.ts
 // prime 的 Markdown。它被注入进模型的上下文：纯文本、没有颜色、结尾恰好一个换行。
 //
-// 所有任务内容在 commands/prime.ts 投影时已经转义过控制字符（DTO 里就是展示值），这里原样拼接——
-// 于是 --json 与文本是同一份内容。
+// 所有任务内容在 commands/prime.ts 投影时已经转义过控制字符（DTO 里就是展示值），这里原样拼接；
+// **渲染不生成内容**——文本里出现的每条命令都来自 DTO（第三轮评审：`todopi show <id>` 与 --full 的
+// `todopi ls --ready` 曾在这里现拼，JSON 里没有）。于是 --json 与文本是同一份内容。
 //
 // **每一行只能是这几种之一**（D010：协议不进 prime）：任务标题、验收标准的标签行或标准、Log 的
 // 标签行或条目、「另有 N 个」、空行、最后的指针行。用例按这个白名单逐行检查。
@@ -12,7 +13,7 @@ import type { PrimeFullReport, PrimeReport, PrimeTask } from "../dto/prime.ts";
 function taskLines(t: PrimeTask): string[] {
   const out = [`## ${t.id}: ${t.title}`];
   if (t.acceptanceTotal === 0) {
-    out.push(`Acceptance criteria: none as checkboxes (see \`todopi show ${t.id}\`)`);
+    out.push(`Acceptance criteria: none as checkboxes (see \`${t.seeAlso}\`)`);
   } else {
     const done = t.acceptance.filter((c) => c.checked).length + t.checkedOmitted;
     const omitted = t.checkedOmitted > 0 ? `; ${t.checkedOmitted} checked not shown` : "";
@@ -51,7 +52,7 @@ export function renderPrimeFull(r: PrimeFullReport): string {
   const blocks: string[] = [];
   blocks.push(r.held.length === 0 ? "# In progress (yours)\n\nNone." : ["# In progress (yours)", ...r.held.map((t) => taskLines(t).join("\n"))].join("\n\n"));
   blocks.push(["# Held by others", "", ...(r.heldByOthers.length === 0 ? ["None."] : r.heldByOthers.map((t) => `- ${t.id} ${t.title} (${t.assignee})`))].join("\n"));
-  const more = r.readyTotal > r.ready.length ? `\n\n${r.readyTotal - r.ready.length} more: \`todopi ls --ready\`` : "";
+  const more = r.readyMore === null ? "" : `\n\n${r.readyMore.count} more: \`${r.readyMore.command}\``;
   blocks.push(["# Ready", "", ...(r.ready.length === 0 ? ["None."] : r.ready.map((t) => `- ${t.id} ${t.title}`))].join("\n") + more);
   const c = r.counts;
   blocks.push(`# Counts\n\n${c.open} open · ${c.in_progress} in progress · ${c.ready} ready · ${c.blocked} blocked · ${c.closed} closed`);

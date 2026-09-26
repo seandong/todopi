@@ -71,6 +71,7 @@ function project(t: TaskFile, level: 0 | 1 | 2): PrimeTask {
     acceptance: kept.map((c) => ({ n: c.n, text: visible(c.text), checked: c.checked })),
     checkedOmitted: all.length - kept.length,
     acceptanceTotal: all.length,
+    seeAlso: all.length === 0 ? `todopi show ${t.idFromFilename}` : null,
     log: entries.map((e) => visible([e.head, ...e.continuation.map((l) => `  ${l}`)].join("\n"))),
     logOmitted: Math.min(every.length, 2) - entries.length,
   };
@@ -125,8 +126,9 @@ export function runPrime(opts: PrimeOptions): { report: PrimeReport; warnings: s
     const more = v.held.length - count;
     const p = pointer(ready, v.others.length, v.held.length > 0);
     const line = moreHeldLine(more);
+    const held = v.held.slice(0, count).map((t) => project(t, level));
     const r: PrimeReport = {
-      held: v.held.slice(0, count).map((t) => project(t, level)),
+      held,
       moreHeld: more,
       ready,
       heldByOthers: v.others.length,
@@ -135,7 +137,9 @@ export function runPrime(opts: PrimeOptions): { report: PrimeReport; warnings: s
       overBudget: false,
       moreHeldLine: line,
       pointer: p.line,
-      commands: [...(line === null ? [] : ["todopi ls --mine"]), ...p.commands],
+      // 文本里提到的每条命令，按出现顺序：各任务的 seeAlso、「另有 N 个」、指针。
+      commands: [...held.flatMap((t) => (t.seeAlso === null ? [] : [t.seeAlso])),
+        ...(line === null ? [] : ["todopi ls --mine"]), ...p.commands],
     };
     // truncated 按**实际省略的内容**算：收紧一级不等于真省掉了什么——没有已勾标准、只有一条 Log 的
     // 任务收紧到底也还是原样（第二轮评审：只按级别算会误报）。
@@ -170,6 +174,7 @@ export function runPrimeFull(opts: PrimeOptions): { report: PrimeFullReport; war
     heldByOthers: sortTasks(v.others).map((t) => ({ id: t.idFromFilename, title: shown(t, "title"), assignee: shown(t, "assignee") })),
     ready: ready.slice(0, 5).map((t) => ({ id: t.idFromFilename, title: shown(t, "title") })),
     readyTotal: ready.length,
+    readyMore: ready.length > 5 ? { count: ready.length - 5, command: "todopi ls --ready" } : null,
     counts: {
       open: v.tasks.filter((t) => statusOf(t) === "open").length,
       in_progress: v.tasks.filter((t) => statusOf(t) === "in_progress").length,

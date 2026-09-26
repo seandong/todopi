@@ -11,6 +11,8 @@ export type PrimeTask = {
   checkedOmitted: number;
   /** 这个任务一共有几条验收标准（勾选项形式的）；0 表示只有散文或没有 */
   acceptanceTotal: number;
+  /** 没有勾选项形式的标准时，去哪里看散文判据；有标准时为 null */
+  seeAlso: string | null;
   /** 最近的 Log，旧的在前；每条是头行加续行 */
   log: string[];
   /** 默认推 2 条，因预算少推了几条 */
@@ -42,6 +44,8 @@ export type PrimeFullReport = {
   heldByOthers: { id: string; title: string; assignee: string }[];
   ready: { id: string; title: string }[];
   readyTotal: number;
+  /** ready 超过列出的 5 条时，剩下的几条与取用命令 */
+  readyMore: { count: number; command: string } | null;
   counts: { open: number; in_progress: number; ready: number; blocked: number; closed: number };
   recentlyClosed: { id: string; title: string; resolution: string }[];
 };
