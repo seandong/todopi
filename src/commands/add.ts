@@ -2,7 +2,9 @@
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { createTask } from "../format/write.ts";
-import { validateWrite } from "../domain/validate.ts";
+import { validateWrite, logEntries } from "../domain/validate.ts";
+import { parseAcceptance, sectionLines } from "../domain/acceptance.ts";
+import { structure } from "../markdown/sections.ts";
 import { currentActor } from "./actor.ts";
 import { EXIT, CliError } from "../exit.ts";
 import { LockBusyError } from "../fs/lock.ts";
@@ -35,6 +37,11 @@ export function checkTitle(raw: string): string {
 export function runAdd(opts: AddOptions): AddReport {
   // 校验在任何写入之前：一个被拒绝的命令不该有副作用（F02 立下的规矩）。
   const title = checkTitle(opts.title);
+  // 一条验收标准是一行（spec §5.3.2）。带换行的参数会在正文里另起行——可能是一个新的小节标题，把后面的
+  // 标准挤出 Acceptance Criteria（F10 第九轮评审实测：done 不带 --force 就过了）。
+  for (const a of opts.acceptance ?? []) {
+    if (/[\r\n]/.test(a)) throw new CliError(EXIT.usage, `An acceptance criterion must be a single line: ${JSON.stringify(a)}`);
+  }
 
   const ledger = discoverLedger(opts.directory);
 
@@ -77,7 +84,7 @@ export function runAdd(opts: AddOptions): AddReport {
     // 校验器与 doctor 用的是同一对函数，所以「通过校验」与「通过 doctor」是同一件事——
     // FR-T1 的验收要求的正是这个。判据是「这次写入**新引入**了什么问题」而不是
     // 「写完之后账本有没有问题」，理由见 validateWrite 的注释。
-    validateWrite,
+    (candidate, existing) => validateWrite(candidate, existing) ?? readsBack(candidate.body, opts),
   ));
 
   return {
@@ -86,6 +93,24 @@ export function runAdd(opts: AddOptions): AddReport {
     path: created.path,
     rank: String(created.frontmatter["rank"] ?? ""),
   };
+}
+
+/**
+ * **写之前问一遍解析器：给的东西原样读得回来。** 标准一条不多、一条不少、都没勾；描述读回一字不差；
+ * Log 只有 created；没有没闭合的块。描述里一行顶格的 `## Plan`、一条以 `<div>` 结尾的标准之类，都会让
+ * 正文的读法和调用者给的东西不一致——与 edit -d 同一个后置条件（F10 第八、九轮评审）。
+ */
+function readsBack(body: string, opts: AddOptions): string | null {
+  const want = (opts.acceptance ?? []).map((a) => a.trim());
+  const got = parseAcceptance(body);
+  const desc = sectionLines(body, "## Description").map((l) => l.text).join("\n").trim();
+  if (JSON.stringify(got.map((c) => c.text)) === JSON.stringify(want) && got.every((c) => !c.checked)
+    && desc === (opts.description ?? "").trim() && logEntries(body).length === 1
+    && structure(body.split("\n")).reparsedAt < 0) return null;
+  throw new CliError(EXIT.usage,
+    "The description or an acceptance criterion would change how the task body is read: it contains a line that "
+    + "starts a section (`## …`) or a block that is never closed. Indent that line by four spaces or put it in a "
+    + "closed code fence, then retry.");
 }
 
 /** 把 fs/ 的中性 LockBusyError 映射为 FR-Q2 的退出码 3。 */

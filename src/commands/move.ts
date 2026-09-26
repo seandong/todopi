@@ -3,7 +3,7 @@
 
 import { writeAsWorker } from "./worker-write.ts";
 import { rankBetween } from "../format/emit.ts";
-import { sortTasks } from "../domain/order.ts";
+import { compareTasks, sortTasks } from "../domain/order.ts";
 import type { TaskFile } from "../domain/types.ts";
 import type { MoveReport } from "../output/dto/plan.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -44,6 +44,10 @@ export function runMove(opts: MoveOptions): MoveReport {
       const i = others.findIndex((t) => t.idFromFilename === anchorId);
       if (i < 0) throw new CliError(EXIT.usage, `No task ${anchorId} in this ledger to move ${opts.id} next to.`);
       const anchor = others[i]!;
+      // 已经在那儿了就什么都不写——先于「锚点没有 rank」的判断：已就位不需要任何 rank（第九轮评审）。
+      if (opts.before !== undefined ? full[pos + 1]?.idFromFilename === anchorId : full[pos - 1]?.idFromFilename === anchorId) {
+        return { noop: "already there" };
+      }
       if (rankOf(anchor) === null) {
         // 混合种群（FR-T5）：有 rank 的整段排在无 rank 的之前，给 opts.id 一个 rank 只能把它放进有 rank
         // 的那一段。所以唯一有解的是「紧贴**第一个**无 rank 任务之前」——排到有 rank 那段的末尾即可
@@ -71,7 +75,13 @@ export function runMove(opts: MoveOptions): MoveReport {
     // 下界之外的那一侧若没有 rank，就当成没有边界：新 rank 仍在有 rank 的那一段里。
     const loRank = lo === null ? null : rankOf(lo);
     const hiRank = hi === null ? null : rankOf(hi);
-    const rank = rankBetween(loRank, hiRank);
+    // §7.4 的顺序是 (rank, id)：两个邻居之间放不下新字符串时，和其中一个共用 rank、靠 id 分先后也可能
+    // 正好落在中间——仍只改一个文件（第九轮评审）。候选逐个按真实的比较函数检验，不自己推 id 的大小。
+    const fits = (r: string) => {
+      const moved = { ...task, frontmatter: { ...task.frontmatter, rank: r } };
+      return (lo === null || compareTasks(lo, moved) < 0) && (hi === null || compareTasks(moved, hi) < 0);
+    };
+    const rank = [rankBetween(loRank, hiRank), loRank, hiRank].find((r): r is string => r !== null && fits(r)) ?? null;
     if (rank === null) {
       // 真的无解。spec 允许重编号，但那要改多个文件并各记一条 moved，而 FR-T5 要只重写一个。
       // 拒绝，点名，让人先把其中一个挪开。

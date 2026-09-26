@@ -78,7 +78,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-T2** `ls` 列出任务；过滤器 `--open`（默认）、`--closed`、`--ready`、`--blocked`、`--mine`、`--label`；`--json` 输出数组；`--limit N`。已关闭任务默认隐藏。stale 与未验证任务有标记。
 - **FR-T3** `show <id>` 打印 frontmatter、带序号的验收标准、最近 5 条 Log 及总数；`--full`、`--tree`（父链与子任务及进度）、`--json`。
 - **FR-T4** `edit <id>` 通过参数或 `--edit`（$EDITOR）修改标题、描述、verify、标签、父任务和正文分节。记录 `edited fields=…`。
-- **FR-T5** `move <id> --top | --before <id> | --after <id>` 是改 `rank` 的唯一途径；**只重写一个文件**。这条成立的前提是每个任务自创建起就带 rank（FR-T1）：有 rank 与无 rank 混合存在时，相对无 rank 任务的位置大都无解，因为任何任务一旦取得 rank 就会整段排到所有无 rank 任务之前；唯一有解的是「紧贴第一个无 rank 任务之前」（排到有 rank 那段的末尾）。
+- **FR-T5** `move <id> --top | --before <id> | --after <id>` 是改 `rank` 的唯一途径；**只重写一个文件**。这条成立的前提是每个任务自创建起就带 rank（FR-T1）：有 rank 与无 rank 混合存在时，相对无 rank 任务的位置大都无解，因为任何任务一旦取得 rank 就会整段排到所有无 rank 任务之前；唯一有解的是「紧贴第一个无 rank 任务之前」（排到有 rank 那段的末尾）。两个邻居之间放不下新的 rank 时，被挪的任务可以与其中一个共用 rank、按 id 分先后（spec §7.4），只要这样正好落在中间。
 - **FR-T6** ID：`<前缀>-<6 位 base36>`，随机生成，本地碰撞检查。
 - **FR-T7** 没有优先级字段、没有类型字段、没有删除命令。软删除是 `close --resolution obsolete`。
 

@@ -74,17 +74,42 @@ test("只重写一个文件（FR-T5），并在它的 Log 里记 moved", () => {
 });
 
 test("--after Y 落在 Y 与它**真正的**下一个之间 —— 同 rank 并列按 id 破", () => {
-  // §7.4：rank 相同按 id 排。两个 worktree 各自 add 就会撞出相同的 rank。
-  // 若 Y 与下一个 rank 相同，两者之间没有字符串可插——拒绝，点名两个任务。
+  // §7.4：rank 相同按 id 排。两个 worktree 各自 add 就会撞出相同的 rank。Y 与下一个共用 rank 时，
+  // 中间放不下新字符串；被挪的任务 id 恰好夹在两者之间才能靠共用 rank 落进去，否则拒绝并点名两个。
+  // id 是随机的，所以按 id 排序后再分配角色：s1、s2 共用 rank，s0 与 s3 分别是 id 在外、在中间以外的挪动者。
   const d = repo();
-  const ids = abcd(d);
-  const rankOf = (id: string) => /^rank: "(.*)"$/m.exec(read(d, id))![1]!;
-  edit(d, ids["c"]!, (s) => s.replace(/^rank: ".*"$/m, `rank: "${rankOf(ids["b"]!)}"`));
-  const [first, second] = [ids["b"]!, ids["c"]!].sort();
+  const [s0, s1, s2, s3] = Object.values(abcd(d)).sort();
+  const setRank = (id: string, r: string) => edit(d, id, (x) => x.replace(/^rank: ".*"$/m, `rank: "${r}"`));
+  setRank(s1!, "m"); setRank(s2!, "m"); setRank(s0!, "t"); setRank(s3!, "v");
   const before = snapshot(d);
-  assert.throws(() => runMove({ directory: d, id: ids["d"]!, after: first!, actor: ME }),
-    (e: unknown) => code(EXIT.usage)(e) && (e as Error).message.includes(first!) && (e as Error).message.includes(second!));
+  assert.throws(() => runMove({ directory: d, id: s3!, after: s1!, actor: ME }),
+    (e: unknown) => code(EXIT.usage)(e) && (e as Error).message.includes(s1!) && (e as Error).message.includes(s2!));
   assert.deepEqual(snapshot(d), before, "拒绝时什么都不该写");
+});
+
+test("邻居之间放不下新 rank 时，和一侧共用 rank、靠 id 落在中间：有解，只改一个文件（第九轮评审）", () => {
+  const d = repo();
+  const [s0, s1, s2, s3] = Object.values(abcd(d)).sort();
+  const setRank = (id: string, r: string) => edit(d, id, (x) => x.replace(/^rank: ".*"$/m, `rank: "${r}"`));
+  // 顺序：s0(m) s2(m) s3(t) s1(v)。把 s1 挪到 s0 之后：只有 rank "m" 且 id 在 s0 与 s2 之间才行。
+  setRank(s0!, "m"); setRank(s2!, "m"); setRank(s3!, "t"); setRank(s1!, "v");
+  const before = snapshot(d);
+  runMove({ directory: d, id: s1!, after: s0!, actor: ME });
+  assert.deepEqual(runLs({ directory: d, all: true }).tasks.map((t) => t.id), [s0, s1, s2, s3]);
+  const after = snapshot(d);
+  assert.deepEqual([...after.keys()].filter((f) => after.get(f) !== before.get(f)), [`${s1}.md`]);
+  assert.equal(runDoctor({ directory: d }).ok, true);
+});
+
+test("同上，共用的是后继的 rank：32 位只差末位的两个邻居之间，id 更小的挪动者排在后继前面", () => {
+  const d = repo();
+  const [s0, s1, s2, s3] = Object.values(abcd(d)).sort();
+  const setRank = (id: string, r: string) => edit(d, id, (x) => x.replace(/^rank: ".*"$/m, `rank: "${r}"`));
+  // 顺序 s3(…0) s2(…1) s0(t) s1(v)。s1 挪到 s2 之前：共用 s3 的 rank 要 id > s3，不行；共用 s2 的要 id < s2，行。
+  setRank(s3!, `${"a".repeat(31)}0`); setRank(s2!, `${"a".repeat(31)}1`); setRank(s0!, "t"); setRank(s1!, "v");
+  runMove({ directory: d, id: s1!, before: s2!, actor: ME });
+  assert.deepEqual(runLs({ directory: d, all: true }).tasks.map((t) => t.id), [s3, s1, s2, s0]);
+  assert.equal(runDoctor({ directory: d }).ok, true);
 });
 
 test("相对一个没有 rank 的任务挪：拒绝并指向 doctor --fix", () => {
@@ -101,7 +126,9 @@ test("紧贴第一个无 rank 任务之前：有解，排到有 rank 那段的�
   // 「c 之前」夹在两个无 rank 任务之间，给谁一个 rank 都到不了那儿——无解。
   const d = repo();
   const ids = abcd(d);
-  for (const t of ["b", "c"]) edit(d, ids[t]!, (s) => s.replace(/^rank: ".*"\n/m, ""));
+  // 无 rank 的按 created 排；同一秒建的会退到随机 id 上，所以显式错开。
+  ["b", "c"].forEach((t, k) => edit(d, ids[t]!, (s) => s.replace(/^rank: ".*"\n/m, "")
+    .replace(/^created: ".*"$/m, `created: "2020-01-01T00:00:0${k}Z"`)));
   assert.deepEqual(order(d), ["a", "d", "b", "c"]);
   const before = snapshot(d);
   runMove({ directory: d, id: ids["a"]!, before: ids["b"]!, actor: ME });
@@ -185,14 +212,28 @@ test("手写的、规格合法但库不认的 rank：add 与 move 都照常工�
 });
 
 test("两个邻居之间真的放不下（32 位、只差末位）：拒绝并点名，什么都不写", () => {
+  // 被挪的任务 id 必须夹在两者之外的那一侧，否则它能和一侧共用 rank 落进去（见上一条）。
+  // 顺序 lo=s2(…0) hi=s0(…1)：共用 lo 的 rank 要 id > s2，共用 hi 的要 id < s0——s1 两样都不满足。
+  const d = repo();
+  const [s0, s1, s2, s3] = Object.values(abcd(d)).sort();
+  const setRank = (id: string, r: string) => edit(d, id, (x) => x.replace(/^rank: ".*"$/m, `rank: "${r}"`));
+  setRank(s2!, `${"a".repeat(31)}0`); setRank(s0!, `${"a".repeat(31)}1`); setRank(s1!, "t"); setRank(s3!, "v");
+  const before = snapshot(d);
+  assert.throws(() => runMove({ directory: d, id: s1!, after: s2!, actor: ME }),
+    (e: unknown) => code(EXIT.usage)(e) && /32 characters/.test((e as Error).message)
+      && (e as Error).message.includes(s2!) && (e as Error).message.includes(s0!));
+  assert.deepEqual(snapshot(d), before);
+});
+
+test("已经在目标位置、锚点又没有 rank：照样是什么都不做，而不是报「没有 rank」（第九轮评审）", () => {
   const d = repo();
   const ids = abcd(d);
-  edit(d, ids["a"]!, (s) => s.replace(/^rank: ".*"$/m, `rank: "${"a".repeat(31)}0"`));
-  edit(d, ids["b"]!, (s) => s.replace(/^rank: ".*"$/m, `rank: "${"a".repeat(31)}1"`));
+  ["b", "c", "d"].forEach((t, k) => edit(d, ids[t]!, (x) => x.replace(/^rank: ".*"\n/m, "")
+    .replace(/^created: ".*"$/m, `created: "2020-01-01T00:00:0${k}Z"`)));
+  assert.deepEqual(order(d), ["a", "b", "c", "d"]);
   const before = snapshot(d);
-  assert.throws(() => runMove({ directory: d, id: ids["d"]!, after: ids["a"]!, actor: ME }),
-    (e: unknown) => code(EXIT.usage)(e) && /32 characters/.test((e as Error).message)
-      && (e as Error).message.includes(ids["a"]!) && (e as Error).message.includes(ids["b"]!));
+  assert.equal(runMove({ directory: d, id: ids["c"]!, before: ids["d"]!, actor: ME }).changed, false);
+  assert.equal(runMove({ directory: d, id: ids["d"]!, after: ids["c"]!, actor: ME }).changed, false);
   assert.deepEqual(snapshot(d), before);
 });
 
