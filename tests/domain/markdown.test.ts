@@ -194,7 +194,7 @@ test("暴力枚举：一条标准之后没有任何结束标记时，它前面�
   // 独立于实现的判据：藏住一行的唯一合法方式是它后面有作者写下的结束标记（```、~~~、</pre>、--> 之类）。
   // 目标标准是正文最后一行，后面什么都没有；标题与它之间也没有能关闭前缀里的块的行——所以它必须被认出来。前缀与夹在中间的行取自下面的字母表，
   // 覆盖三类会吞行的块、容器、缩进、段落与 setext。
-  const ALPHA = ["<div>", "<pre>", "</pre>", "<!--", "-->", "```", "~~~", "\t```", "> x", "- x", "  x", "x", "", "  ## Plan",
+  const ALPHA = ["<div>", "<pre>", "</pre>", "<!--", "-->", "```", "~~~", "\t```", "> x", "- x", "  x", "x", "", "  ## Plan", "##\tPlan", "##",
     "<table>", "<custom>", "</div>", "    code", "---", "<?x"];
   const seqs = (n: number): string[][] => n === 0 ? [[]] : seqs(n - 1).flatMap((s) => ALPHA.map((a) => [...s, a]));
   let count = 0;
@@ -223,8 +223,8 @@ test("验收标准小节重复出现：全部读，编号跨小节连续 —— 
 });
 
 test("缩进 1–3 格的 `## X` 不是小节边界：后面的标准仍在验收小节里（第十二轮评审）", () => {
-  for (const pad of [" ", "  ", "   "]) {
-    const body = ["## Acceptance Criteria", "", `${pad}## Plan`, "", "- [ ] must pass", "", "## Log", ""].join("\n");
-    assert.deepEqual(parseAcceptance(body).map((c) => c.text), ["must pass"], JSON.stringify(pad));
+  for (const heading of [" ## Plan", "  ## Plan", "   ## Plan", "##\tPlan", "##"]) {   // 第十三轮加了后两种
+    const body = ["## Acceptance Criteria", "", heading, "", "- [ ] must pass", "", "## Log", ""].join("\n");
+    assert.deepEqual(parseAcceptance(body).map((c) => c.text), ["must pass"], JSON.stringify(heading));
   }
 });
