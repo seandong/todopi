@@ -621,11 +621,15 @@ cmd_clean_check() {
     # 可满足且有意义的条件是这两个：
     #   1. 最后一个 commit 确实带上了 PROGRESS.md（状态没有掉队）
     #   2. PROGRESS.md 记录的 Last commit 在当前历史里（不是随手写的过期值）
-    local rec touched
+    local rec touched subject
     rec="$(grep -oE 'Last commit: `[0-9a-f]+`' "$PROGRESS" | head -1 | tr -d '`' | awk '{print $3}')"
-    touched="$(git show --name-only --format= HEAD 2>/dev/null | grep -Fx "$PROGRESS" || true)"
+    # HEAD 是 --no-ff 合并时，看被合并进来的分支末端（第二个父提交）：合并提交本身在 git show --name-only
+    # 下是空的，按它判会让每次合入 main 后都「失败」（F14 收尾时撞上）。clock-out 的那个提交就是分支末端。
+    subject=HEAD
+    if git rev-parse -q --verify 'HEAD^2' >/dev/null 2>&1; then subject='HEAD^2'; fi
+    touched="$(git show --name-only --format= "$subject" 2>/dev/null | grep -Fx "$PROGRESS" || true)"
     if [ -z "$touched" ]; then
-      emit state-updated fail "最后一个 commit 没有包含 ${PROGRESS}。clock-out 必须把状态和代码放进 same commit"
+      emit state-updated fail "最后一个 commit（合并时为被合并分支的末端）没有包含 ${PROGRESS}。clock-out 必须把状态和代码放进 same commit"
     elif [ -z "$rec" ]; then
       emit state-updated fail "${PROGRESS} 里找不到 Last commit 行"
     elif git merge-base --is-ancestor "$rec" HEAD >/dev/null 2>&1; then
