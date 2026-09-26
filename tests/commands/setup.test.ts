@@ -132,22 +132,22 @@ test("更新已有的 settings.json 与 CLAUDE.md：权限位不变（用户的�
   assert.equal(statSync(m).mode & 0o777, 0o640);
 });
 
-test("我们的命令已在、但覆盖不全：只补缺的来源（不改用户的组、启动时不注入两遍）；多组并集覆盖就算装好（评审一、二轮）", () => {
+test("只认我们写出的标准组（无 matcher / 空 / *）；限定过 matcher 的同名组不改、另补标准组并提示可能重复（评审一至四轮）", () => {
   const d = tmp();
   const p = join(d, "settings.json");
   const end = [{ hooks: [{ type: "command", command: "todopi handoff --check --hook" }] }];
   const ours = (matcher?: string) => ({ ...(matcher === undefined ? {} : { matcher }), hooks: [{ type: "command", command: "todopi prime --hook" }] });
-  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [ours("startup")], SessionEnd: end } }));
-  const r = ensureClaudeHooks(p);
-  assert.equal(r.status, "updated");
-  assert.deepEqual(json(p).hooks.SessionStart.map((g: { matcher?: string }) => g.matcher), ["startup", "compact"]);
-  assert.match(r.notes[0]!, /added a group for compact/);
-  assert.equal(ensureClaudeHooks(p).status, "unchanged", "补过之后幂等");
-  // 两个组分别覆盖 startup 与 compact：并集覆盖，什么都不做、不提示。
-  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [ours("startup"), ours("compact")], SessionEnd: end } }));
-  assert.deepEqual(ensureClaudeHooks(p), { status: "unchanged", notes: [] });
-  // 正则、*、缺省：都算覆盖。
-  for (const matcher of ["startup|compact|resume", "*", ".*", undefined]) {
+  // 不猜 Claude Code 怎么解释 matcher（精确列表、正则）：限定过的一律不算装好。
+  for (const matchers of [["startup"], ["startup", "compact"], ["startup, compact"], ["startup|compact|resume"], [".*"], ["^star"]]) {
+    writeFileSync(p, JSON.stringify({ hooks: { SessionStart: matchers.map(ours), SessionEnd: end } }));
+    const r = ensureClaudeHooks(p);
+    assert.equal(r.status, "updated", JSON.stringify(matchers));
+    const got = json(p).hooks.SessionStart.map((g: { matcher?: string }) => g.matcher);
+    assert.deepEqual(got, [...matchers, undefined], "原组不动，末尾补一组不带 matcher 的");
+    assert.match(r.notes[0]!, /runs twice/);
+    assert.equal(ensureClaudeHooks(p).status, "unchanged", "补过之后幂等");
+  }
+  for (const matcher of [undefined, "", "*"]) {
     writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [ours(matcher)], SessionEnd: end } }));
     assert.deepEqual(ensureClaudeHooks(p), { status: "unchanged", notes: [] }, String(matcher));
   }
@@ -179,7 +179,14 @@ test("同一命令但可能不运行、或输出不进上下文的（if、async�
     const s = json(p);
     assert.deepEqual(s.hooks.SessionStart, [group, { hooks: [{ type: "command", command: "todopi prime --hook" }] }]);
   }
-  // timeout、statusMessage 不影响运行与注入：算装好。
+  // timeout、statusMessage 的值类型不对：不算（评审四轮）。
+  for (const extra of [{ timeout: "bad" }, { timeout: 0 }, { statusMessage: { x: 1 } }]) {
+    const d = tmp();
+    const p = join(d, "settings.json");
+    writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "todopi prime --hook", ...extra }] }], SessionEnd: end } }));
+    assert.equal(ensureClaudeHooks(p).status, "updated", JSON.stringify(extra));
+  }
+  // timeout（正数）、statusMessage（字符串）不影响运行与注入：算装好。
   const d = tmp();
   const p = join(d, "settings.json");
   writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "todopi prime --hook", timeout: 30, statusMessage: "priming" }] }], SessionEnd: end } }));
