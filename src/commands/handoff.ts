@@ -61,7 +61,9 @@ export function verifySnapshot(t: TaskFile): string {
   const raw = t.frontmatter["verify"];
   const print = t.parseError !== undefined || (raw !== undefined && typeof raw !== "string") ? UNREADABLE
     : verifyPrint(raw);
-  const edits = t.parseError !== undefined ? 0 : parsedLog(t)
+  // frontmatter 坏了正文照样读得出来（read.ts 保留它），Log 里的编辑照数——硬记成 0 会让两端都读不
+  // 出来、中间经 CLI 改过的漏报（评审四轮）。
+  const edits = parsedLog(t)
     .filter((p) => p.verb === "edited" && (p.args["fields"] ?? "").split(",").includes("verify")).length;
   return `${print}#${edits}`;
 }

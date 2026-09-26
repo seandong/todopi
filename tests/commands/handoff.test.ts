@@ -307,3 +307,16 @@ test("编辑次数增长在每条路径上都报：prime 之后新建又经 CLI 
   const again = runHandoff({ directory: d, actor: ME, check: true });
   assert.equal(again.verifyChanged?.find((x) => x.id === bad)?.state, "unreadable");
 });
+
+test("frontmatter 两端都坏、中间修好并经 CLI 改过 verify：编辑照数，报 unreadable（评审四轮）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t", verify: "a", actor: ME }).id;
+  const breakIt = () => edit(d, t, (s) => s.replace(/^title: .*$/m, "title: [invalid"));
+  const fix = () => edit(d, t, (s) => s.replace(/^title: \[invalid$/m, 'title: "t"'));
+  breakIt();
+  runPrime({ directory: d, actor: ME });
+  fix();
+  runEdit({ directory: d, id: t, verify: "c", actor: ME });
+  breakIt();
+  assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true }).verifyChanged?.map((x) => [x.id, x.state]), [[t, "unreadable"]]);
+});
