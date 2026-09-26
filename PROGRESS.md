@@ -158,6 +158,8 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+36. harness：`clean-check` 的 state-updated 在 `--no-ff` 合并提交上改看被合并分支的末端（合并提交本身在
+    `git show --name-only` 下是空的，以前每次合入 main 后都判失败；上一次我补了一个空的状态提交凑数）。
 35. ~~F14 `setup claude`~~ 已完成（2026-09-26）。外部事实先重核：查文档的子 agent 说「PostCompact 不存在」，
     直查官方页面发现它错了——它存在，但 stdout 不进上下文；压缩后注入走 SessionStart 的 compact 来源。
     **真 Claude Code 会话实测**：会话开始、交互式 /compact 之后、退出，三次钩子都触发且注入生效（PRD §17）。
