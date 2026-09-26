@@ -2022,3 +2022,8 @@ Node 用 spec reporter，整层被判 blocked。
   另一个 worktree 分支上的活认领——单个 checkout 分辨不出。能可靠判断的只有「过期」，`--fix` 已在清。
   PRD FR-Q1 的措辞相应改掉。未知键按 §5.2 给警告（不让 doctor 失败）。
 
+- F13 评审二至四轮：rank 回填改为两阶段（全部算好、核对过才写，任何一个缺 rank 的任务写不了就整体不回填）；
+  读取时标记非法 UTF-8，doctor 报告、所有写入口拒绝；`updated` 的原文由 YAML 解析器定位后原样放回（第四次
+  「用字符形状近似需要真解析的判断」——正则 `^updated:` 认不得 `"updated":`）；frontmatter 有手写注释就不重写。
+  这几类错误没有有意义的静态判据，按 AGENTS.md 的要求说明：由 tests/commands/doctor-fix.test.ts 守护
+  （updated 原文的五种写法、非法 UTF-8、回填的两种阻挡情形、注释）。
