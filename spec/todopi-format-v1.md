@@ -375,9 +375,14 @@ Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.
 
 The version number protects files and implementations that exist. Until the first release of a tool implementing this document, revisions that fill gaps in version 1 are recorded here instead of incrementing the version; after that, §9 applies without exception.
 
-**2026-09-26** — §5.3 (body structure). The 2026-09-16 text said the four headings are recognized "exactly and case-sensitively" and left undefined: headings inside code blocks, HTML blocks and containers; repeated headings; code fences and HTML blocks that are never closed. This revision defines them: section headings and top-level list items are located by CommonMark; setext headings are not section headings; repeated `## Acceptance Criteria` sections are all read; a block not ended by a terminator its author wrote does not hide what follows it, and writers do not rewrite a body containing one.
+**2026-09-26** — §5.3 (body structure). The 2026-09-16 text said the four headings are recognized "exactly and case-sensitively" and left undefined: headings and list items inside code blocks, HTML blocks and containers; repeated headings; code fences and HTML blocks that are never closed. This revision defines them:
 
-Migration: none. A body that uses none of those constructs reads exactly as before. A body that uses them had no defined meaning; under this revision every change of reading is in the stricter direction — more criteria are seen, never fewer — so no task that was correctly closed becomes invalid, and doctor reports nothing new for it. No file needs to be rewritten.
+- Section headings and top-level list items are located by CommonMark. A section heading is a top-level ATX level-2 heading whose source line is exactly `## <name>`; setext headings are not section headings and do not end a section.
+- A `## …`, `- [ ] …` or `- <timestamp> …` line inside a top-level code block or HTML block is text: not a heading, not a criterion, not a Log entry.
+- Repeated `## Acceptance Criteria` sections are all read, as one list numbered consecutively. For the other recognized headings the first occurrence is the section.
+- A block not ended by a terminator its author wrote does not hide what follows it; writers do not rewrite a body containing one.
+
+Migration. A body that contains none of those constructs — no code block, HTML block, block quote, nested or setext heading, or repeated heading — reads exactly as before, and no file needs to be rewritten. A body that does contain them may read differently, **in either direction**: a `- [ ]` inside a code block that an earlier reader counted is no longer a criterion (so `done` may now pass where it was refused), while criteria in a repeated `## Acceptance Criteria` section or after an unclosed block are now counted (so `done` may now be refused where it passed). Likewise a Log section that an earlier reader located inside a code block is no longer the Log, so `doctor` may report findings it did not report before, or stop reporting some. Tasks already closed stay closed; their status is not re-derived. After upgrading, run `doctor` and review any task whose body contains code blocks, HTML or repeated headings.
 
 ## 10. Complete example
 
