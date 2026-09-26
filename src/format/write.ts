@@ -177,6 +177,12 @@ export function prepareUpdate(
       `Task ${id} cannot be read: ${target.parseError}. Run "todopi doctor" to see what is wrong with it.`);
   }
 
+  // 文件里有非法 UTF-8 字节：解码时已换成 U+FFFD，整文件写回就改掉了原字节（包括 Log）。拒绝，让人先修
+  // （F13 评审二轮在 doctor --fix 上发现，所有写入口同理）。
+  if (target.invalidUtf8 === true) {
+    throw new CliError(EXIT.usage, `Refusing to write ${relPathOf(id)}: the file is not valid UTF-8 (spec §5.1); fix it first.`);
+  }
+
   // **写回时把正文规范化成 LF**（spec §5.1：行尾 LF，无 BOM）。
   //
   // 读取侧对 CRLF 是容错的（`sectionLines` 会去掉行尾的 \r），否则一份 CRLF
@@ -315,37 +321,43 @@ function appendLogLine(body: string, line: string): string {
   return out;
 }
 
+const relPathOf = (id: string) => join("tasks", `${id}.md`);
+
 /**
- * `doctor --fix` 的规范化重写。与 prepareUpdate **有意不同**：不刷新 `updated`、不追加 Log（规格 §6.3 的
- * 例外，D034）。调用方必须已持有账本锁。
+ * `doctor --fix` 的规范化重写，分两步：planNormalized 算出新内容并核对，writeNormalized 才写。分开是为了
+ * 让调用方先把**所有**文件都算好——rank 回填只有全部能写时才做，写到一半停下会改变显示顺序（F13 评审二轮）。
  *
- * 写之前三道核对，任何一道不过就不写、返回原因：
- *   1. 文件的原始字节就是它的 UTF-8 解码再编码——否则那里有非法字节，整文件重写会把它们换成 U+FFFD，
- *      Log 就不再是原来的字节了（F13 评审：`\xff` 被写成 `ef bf bd`）；
+ * 与 prepareUpdate **有意不同**：不刷新 `updated`、不追加 Log（规格 §6.3 的例外，D034）。`updated` 那一行
+ * 保留原文——换个写法（加引号）也是改（D034）。
+ *
+ * 核对，任何一道不过就不写、返回原因：
+ *   1. 文件是合法 UTF-8——否则整文件重写会把非法字节换成 U+FFFD，Log 就不是原来的字节了；
  *   2. 新 frontmatter 读回来恰好是 `want`；
  *   3. 正文只在 `changedLines` 这几行不同。
  */
-export function rewriteNormalized(
-  ledger: Ledger, t: TaskFile, want: Record<string, unknown>, body: string, changedLines: Set<number>,
-): { written: boolean } | { error: string } {
-  const path = join(ledger.dir, "tasks", `${t.idFromFilename}.md`);
-  const bytes = readFileSync(path);
-  const decoded = bytes.toString("utf8");
-  if (!bytes.equals(Buffer.from(decoded, "utf8")) || decoded !== t.raw) {
-    return { error: "the file is not valid UTF-8 (or changed while reading); rewriting it would alter bytes" };
-  }
+export function planNormalized(
+  t: TaskFile, want: Record<string, unknown>, body: string, changedLines: Set<number>,
+): { text: string } | { unchanged: true } | { error: string } {
+  if (t.invalidUtf8 === true) return { error: "the file is not valid UTF-8; rewriting it would alter bytes" };
   const env = splitEnvelope(t.raw);
-  const text = `---\n${emitFrontmatter(want)}---\n${body}`;
+  if (env === null) return { error: "the file has no valid envelope" };
+  let head = emitFrontmatter(want);
+  const updatedLine = /^updated:[^\n]*$/m.exec(env.head);
+  if (updatedLine !== null && "updated" in want) head = head.replace(/^updated:[^\n]*$/m, () => updatedLine[0]);
+  const text = `---\n${head}---\n${body}`;
   const back = splitEnvelope(text);
   const parsed = back === null ? null : parseFrontmatter(back.head);
-  if (env === null || back === null || parsed === null || !parsed.ok || !isDeepStrictEqual(parsed.data, want)) {
+  if (back === null || parsed === null || !parsed.ok || !isDeepStrictEqual(parsed.data, want)) {
     return { error: "the normalized frontmatter would not read back as the same data" };
   }
   const before = env.body.split("\n"), after = back.body.split("\n");
   if (before.length !== after.length || before.some((l, i) => l !== after[i] && !changedLines.has(i))) {
     return { error: "the body would change outside the lines being normalized" };
   }
-  if (text === t.raw) return { written: false };
-  writeFileAtomic(path, text);
-  return { written: true };
+  return text === t.raw ? { unchanged: true } : { text };
+}
+
+/** 写 planNormalized 算好的内容。调用方必须已持有账本锁。 */
+export function writeNormalized(ledger: Ledger, t: TaskFile, text: string): void {
+  writeFileAtomic(join(ledger.dir, relPathOf(t.idFromFilename)), text);
 }

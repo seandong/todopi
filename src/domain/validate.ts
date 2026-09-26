@@ -20,6 +20,9 @@ export function validateFile(t: TaskFile): Finding[] {
     at("invariant-7", "file contains unresolved git conflict markers (<<<<<<< / ======= / >>>>>>> at line start)");
   }
 
+  // spec §5.1：UTF-8。读取端把非法字节换成了 U+FFFD，内容已经不是原样——报告，但不挡后面的检查。
+  if (t.invalidUtf8 === true) at("envelope", "the file is not valid UTF-8 (spec §5.1)");
+
   // 不变量 1 —— 解析成功且 id 与文件名一致
   if (t.parseError) {
     at("envelope", t.parseError);

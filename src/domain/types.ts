@@ -30,6 +30,8 @@ export type TaskFile = {
   raw: string;
   /** 信封或 YAML 解析失败时的原因；非空时 frontmatter 是空对象 */
   parseError?: string;
+  /** 文件里有不是合法 UTF-8 的字节（spec §5.1）；raw 里它们已被替换成 U+FFFD */
+  invalidUtf8?: boolean;
 };
 
 /**

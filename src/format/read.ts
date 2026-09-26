@@ -28,22 +28,26 @@ export function readTasks(ledger: Ledger): TaskFile[] {
     const id = entry.slice(0, -3);
     if (!ID_RE.test(id)) continue;                     // 文件名不是合法 id，同样忽略
     const path = join("tasks", entry);
-    const raw = readFileSync(join(tasksDir, entry), "utf8");
+    const bytes = readFileSync(join(tasksDir, entry));
+    const raw = bytes.toString("utf8");
+    // spec §5.1 要求 UTF-8。解码会把非法字节静默换成 U+FFFD——记下来，doctor 才报得出，修复工具才知道
+    // 不能整文件重写（F13 评审二轮）。
+    const bad = !bytes.equals(Buffer.from(raw, "utf8")) ? { invalidUtf8: true } : {};
 
     const env = splitEnvelope(raw);
     if (env === null) {
       out.push({
-        path, idFromFilename: id, frontmatter: {}, body: "", raw,
+        path, idFromFilename: id, frontmatter: {}, body: "", raw, ...bad,
         parseError: "not a valid envelope: the file must begin with a --- line and have a closing --- line",
       });
       continue;
     }
     const parsed = parseFrontmatter(env.head);
     if (!parsed.ok) {
-      out.push({ path, idFromFilename: id, frontmatter: {}, body: env.body, raw, parseError: parsed.error });
+      out.push({ path, idFromFilename: id, frontmatter: {}, body: env.body, raw, ...bad, parseError: parsed.error });
       continue;
     }
-    out.push({ path, idFromFilename: id, frontmatter: parsed.data, body: env.body, raw });
+    out.push({ path, idFromFilename: id, frontmatter: parsed.data, body: env.body, raw, ...bad });
   }
   return out;
 }

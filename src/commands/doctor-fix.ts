@@ -14,7 +14,7 @@
 
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
-import { rewriteNormalized, withLedgerLock } from "../format/write.ts";
+import { planNormalized, withLedgerLock, writeNormalized } from "../format/write.ts";
 import { rankBetween } from "../format/emit.ts";
 import { splitEnvelope } from "../format/envelope.ts";
 import { deleteLease, readHeartbeats } from "../format/lease.ts";
@@ -59,12 +59,13 @@ export function runDoctorFix(opts: { directory: string; now?: number }): DoctorF
     const readable = tasks.filter((t) => t.parseError === undefined);
 
     // rank 回填：缺 rank 的任务按 §7.4 的现有顺序（created、再按 id）排到有 rank 的那一段之后——前提是
-    // **现在排在无 rank 段里的每一个任务都能回填**。§7.4 把读不出来的、rank 不是字符串的（`rank: 7`）也
-    // 排在无 rank 段；只回填其余的，它们就跳到这些任务前面，显示顺序变了（F13 评审）。有这样的任务时
-    // 整体不回填，报告原因——rank 不对的那个要人来看。
-    const newRank = new Map<string, string>();
+    // **现在排在无 rank 段里的每一个任务都能回填、并且都真的写得下去**。§7.4 把读不出来的、rank 不是字符串的
+    // （`rank: 7`）也排在无 rank 段；只回填其余的，它们就跳到这些任务前面（F13 评审一轮）。写得下去也要先确认：
+    // 排在前面的那个因非法 UTF-8 写不了、后面的照样回填，顺序同样会变（评审二轮）。所以两步走：先把所有
+    // 文件的新内容都算好并核对，回填里有任何一个算不成就整体撤掉回填，然后才写。
     const hasRank = (t: TaskFile) => typeof t.frontmatter["rank"] === "string" && t.frontmatter["rank"] !== "";
     const unranked = tasks.filter((t) => !hasRank(t));
+    const backfill = new Map<string, string>();
     const blockers = unranked.filter((t) => t.parseError !== undefined || "rank" in t.frontmatter);
     if (unranked.length > 0 && blockers.length > 0) {
       skipped.push({ path: "(rank backfill)", reason: `not done: ${blockers.map((t) => t.path).join(", ")} `
@@ -73,17 +74,25 @@ export function runDoctorFix(opts: { directory: string; now?: number }): DoctorF
       let last: string | null = sortTasks(readable.filter(hasRank)).map((t) => String(t.frontmatter["rank"])).at(-1) ?? null;
       for (const t of sortTasks(unranked)) {
         const r = rankBetween(last, null);
-        if (r === null) break;                 // 放不下了：剩下的照常由 doctor 报告，不猜
-        newRank.set(t.idFromFilename, r);
+        if (r === null) { backfill.clear(); break; }   // 放不下：整体不回填，照常由 doctor 报告
+        backfill.set(t.idFromFilename, r);
         last = r;
       }
     }
 
-    for (const t of readable) {
-      const r = fixOne(ledger, t, newRank.get(t.idFromFilename));
-      if (r === null) continue;
-      if ("error" in r) skipped.push({ path: t.path, reason: r.error });
-      else fixed.push({ path: t.path, changes: r.changes });
+    let plans = readable.map((t) => ({ t, plan: planOne(t, backfill.get(t.idFromFilename)) }));
+    const failedBackfill = plans.filter(({ t, plan }) => backfill.has(t.idFromFilename) && "error" in plan.result);
+    if (failedBackfill.length > 0) {
+      skipped.push({ path: "(rank backfill)", reason: `not done: ${failedBackfill.map(({ t }) => t.path).join(", ")} `
+        + "cannot be rewritten, and backfilling the rest would change the order" });
+      plans = readable.map((t) => ({ t, plan: planOne(t, undefined) }));
+    }
+    for (const { t, plan } of plans) {
+      if ("error" in plan.result) skipped.push({ path: t.path, reason: plan.result.error });
+      else if ("text" in plan.result) {
+        writeNormalized(ledger, t, plan.result.text);
+        fixed.push({ path: t.path, changes: plan.changes });
+      }
     }
 
     // 过期租约：心跳超过 lease_hours（与 stale 的判据同一个阈值）。租约是随时可删的运行时状态（§8）。
@@ -99,10 +108,11 @@ export function runDoctorFix(opts: { directory: string; now?: number }): DoctorF
   return { fixed, skipped, leasesCleared: leasesCleared.sort(), after: runDoctor({ directory: opts.directory }) };
 }
 
-/** 修一个文件。没什么可修返回 null；核对不过返回 error（不写）。 */
-function fixOne(ledger: Ledger, t: TaskFile, rank: string | undefined): { changes: string[] } | { error: string } | null {
+/** 算一个文件的规范化结果（不写）。 */
+function planOne(t: TaskFile, rank: string | undefined):
+  { result: ReturnType<typeof planNormalized>; changes: string[] } {
   const env = splitEnvelope(t.raw);
-  if (env === null) return null;
+  if (env === null) return { result: { unchanged: true }, changes: [] };
   const changes: string[] = [];
 
   const want: Record<string, unknown> = { ...t.frontmatter };
@@ -122,8 +132,5 @@ function fixOne(ledger: Ledger, t: TaskFile, rank: string | undefined): { change
     return `- [x]${l.slice(5)}`;
   }).join("\n");
   if (touched.size > 0) changes.push(`${touched.size} checkbox${touched.size === 1 ? "" : "es"}`);
-
-  const r = rewriteNormalized(ledger, t, want, body, touched);
-  if ("error" in r) return { error: r.error };
-  return r.written ? { changes: changes.length === 0 ? ["key order and quoting"] : changes } : null;
+  return { result: planNormalized(t, want, body, touched), changes: changes.length === 0 ? ["key order and quoting"] : changes };
 }

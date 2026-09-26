@@ -288,3 +288,13 @@ test("Log 末尾一个 <div>：事件隔一个空行追加，读得到（紧贴�
   runNote({ directory: d, id: t, text: "hello", actor: ME });
   assert.deepEqual(entries(d, t).map((e) => e.head.replace(/^- \S+ \S+ /, "")), ["created", "note: hello"]);
 });
+
+test("任务文件里有非法 UTF-8 字节：note 拒绝，文件字节不变（写回会把它们换成 U+FFFD）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  const p = taskPath(d, t);
+  const bytes = Buffer.concat([readFileSync(p), Buffer.from([0x2d, 0x20, 0xff, 0x0a])]);
+  writeFileSync(p, bytes);
+  assert.throws(() => runNote({ directory: d, id: t, text: "x", actor: ME }), (e: unknown) => code(EXIT.usage)(e) && /not valid UTF-8/.test((e as Error).message));
+  assert.ok(readFileSync(p).equals(bytes));
+});

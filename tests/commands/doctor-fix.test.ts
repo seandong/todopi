@@ -169,8 +169,9 @@ test("文件里有非法 UTF-8 字节：不重写（重写会把它们换成 U+F
   writeFileSync(p, bytes);
   const r = runDoctorFix({ directory: d });
   assert.ok(readFileSync(p).equals(bytes), "文件字节变了");
-  assert.deepEqual(r.skipped.map((s) => s.path), [`tasks/${t}.md`]);
-  assert.match(r.skipped[0]!.reason, /not valid UTF-8/);
+  // 它缺 rank 又写不了：回填整体撤掉，也报一条。
+  assert.deepEqual(r.skipped.map((s) => s.path), ["(rank backfill)", `tasks/${t}.md`]);
+  assert.match(r.skipped[1]!.reason, /not valid UTF-8/);
 });
 
 test("无 rank 段里有回填不了的任务（rank 是数字、文件读不出来）：整体不回填，顺序不变，报告原因（评审一轮）", () => {
@@ -207,4 +208,31 @@ test("未知键给警告、不让 doctor 失败；x- 扩展键不警告", () => 
   assert.equal(r.ok, true);
   assert.deepEqual(r.warnings.map((w) => [w.rule, w.path]), [["unknown-key", `tasks/${t}.md`]]);
   assert.match(r.warnings[0]!.message, /"future_key"/);
+});
+
+test("updated 那一行保留原文：不加引号的照样不加（D034：换个写法也是改）（评审二轮）", () => {
+  const d = repo();
+  copyFileSync(join(ROOT, "spec/fixtures/valid/unquoted-hand-written.md"), taskPath(d, "tp-a1b2c3"));
+  runDoctorFix({ directory: d });
+  const text = read(d, "tp-a1b2c3");
+  assert.match(text, /^updated: 2026-09-14T09:00:00Z$/m, "updated 的原文变了");
+  assert.match(text, /^created: "2026-09-14T09:00:00Z"$/m, "created 照常规范成加引号形态");
+});
+
+test("排在前面的缺 rank 任务写不了（非法 UTF-8）：整体不回填，顺序不变；doctor 报非法 UTF-8、退出不为 ok（评审二轮）", () => {
+  const d = repo();
+  const early = runAdd({ directory: d, title: "early", actor: ME }).id;
+  const late = runAdd({ directory: d, title: "late", actor: ME }).id;
+  edit(d, early, (s) => s.replace(/^rank: ".*"\n/m, "").replace(/^created: ".*"$/m, 'created: "2020-01-01T00:00:00Z"'));
+  edit(d, late, (s) => s.replace(/^rank: ".*"\n/m, "").replace(/^created: ".*"$/m, 'created: "2020-01-02T00:00:00Z"'));
+  const p = taskPath(d, early);
+  writeFileSync(p, Buffer.concat([readFileSync(p), Buffer.from([0xff, 0x0a])]));
+  const order = () => sortTasks(readTasks(discoverLedger(d))).map((t) => t.idFromFilename);
+  const before = order();
+  const r = runDoctorFix({ directory: d });
+  assert.deepEqual(order(), before);
+  assert.equal("rank" in fm(d, late), false, "late 不该单独回填");
+  assert.ok(r.skipped.some((s) => s.path === "(rank backfill)"));
+  assert.equal(r.after.ok, false);
+  assert.ok(r.after.findings.some((f) => f.path === `tasks/${early}.md` && /not valid UTF-8/.test(f.message)));
 });
