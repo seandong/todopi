@@ -240,8 +240,16 @@ test("任务内容里的控制字符换成可见转义：输出里没有 ESC（�
   assert.doesNotMatch(out, /[\x00-\x08\x0b-\x1f\x7f-\x9f]/);
   assert.match(out, /\\x1b\[31mRED\\x1b\[0m/);
   assert.match(out, /bell\\x07 and\ttab\n {2}second \\x1b\]0;x\\x07 line/, "换行与 Tab 保留");
-  const full = renderPrimeFull(runPrimeFull({ directory: d, actor: ME }).report);
+  // 别人持有、assignee 里带 ESC（actor 语法只排除空白与冒号）：--full 那一行也要转义（第二轮评审）。
+  const theirs = runAdd({ directory: d, title: "theirs", actor: ME }).id;
+  runClaim({ directory: d, id: theirs, actor: "bad\x1b[31mactor" });
+  const fullReport = runPrimeFull({ directory: d, actor: ME }).report;
+  const full = renderPrimeFull(fullReport);
   assert.doesNotMatch(full, /\x1b/);
+  assert.match(full, /\(bad\\x1b\[31mactor\)/);
+  // JSON 与文本是同一份展示值：DTO 里也没有控制字符（第二轮评审：只在渲染时转义，JSON 解码仍带 ESC）。
+  assert.doesNotMatch(JSON.stringify(prime(d)), /\\u00(0[0-8]|0[bcef]|1[0-9a-f]|7f)/);
+  assert.doesNotMatch(JSON.stringify(fullReport), /\\u001b/);
 });
 
 test("没有持有的任务时无可裁剪：truncated 为假；装不下指针就如实报 overBudget（第一轮评审）", () => {
@@ -255,4 +263,27 @@ test("没有持有的任务时无可裁剪：truncated 为假；装不下指针�
   assert.equal(prime(d, 0).overBudget, true, "第一个任务收紧到底仍超预算");
   assert.equal(prime(d, 5000).overBudget, false);
   void t;
+});
+
+test("收紧了却什么都没省掉（没有已勾标准、只有一条 Log）：truncated 为假，只报 overBudget（第二轮评审）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "tiny", acceptance: ["only"], actor: ME }).id;
+  edit(d, t, (s) => s.replace(/^status: "open"$/m, 'status: "in_progress"\nassignee: "me@host"'));
+  const roomy = prime(d, 5000);
+  const tight = prime(d, 0);
+  assert.deepEqual(tight.held, roomy.held, "两种预算下推送的内容完全相同");
+  assert.equal(tight.truncated, false);
+  assert.equal(tight.overBudget, true);
+});
+
+test("只省掉了一条 Log（没有已勾标准可丢）：truncated 为真，logOmitted 为 1", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "logs only", acceptance: ["open one"], actor: ME }).id;
+  runClaim({ directory: d, id: t, actor: ME });
+  runNote({ directory: d, id: t, text: "a long note ".repeat(20), actor: ME });
+  const r = prime(d, 10);
+  assert.equal(r.held[0]!.checkedOmitted, 0);
+  assert.equal(r.held[0]!.logOmitted, 1);
+  assert.equal(r.held[0]!.log.length, 1);
+  assert.equal(r.truncated, true);
 });

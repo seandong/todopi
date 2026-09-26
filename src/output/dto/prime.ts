@@ -1,6 +1,7 @@
 // src/output/dto/prime.ts
 // prime 的对外契约（FR-P1、FR-P2、FR-P3）。--json 输出的就是这个——裁剪**之后**的，所以
-// 「以结构化数据输出相同内容」字面成立；`truncated` 说明预算有没有起作用。
+// 「以结构化数据输出相同内容」字面成立；`truncated` 说明预算有没有起作用。任务内容是**展示值**：
+// 控制字符已转义成 `\xNN`（commands/prime.ts 的 visible），与文本输出逐字相同。
 
 export type PrimeTask = {
   id: string;
@@ -10,8 +11,10 @@ export type PrimeTask = {
   checkedOmitted: number;
   /** 这个任务一共有几条验收标准（勾选项形式的）；0 表示只有散文或没有 */
   acceptanceTotal: number;
-  /** 最近的 Log，旧的在前；每条是原文（头行加续行） */
+  /** 最近的 Log，旧的在前；每条是头行加续行 */
   log: string[];
+  /** 默认推 2 条，因预算少推了几条 */
+  logOmitted: number;
 };
 
 export type PrimeReport = {

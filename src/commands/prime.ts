@@ -46,20 +46,33 @@ const str = (t: TaskFile, k: string): string => {
 };
 
 /**
+ * 进输出的任务内容把控制字符（ESC 之类）换成可见的 `\xNN`：这段文字要进模型的上下文，也会打到
+ * 终端上，一条标准或一个 assignee 不该能改颜色或挪光标（F11 评审一、二轮）。换行与 Tab 保留——
+ * 多行 Log 的续行靠换行。**在投影时做，不在渲染时做**：DTO 里就是展示值，--json 与文本才是同一份
+ * 内容（第二轮：只在渲染时转义，JSON 解码出来仍带 ESC）。原值要看 `todopi show --json`。
+ */
+export function visible(s: string): string {
+  return s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+}
+const shown = (t: TaskFile, k: string): string => visible(str(t, k));
+
+/**
  * 一个持有任务的推送内容。`level` 是 FR-P1a 的项内截断：
  * 0 全量；1 丢掉已勾的标准（未勾的永不丢——它们正是推送的意义）；2 再把 Log 从 2 条减到最新 1 条。
  */
 function project(t: TaskFile, level: 0 | 1 | 2): PrimeTask {
   const all = parseAcceptance(t.body);
   const kept = level >= 1 ? all.filter((c) => !c.checked) : all;
-  const entries = logEntries(t.body).slice(level >= 2 ? -1 : -2);
+  const every = logEntries(t.body);
+  const entries = every.slice(level >= 2 ? -1 : -2);
   return {
     id: t.idFromFilename,
-    title: str(t, "title"),
-    acceptance: kept.map((c) => ({ n: c.n, text: c.text, checked: c.checked })),
+    title: shown(t, "title"),
+    acceptance: kept.map((c) => ({ n: c.n, text: visible(c.text), checked: c.checked })),
     checkedOmitted: all.length - kept.length,
     acceptanceTotal: all.length,
-    log: entries.map((e) => [e.head, ...e.continuation.map((l) => `  ${l}`)].join("\n")),
+    log: entries.map((e) => visible([e.head, ...e.continuation.map((l) => `  ${l}`)].join("\n"))),
+    logOmitted: Math.min(every.length, 2) - entries.length,
   };
 }
 
@@ -118,13 +131,15 @@ export function runPrime(opts: PrimeOptions): { report: PrimeReport; warnings: s
       ready,
       heldByOthers: v.others.length,
       budget,
-      // 只有收紧到第 2 级之后才会减少任务数，所以 level > 0 已经涵盖了「有任务没装下」。
-      truncated: level > 0,
+      truncated: false,
       overBudget: false,
       moreHeldLine: line,
       pointer: p.line,
       commands: [...(line === null ? [] : ["todopi ls --mine"]), ...p.commands],
     };
+    // truncated 按**实际省略的内容**算：收紧一级不等于真省掉了什么——没有已勾标准、只有一条 Log 的
+    // 任务收紧到底也还是原样（第二轮评审：只按级别算会误报）。
+    r.truncated = more > 0 || r.held.some((t) => t.checkedOmitted > 0 || t.logOmitted > 0);
     return { ...r, overBudget: estimateTokens(renderPrime(r)) > budget };
   };
 
@@ -152,8 +167,8 @@ export function runPrimeFull(opts: PrimeOptions): { report: PrimeFullReport; war
   const closed = v.tasks.filter((t) => statusOf(t) === "closed");
   const report: PrimeFullReport = {
     held: v.held.map((t) => project(t, 0)),
-    heldByOthers: sortTasks(v.others).map((t) => ({ id: t.idFromFilename, title: str(t, "title"), assignee: str(t, "assignee") })),
-    ready: ready.slice(0, 5).map((t) => ({ id: t.idFromFilename, title: str(t, "title") })),
+    heldByOthers: sortTasks(v.others).map((t) => ({ id: t.idFromFilename, title: shown(t, "title"), assignee: shown(t, "assignee") })),
+    ready: ready.slice(0, 5).map((t) => ({ id: t.idFromFilename, title: shown(t, "title") })),
     readyTotal: ready.length,
     counts: {
       open: v.tasks.filter((t) => statusOf(t) === "open").length,
@@ -163,7 +178,7 @@ export function runPrimeFull(opts: PrimeOptions): { report: PrimeFullReport; war
       closed: closed.length,
     },
     recentlyClosed: [...closed].sort(byUpdatedDesc).slice(0, 3)
-      .map((t) => ({ id: t.idFromFilename, title: str(t, "title"), resolution: str(t, "resolution") })),
+      .map((t) => ({ id: t.idFromFilename, title: shown(t, "title"), resolution: shown(t, "resolution") })),
   };
   return { report, warnings: record(v, opts) };
 }
