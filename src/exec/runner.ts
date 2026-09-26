@@ -87,7 +87,11 @@ function signalGroup(sig: NodeJS.Signals): void {
     process.kill(-child.pid!, sig);
   } catch {
     // 组已经没了，或者建组失败（那就退回到只杀直接子进程）
-    try { child.kill(sig); } catch { /* 已经退出 */ }
+    try {
+      child.kill(sig);
+    } catch {
+      // 已经退出
+    }
   }
 }
 

@@ -164,3 +164,18 @@ export function deriveState(index: TaskIndex, t: TaskFile, input: StaleInput): D
   if (isContainer(index, t)) out.childProgress = childProgress(index, t);
   return out;
 }
+
+/** FR-B2 看板的五列。 */
+export const BOARD_COLUMNS = ["open", "blocked", "in progress", "done", "closed"] as const;
+export type BoardColumn = typeof BOARD_COLUMNS[number];
+
+/**
+ * 一个任务落在看板的哪一列。已关闭的按 resolution 分：`done` 进 done 列，其余（obsolete、duplicate……）进 closed。
+ * open 且被挡住（spec §7.2）进 blocked。状态不认识的（doctor 会报）按 open 放，不让它从看板上消失。
+ */
+export function boardColumn(index: TaskIndex, t: TaskFile): BoardColumn {
+  const status = statusOf(t);
+  if (status === "closed") return t.frontmatter["resolution"] === "done" ? "done" : "closed";
+  if (status === "in_progress") return "in progress";
+  return isBlocked(index, t) ? "blocked" : "open";
+}

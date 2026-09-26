@@ -16,11 +16,11 @@
       "id": "ARCH-002",
       "description": "不得引入常驻进程或非 loopback 监听",
       "applies_when": "test -d src",
-      "check": "grep -rnE '\\b(setInterval|\\.listen\\(|createServer|child_process\\.spawn.*detached)\\b' src --include='*.ts' --include='*.tsx' | grep -v 'src/board/' | grep -vE ':[[:space:]]*(//|\\\\*|/\\\\*)' || true",
+      "check": "{ grep -rnE '\\b(setInterval|\\.listen\\(|createServer|child_process\\.spawn.*detached)\\b' src --include='*.ts' --include='*.tsx' | grep -v 'src/board/' | grep -vE ':[0-9]+:[[:space:]]*(//|\\*|/\\*)'; grep -rnE '\\.listen\\(' src/board --include='*.ts' | grep -vE ':[0-9]+:[[:space:]]*(//|\\*|/\\*)' | grep -vE '\\.listen\\([^,()]+,[[:space:]]*\"127\\.0\\.0\\.1\"[[:space:]]*[,)]'; } || true",
       "expect": "empty",
-      "what": "board 之外的代码里出现了常驻循环、端口监听或 detached 子进程。",
+      "what": "board 之外的代码里出现了常驻循环、端口监听或 detached 子进程；或 board 里的监听没有写明 127.0.0.1。",
       "why": "README 承诺 no resident process。CLI 必须是跑完就退出的短命进程，否则台账的并发模型（基于文件锁与租约）会被长期持有的状态破坏。 本规则只看代码行：注释里提到 setInterval 这个词不算违规——解释「为什么不用它」的注释恰恰是我们希望存在的（2026-09-21 误伤过一次）。",
-      "fix": "把逻辑改成一次性执行并退出。board 是唯一例外，它的监听必须绑定 127.0.0.1，且代码放在 src/board/ 下。"
+      "fix": "把逻辑改成一次性执行并退出。board 是唯一例外，它的监听必须绑定 127.0.0.1（本规则逐行检查 src/board/ 里的 .listen( 调用的第二个参数恰好是、且只是字面量 \"127.0.0.1\"（后面紧跟 , 或 )），同一行别处出现不算；调用要写在一行里，F18 起），且代码放在 src/board/ 下。"
     },
     {
       "id": "ARCH-003",
@@ -136,7 +136,7 @@
       "id": "ARCH-014",
       "description": "src/ 中面向用户的输出必须是英文",
       "applies_when": "test -d src",
-      "check": "grep -rn '[一-鿿]' src --include='*.ts' --include='*.tsx' | grep -vE ':[[:space:]]*(//|\\\\*|/\\\\*)' | grep -vE '//[^\"'\"'\"'`]*[一-鿿]' || true",
+      "check": "grep -rn '[一-鿿]' src --include='*.ts' --include='*.tsx' | grep -vE ':[0-9]+:[[:space:]]*(//|\\*|/\\*)' | grep -vE '//[^\"'\"'\"'`]*[一-鿿]' || true",
       "expect": "empty",
       "what": "src/ 的代码（非注释）里出现了中文字符。",
       "why": "CLI 的 stdout / stderr / help 是产品表面，MUST 是英文（AGENTS.md「用户可见文案 English-first」、engineering-rules「改动措辞等同改 UI，先写英文」）。注释保持中文是有意的——那是内部设计文档，英文是分发语言、中文是思考语言，混同会让其中一种长期失真。这条规则之所以需要，是因为 e2e 只断言退出码与 JSON 可解析性，从不检查语言：2026-09-21 的 Codex review 发现 F01 与 F02 的全部用户可见文案都是中文，而三层验证全绿。",

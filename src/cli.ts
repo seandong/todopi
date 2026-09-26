@@ -460,6 +460,42 @@ function registerTransition(
   }
 }
 
+program
+  .command("web")
+  .description("serve a read-only board of the ledger on 127.0.0.1 that updates as the files change")
+  .option("--port <n>", "port to listen on, on 127.0.0.1 only (default 4747)")
+  .option("--open", "open the board in your browser")
+  .option("--poll", "watch the files by polling (for container mounts where change events do not arrive)")
+  .action(async (cmdOpts: { port?: string; open?: boolean; poll?: boolean }) => {
+    const { runBoard, parsePort, DEFAULT_PORT } = await import("./commands/board.ts");
+    const { BOARD_PAGE } = await import("./output/render/board-page.ts");
+    const { startBoardServer, PortInUseError } = await import("./board/server.ts");
+    const { openInBrowser } = await import("./board/open.ts");
+    const { discoverLedger } = await import("./format/discover.ts");
+    const opts = program.opts();
+    const directory = (opts["directory"] as string | undefined) ?? process.cwd();
+    const actor = opts["as"] as string | undefined;
+    const port = cmdOpts.port === undefined ? DEFAULT_PORT : parsePort(cmdOpts.port);
+    const ledger = discoverLedger(directory);
+    // FR-B1：前台进程，不装信号处理——Ctrl+C（SIGINT）与关掉终端（SIGHUP）的默认行为就是结束进程。
+    // 端口被占用就报错退出，不换端口：换了用户就不知道看板在哪。
+    const server = await startBoardServer({
+      port, page: BOARD_PAGE, watchDir: ledger.dir, poll: cmdOpts.poll,
+      build: () => JSON.stringify(runBoard({ directory, actor })),
+    }).catch((err: unknown) => {
+      if (err instanceof PortInUseError) {
+        throw new CliError(EXIT.usage, `Port ${port} on 127.0.0.1 is already in use. Pick another with --port <n>.`);
+      }
+      throw err;
+    });
+    const url = `http://127.0.0.1:${server.port}/`;
+    process.stdout.write(`todopi board: ${url}\n`
+      + `Read-only; ${server.mode === "poll" ? "polling" : "watching"} ${ledger.dir} for changes. Press Ctrl+C to stop.\n`);
+    if (cmdOpts.open === true && !(await openInBrowser(url))) {
+      process.stderr.write(`Could not open a browser; open ${url} yourself.\n`);
+    }
+  });
+
 registerTransition(["done", "finish", "complete"], "done", "close a task as finished");
 registerTransition(["close", "cancel"], "close", "close a task without finishing it",
   (c) => c.option("-r, --resolution <resolution>", "wontfix | duplicate | obsolete"));

@@ -6,7 +6,7 @@
 // 约 1.6 MB 的依赖。PRD 记录的实测：这组系数对中英文都在 ±15% 以内。
 
 /** 中日韩文字与全角标点：一个字大约 0.6 个 token。 */
-const CJK = /[　-〿぀-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/u;
+const CJK = /[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/u;
 
 export function estimateTokens(text: string): number {
   let ascii = 0, cjk = 0, other = 0;
