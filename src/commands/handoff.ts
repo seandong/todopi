@@ -49,6 +49,23 @@ function summaryOf(t: TaskFile): string {
   return ac.length === 0 ? "no checkbox criteria" : `${ac.filter((c) => c.checked).length}/${ac.length} criteria checked`;
 }
 
+/**
+ * 一个任务在 verify 快照里的记录：`<指纹>#<经 CLI 编辑 verify 的次数>`。prime 记下它，handoff 拿当前值比。
+ *
+ * - 指纹：没有 verify 为 `-`；任务文件读不出来、或 verify 不是字符串（`verify: 123`）为 `?`——不知道
+ *   就不假装知道，也不把「存在但不可用」当成「没有」（F12 评审二轮）。
+ * - 编辑次数：`edited fields=…verify…` 的条数。**比次数、不比时间**：Log 时间戳只到秒，prime 与随后
+ *   同一秒里的往返编辑分不出先后（评审二轮实测漏报）；次数变多就是 prime 之后编辑过。
+ */
+export function verifySnapshot(t: TaskFile): string {
+  const raw = t.frontmatter["verify"];
+  const print = t.parseError !== undefined || (raw !== undefined && typeof raw !== "string") ? UNREADABLE
+    : verifyPrint(raw);
+  const edits = t.parseError !== undefined ? 0 : parsedLog(t)
+    .filter((p) => p.verb === "edited" && (p.args["fields"] ?? "").split(",").includes("verify")).length;
+  return `${print}#${edits}`;
+}
+
 export function runHandoff(opts: HandoffOptions): HandoffReport {
   const ledger = discoverLedger(opts.directory);
   const actor = currentActor(ledger.root, opts.actor);
@@ -79,24 +96,21 @@ export function runHandoff(opts: HandoffOptions): HandoffReport {
     return origin !== undefined && isMine(origin.actor, who);
   }).map(ref);
 
-  // 3. verify 新出现、变了、被去掉、或读不出来的——所有人的任务（FR-D4：威胁正是别人改了 verify）。
-  //    判据是「与 prime 时不同」（快照能看见手改与合并）；另把 prime 之后 Log 里的
-  //    `edited fields=…verify…` 并进来：经 CLI 改了又改回的，现值相同也报（F12 评审的 A→B→A）。
-  //    手改了又改回的看不见——快照只有两端。
-  const since = record?.primedAt ?? "";
-  const editedVerify = (t: TaskFile) => parsedLog(t).some((p) => p.verb === "edited" && p.timestamp > since
-    && (p.args["fields"] ?? "").split(",").includes("verify"));
+  // 3. verify 一节——所有人的任务（FR-D4：威胁正是别人改了 verify）。判据是「与 prime 时的快照不同」
+  //    （快照看得见手改与合并），外加「prime 之后经 CLI 编辑过 verify」（改了又改回的也报 edited）。
+  //    手改了又改回的看不见——快照只有两端（D033）。
   type VerifyRow = NonNullable<HandoffReport["verifyChanged"]>[number];
   const verifyRow = (t: TaskFile, before: string | undefined): VerifyRow | null => {
-    if (t.parseError !== undefined) {
-      // 读不出来：不知道 verify 是什么，就不说它「被删了」（F12 评审：YAML 坏掉曾被报成 removed）。
-      return before === UNREADABLE ? null : { ...ref(t), verify: null, state: "unreadable" };
-    }
+    const [cp, ce] = verifySnapshot(t).split("#");
     const raw = str(t, "verify");
-    const verify = raw === undefined ? null : visibleLine(raw);
-    if (before === undefined || before === UNREADABLE) return raw === undefined ? null : { ...ref(t), verify, state: before === undefined ? "new" : "changed" };
-    if (before !== verifyPrint(raw)) return { ...ref(t), verify, state: raw === undefined ? "removed" : "changed" };
-    return editedVerify(t) ? { ...ref(t), verify, state: "edited" } : null;
+    const row = (state: VerifyRow["state"]): VerifyRow => ({ ...ref(t), verify: raw === undefined ? null : visibleLine(raw), state });
+    if (cp === UNREADABLE) return before?.startsWith(`${UNREADABLE}#`) === true ? null : { ...ref(t), verify: null, state: "unreadable" };
+    if (before === undefined) return cp === "-" ? null : row("new");
+    const [bp, be] = before.split("#");
+    // prime 时读不出来：不知道原来是什么，就不说它变了（评审二轮）。现在没有 verify 则无可担心。
+    if (bp === UNREADABLE) return cp === "-" ? null : row("unknown");
+    if (bp !== cp) return row(cp === "-" ? "removed" : "changed");
+    return be !== undefined && Number(ce) > Number(be) ? row("edited") : null;
   };
   const verifyChanged = snap === null ? null
     : all.map((t) => verifyRow(t, snap[t.idFromFilename])).filter((row): row is VerifyRow => row !== null);

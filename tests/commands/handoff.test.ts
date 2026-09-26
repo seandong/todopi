@@ -232,13 +232,7 @@ test("经 CLI 改了又改回的 verify：现值相同也报 edited；什么都�
   const t = runAdd({ directory: d, title: "t", verify: "true", actor: ME }).id;
   runAdd({ directory: d, title: "quiet", verify: "true", actor: ME });
   runPrime({ directory: d, actor: ME });
-  // prime 与编辑可能落在同一秒：把 prime 的时间往前拨一秒，「之后」才分得清。
-  const ledger = discoverLedger(d);
-  const dir = join(leaseDirFor(ledger), "sessions");
-  for (const f of readdirSync(dir)) {
-    const rec = JSON.parse(readFileSync(join(dir, f), "utf8"));
-    writeFileSync(join(dir, f), JSON.stringify({ ...rec, primed_at: "2020-01-01T00:00:00Z" }));
-  }
+  // 不拨时间：prime 与两次编辑几乎必然落在同一秒——评审二轮正是在这个边界上测出漏报（按时间比分不出先后）。
   runEdit({ directory: d, id: t, verify: "false", actor: ME });
   runEdit({ directory: d, id: t, verify: "true", actor: ME });
   const r = runHandoff({ directory: d, actor: ME, check: true });
@@ -270,4 +264,25 @@ test("会话记录里的 primed_at 不是时间戳：当作没有记录（它会
   assert.doesNotMatch(renderHandoff(r), /\x1b/);
   const failed = renderHandoff({ ...r, check: false, failed: [{ id: "tp-123456", title: "t", message: "busy", code: 3 }] });
   assert.match(failed, /- tp-123456 t: busy \(exit 3\)\n/);
+});
+
+test("prime 时读不出来、之后修好了：报 unknown，不说 changed（评审二轮）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t", verify: "true", actor: ME }).id;
+  const good = read(d, t);
+  edit(d, t, (s) => s.replace(/^title: .*$/m, "title: [invalid"));
+  runPrime({ directory: d, actor: ME });
+  writeFileSync(taskPath(d, t), good);
+  assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true }).verifyChanged?.map((x) => [x.id, x.state]), [[t, "unknown"]]);
+});
+
+test("verify 存在但不是字符串（verify: 123）：报 unreadable，不说 removed（评审二轮）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t", verify: "true", actor: ME }).id;
+  runPrime({ directory: d, actor: ME });
+  edit(d, t, (s) => s.replace(/^verify: ".*"$/m, "verify: 123"));
+  assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true }).verifyChanged?.map((x) => [x.id, x.state]), [[t, "unreadable"]]);
+  // prime 时就是 123、现在还是：没有新信息，不报。
+  runPrime({ directory: d, actor: ME });
+  assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true }).verifyChanged, []);
 });

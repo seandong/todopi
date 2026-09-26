@@ -5,9 +5,10 @@ export type HandoffTaskRef = { id: string; title: string };
 
 /**
  * verify 一节每一项的状态：new（prime 之后才出现且带 verify）、changed、removed、
- * edited（现值与 prime 时相同，但期间经 CLI 改过）、unreadable（任务文件读不出来，不知道）。
+ * edited（现值与 prime 时相同，但期间经 CLI 改过）、unreadable（任务文件读不出来或 verify 不是字符串，
+ * 不知道）、unknown（prime 时读不出来，现在有 verify——无从比较）。
  */
-export type HandoffVerifyState = "new" | "changed" | "removed" | "edited" | "unreadable";
+export type HandoffVerifyState = "new" | "changed" | "removed" | "edited" | "unreadable" | "unknown";
 
 export type HandoffReport = {
   actor: string;

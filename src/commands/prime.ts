@@ -10,7 +10,8 @@ import { isDisplayable, staleInputFor, visible, visibleLine } from "./view.ts";
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { nowStamp } from "../format/write.ts";
-import { UNREADABLE, recordPrime, verifyPrint } from "../format/session.ts";
+import { recordPrime } from "../format/session.ts";
+import { verifySnapshot } from "./handoff.ts";
 import { indexTasks, isBlocked, isReady, statusOf } from "../domain/derive.ts";
 import { parseAcceptance } from "../domain/acceptance.ts";
 import { logEntries, validateFile } from "../domain/validate.ts";
@@ -102,8 +103,7 @@ function record(v: ReturnType<typeof view>, opts: PrimeOptions): string[] {
     // 快照取磁盘上**全部**读得出的任务（含 doctor 不认的），handoff 才能发现任何一个的 verify 变了。
     const verify: Record<string, string> = {};
     for (const t of v.all) {
-      const raw = t.frontmatter["verify"];
-      verify[t.idFromFilename] = t.parseError !== undefined ? UNREADABLE : verifyPrint(typeof raw === "string" ? raw : undefined);
+      verify[t.idFromFilename] = verifySnapshot(t);
     }
     recordPrime(v.ledger, opts.session !== undefined ? { session: opts.session } : { actor: v.actor }, nowStamp(), verify);
     return [];
