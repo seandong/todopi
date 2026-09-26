@@ -21,7 +21,7 @@ export type BodyStructure = {
   reparsedAt: number;
 };
 
-const ATX = /^ {0,3}##(?:[ \t]|$)/;
+const ATX = /^##(?:[ \t]|$)/;
 const OPENER = /^ {0,3}(`{3,}|~{3,})/;
 const CLOSER = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 
@@ -99,8 +99,10 @@ function analyse(lines: string[]): BodyStructure {
     let neutralised = false;
     for (let n = doc.firstChild; n !== null; n = n.next) {
       const [[start], [end]] = n.sourcepos;
-      // 只认 ATX（`## …`）。setext 标题（一行文字下面一行 `---`）也是二级标题，但 spec §5.3 说小节标题是
-      // ATX 的；把它也当边界，`x` + `---` 两行就能把后面的标准切到一个无名小节里（第五轮的暴力枚举找到的）。
+      // 只认**顶格**的 ATX（`## …`）。setext 标题（一行文字下面一行 `---`）也是二级标题，但 spec §5.3 说小节
+      // 标题是 ATX 的；把它也当边界，`x` + `---` 两行就能把后面的标准切到一个无名小节里（第五轮的暴力枚举
+      // 找到的）。缩进 1–3 格的 `  ## Plan` 在 CommonMark 里同样是标题，但源码行不是 `## Plan`；当成边界，
+      // 它后面的标准就掉出了验收小节（第十二轮评审）。旧实现也只认顶格。
       if (n.type === "heading" && n.level === 2 && ATX.test(work[start - 1] ?? "")) h2.add(start - 1);
       if (n.type !== "code_block" && n.type !== "html_block") continue;
       // **一处刻意偏离 CommonMark。** 没有被作者写下的结束标记结束的块（见 isUnclosedHtml 上面的枚举），
