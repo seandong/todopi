@@ -63,8 +63,7 @@ test("已有的 settings.json：别的键、别的钩子原样保留，只补我
 test("settings.json 不是合法 JSON、不是对象、hooks 形状不对：拒绝，文件不动", () => {
   for (const content of ["{ not json", "[1, 2]", JSON.stringify({ hooks: [] }), JSON.stringify({ hooks: { SessionStart: {} } }),
     // 显式的 null 不是「没有」；组与处理器的形状也要对（F14 评审）。
-    JSON.stringify({ hooks: null }), JSON.stringify({ hooks: { SessionStart: null } }),
-    JSON.stringify({ hooks: { SessionStart: [42] } }), JSON.stringify({ hooks: { SessionEnd: [{ hooks: "x" }] } })]) {
+    JSON.stringify({ hooks: null }), JSON.stringify({ hooks: { SessionStart: null } })]) {
     const d = tmp();
     const p = join(d, "settings.json");
     writeFileSync(p, content);
@@ -154,15 +153,37 @@ test("我们的命令已在、但覆盖不全：只补缺的来源（不改用�
   }
 });
 
-test("处理器缺 type、command 不是字符串、matcher 不是字符串：拒绝，文件不动（评审二轮）", () => {
-  for (const group of [{ hooks: [{}] }, { hooks: [{ type: "command" }] }, { matcher: 5, hooks: [] }]) {
+test("用户别的钩子不校验、原样保留（那是 Claude Code 的事），只往数组末尾加我们的（评审三轮）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  const odd = [42, { hooks: [{}] }, { matcher: 5, hooks: [{ type: "bogus" }] }, { matcher: "[", hooks: [] }];
+  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: odd } }));
+  assert.equal(ensureClaudeHooks(p).status, "updated");
+  const s = json(p);
+  assert.deepEqual(s.hooks.SessionStart.slice(0, 4), odd, "原有条目逐个原样");
+  assert.deepEqual(s.hooks.SessionStart[4], { hooks: [{ type: "command", command: "todopi prime --hook" }] });
+});
+
+test("同一命令但可能不运行、或输出不进上下文的（if、async、陌生键、非法正则 matcher）：不算装好，补一组标准的（评审三轮）", () => {
+  const end = [{ hooks: [{ type: "command", command: "todopi handoff --check --hook" }] }];
+  for (const group of [
+    { hooks: [{ type: "command", command: "todopi prime --hook", if: "Bash(ls)" }] },
+    { hooks: [{ type: "command", command: "todopi prime --hook", async: true }] },
+    { hooks: [{ type: "command", command: "todopi prime --hook", something: 1 }] },
+    { matcher: "[", hooks: [{ type: "command", command: "todopi prime --hook" }] },
+  ]) {
     const d = tmp();
     const p = join(d, "settings.json");
-    const content = JSON.stringify({ hooks: { SessionStart: [group] } });
-    writeFileSync(p, content);
-    assert.throws(() => ensureClaudeHooks(p), code(EXIT.usage), content);
-    assert.equal(readFileSync(p, "utf8"), content);
+    writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [group], SessionEnd: end } }));
+    assert.equal(ensureClaudeHooks(p).status, "updated", JSON.stringify(group));
+    const s = json(p);
+    assert.deepEqual(s.hooks.SessionStart, [group, { hooks: [{ type: "command", command: "todopi prime --hook" }] }]);
   }
+  // timeout、statusMessage 不影响运行与注入：算装好。
+  const d = tmp();
+  const p = join(d, "settings.json");
+  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "todopi prime --hook", timeout: 30, statusMessage: "priming" }] }], SessionEnd: end } }));
+  assert.equal(ensureClaudeHooks(p).status, "unchanged");
 });
 
 test("符号链接：拒绝，不把链接换成普通文件（F14 评审）", () => {

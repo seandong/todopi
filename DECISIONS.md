@@ -2027,3 +2027,18 @@ Node 用 spec reporter，整层被判 blocked。
   「用字符形状近似需要真解析的判断」——正则 `^updated:` 认不得 `"updated":`）；frontmatter 有手写注释就不重写。
   这几类错误没有有意义的静态判据，按 AGENTS.md 的要求说明：由 tests/commands/doctor-fix.test.ts 守护
   （updated 原文的五种写法、非法 UTF-8、回填的两种阻挡情形、注释）。
+
+## D035 — setup claude：只判断「我们的钩子装好了、能跑」，不校验用户别的钩子
+
+- 日期：2026-09-26（F14）
+- 外部事实（PRD §17 重核并实测）：Claude Code 的 PostCompact 存在，但不在「stdout 进上下文」的事件表里；压缩后
+  注入走 SessionStart 的 compact 来源。setup 只装 SessionStart（不设 matcher）与 SessionEnd。任务验收标准据此改写。
+- 评审前三轮把我推向「逐条校验用户的钩子形状」——那等于手写一份 Claude Code 的设置校验器（第五次「用手写
+  近似代替真解析」）。收回：用户别的钩子**不校验、原样保留**，我们只往数组末尾加一组，不会让它们变得更糟。
+  只在要往里加东西的容器不对（`hooks` 不是对象、事件不是列表、文件不是 JSON 对象、符号链接）时拒绝。
+- 需要判断的只有「我们的钩子装好了、能跑」，按最保守的方式认：标准形状的处理器（type command、命令恰好是我们的，
+  只允许 timeout / statusMessage 这类不改变运行与注入的键），matcher 是合法正则，所有这类组的覆盖并集含 startup
+  与 compact。缺一部分就只补缺的来源（启动时不注入两遍）；一个都没覆盖就补一组标准的。带 `if`、`async` 或陌生
+  键的同名处理器不算——宁可多补一组，也不把一个可能不跑的处理器当成装好。
+- 用户文件的权限位不变（writeFileAtomic 新增 mode）；CLAUDE.md 按字节追加；导入判定按纯 CommonMark
+  （markdown 层新增 commonmarkCodeLines——不带为验收门禁做的偏离）。
