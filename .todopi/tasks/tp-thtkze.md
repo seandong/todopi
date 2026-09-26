@@ -31,7 +31,8 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - [ ] Codex：写 `.codex/hooks.json` 的 SessionStart
 - [ ] Codex：写 `.codex/hooks.json` 的 PostCompact
 - [ ] Codex：写 `.codex/hooks.json` 的 SessionEnd
-- [ ] OpenCode：写 `.opencode/plugins/` 下的插件，通过 event 钩子订阅 `session.created`
+- [ ] OpenCode：插件写在 `.opencode/plugins/` 下
+- [ ] OpenCode：插件通过 event 钩子订阅 `session.created`
 - [ ] OpenCode：同一插件订阅 `session.compacted`
 - [ ] Codex 的会话 id 能取到
 - [ ] OpenCode 的会话 id 能取到：事件对象上给 `session_id` 时

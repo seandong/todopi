@@ -25,7 +25,8 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - [ ] `todopi setup pi` 装好（标题）
 - [ ] pi 的会话开始时收到注入（标题）
 - [ ] pi 压缩后收到注入（标题）
-- [ ] 写 `.pi/extensions/` 下的扩展，订阅 `session_start`
+- [ ] 扩展写在 `.pi/extensions/` 下
+- [ ] 扩展订阅 `session_start`
 - [ ] 扩展订阅 `session_compact`（压缩后；`session_before_compact` 是压缩前，PRD 1.1 版选错了方向）
 - [ ] 会话 id 调 `ctx.sessionManager.getSessionId()` 自取（不在事件参数里）
 - [ ] 上下文注入走 `before_agent_start`

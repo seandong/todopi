@@ -26,7 +26,7 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - [ ] 装好之后，全新克隆上 Claude Code 会话开始时收到 prime 输出（标题）
 - [ ] 写入项目级 `.claude/settings.json` 的 SessionStart 钩子，调用 `prime`
 - [ ] 写入项目级 `.claude/settings.json` 的 PostCompact 钩子，调用 `prime`
-- [ ] 写入 SessionEnd 钩子，调用 `handoff --check`
+- [ ] 写入项目级 `.claude/settings.json` 的 SessionEnd 钩子，调用 `handoff --check`
 - [ ] 确保存在含 `@AGENTS.md` 导入的 CLAUDE.md（FR-Q5a：Claude Code 读 CLAUDE.md 而不读 AGENTS.md，只跑 init 的用户读不到协议）
 - [ ] 幂等：重复运行不产生第二份钩子
 - [ ] 打印写入的每个文件
