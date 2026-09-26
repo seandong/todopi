@@ -19,7 +19,7 @@ import { sortTasks } from "../domain/order.ts";
 import { estimateTokens } from "../domain/tokens.ts";
 import type { TaskFile } from "../domain/types.ts";
 import type { PrimeFullReport, PrimeReport, PrimeTask } from "../output/dto/prime.ts";
-import { renderPrime } from "../output/render/prime.ts";
+import { moreHeldLine, pointer, renderPrime } from "../output/render/prime.ts";
 import { EXIT, CliError } from "../exit.ts";
 
 export type PrimeOptions = {
@@ -108,25 +108,35 @@ export function runPrime(opts: PrimeOptions): { report: PrimeReport; warnings: s
 
   let level: 0 | 1 | 2 = 0;
   let count = v.held.length;
-  const build = (): PrimeReport => ({
-    held: v.held.slice(0, count).map((t) => project(t, level)),
-    moreHeld: v.held.length - count,
-    ready,
-    heldByOthers: v.others.length,
-    budget,
-    // 只有收紧到第 2 级之后才会减少任务数，所以 level > 0 已经涵盖了「有任务没装下」。
-    truncated: level > 0,
-  });
-  const fits = (r: PrimeReport) => estimateTokens(renderPrime(r)) <= budget;
+  const build = (): PrimeReport => {
+    const more = v.held.length - count;
+    const p = pointer(ready, v.others.length, v.held.length > 0);
+    const line = moreHeldLine(more);
+    const r: PrimeReport = {
+      held: v.held.slice(0, count).map((t) => project(t, level)),
+      moreHeld: more,
+      ready,
+      heldByOthers: v.others.length,
+      budget,
+      // 只有收紧到第 2 级之后才会减少任务数，所以 level > 0 已经涵盖了「有任务没装下」。
+      truncated: level > 0,
+      overBudget: false,
+      moreHeldLine: line,
+      pointer: p.line,
+      commands: [...(line === null ? [] : ["todopi ls --mine"]), ...p.commands],
+    };
+    return { ...r, overBudget: estimateTokens(renderPrime(r)) > budget };
+  };
 
   // FR-P1a：先在项内截断（所有任务一起收紧），再把装不下的任务从旧的一端退化为一行计数。
-  // 第一个任务收紧到底仍超预算时照样输出：它的未勾标准是这个命令存在的理由。
+  // 第一个任务收紧到底仍超预算时照样输出：它的未勾标准是这个命令存在的理由。没有持有的任务
+  // 时无可收紧——只剩指针，它永不裁剪（此时 truncated 为假，overBudget 如实报告）。
   let report = build();
-  while (!fits(report) && level < 2) {
+  while (report.overBudget && v.held.length > 0 && level < 2) {
     level = (level + 1) as 1 | 2;
     report = build();
   }
-  while (!fits(report) && count > 1) {
+  while (report.overBudget && count > 1) {
     count -= 1;
     report = build();
   }

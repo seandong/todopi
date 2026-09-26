@@ -21,7 +21,16 @@ export type PrimeReport = {
   ready: number;
   heldByOthers: number;
   budget: number;
+  /** 有任务内容被省略（已勾的标准、较早的 Log、整个较旧的任务） */
   truncated: boolean;
+  /** 收紧到底之后估算仍超预算（指针行与第一个任务的最小推送不裁剪，见 FR-P1a） */
+  overBudget: boolean;
+  /** 「另有 N 个你持有的任务」那一行；没有就是 null */
+  moreHeldLine: string | null;
+  /** 末尾的指针行，与文本输出的最后一行逐字相同 */
+  pointer: string;
+  /** 指针与「另有 N 个」里提到的命令，按出现顺序 */
+  commands: string[];
 };
 
 /** --full（FR-P3）：全景，不受预算约束。 */

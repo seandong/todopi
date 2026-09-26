@@ -117,7 +117,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-P1** `prime [--budget <tokens>]`（默认 600）**推送「你正在做什么」，指向其余一切**。输出 Markdown：
 
   1. 调用者正在进行的任务：标题、带状态的验收标准、最近 2 条 Log。**这一段是推送的**。
-  2. 一行指针，给出可领任务数、本机其他 actor 持有的任务数，以及取用它们的命令。
+  2. 一行指针，给出可领任务数、别人持有的任务数（按 FR-C6 不算你的进行中任务——同一台机器上的其他 agent 按 FR-C6 算你的），以及取用它们的命令。
 
   没有进行中的任务时退化为单行：可领数量加一条 `todopi ls --ready`。
 
@@ -148,7 +148,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
   装不下的任务退化为一行「另有 N 个你持有的任务」。
 - **FR-P1b** `prime` 把调用时间按**会话**记录在 FR-C5 的运行时目录，供 FR-H1 使用。会话标识的可得性于 2026-09-16 核实：Claude Code、Codex、Gemini CLI 在钩子 stdin 里给 `session_id`；Cursor 的钩子载荷同样带会话标识；OpenCode 在事件对象上给 `session_id` 或 `sessionID`（两种拼法都要处理）；pi 不把它传进事件，扩展需调 `ctx.sessionManager.getSessionId()` 自取。六家都拿得到，因此按 actor 记录只是**防御性**回退，不是常态。
 - **FR-P2** `prime --json` 以结构化数据输出相同内容。
-- **FR-P3** `prime --full` 输出 1.1 版那种全量上下文：当前任务、本机其他 actor
+- **FR-P3** `prime --full` 输出 1.1 版那种全量上下文：当前任务、别人（按 FR-C6 不算你的）
   持有的任务、ready 前 5 条、计数、最近关闭 3 条。它是**给 agent 主动调用的**——
   FR-P1 的指针指向的就是它。默认 `prime` 服务于钩子（每次注入都要付钱），
   `--full` 服务于「我现在确实需要全景」这个明确时刻。不是新子命令，是一个 flag。
@@ -252,7 +252,7 @@ todopi import <file.md> | import beads [path]
 
 | 领域 | 要求 |
 |---|---|
-| 性能 | 2,000 个任务的仓库上任何命令在笔记本上 < 200 ms（冷缓存 < 1 s）。`prime` 永不超预算。2026-09-16 实测（M 系列 mac，2,000 任务全量扫描）：手写快路径解析 16 ms、通用 YAML 解析器 120 ms、进程启动 10 ms、文件 I/O 20 ms。目标环境含 WSL2、容器挂载卷与网络文件系统，那里 I/O 往返贵一个数量级，余量按最坏环境预留而非按开发机。 |
+| 性能 | 2,000 个任务的仓库上任何命令在笔记本上 < 200 ms（冷缓存 < 1 s）。`prime` 只在两处超出预算：末尾的指针行永不裁剪，第一个持有任务收紧到底（只剩未勾标准与最新一条 Log）仍装不下时照样输出（FR-P1a，D032）；此时 `--json` 的 `overBudget` 为真。2026-09-16 实测（M 系列 mac，2,000 任务全量扫描）：手写快路径解析 16 ms、通用 YAML 解析器 120 ms、进程启动 10 ms、文件 I/O 20 ms。目标环境含 WSL2、容器挂载卷与网络文件系统，那里 I/O 往返贵一个数量级，余量按最坏环境预留而非按开发机。 |
 | 平台 | 支持 macOS 与 Linux；Windows 尽力（CI 跑，失败不阻塞发布）。 |
 | 运行时 | npm 包在 Node ≥ 20 上运行，不需要 Bun；brew/curl 提供无运行时依赖的 Bun 编译二进制。源码只用 Node API，Bun 仅作编译器（DECISIONS D006）。实测体积：**npm 装完 1.5 MB**（三个零传递依赖），二进制 61 MB（macOS arm64）/ 90 MB（Linux x64）——体积全部来自内嵌运行时，`--minify` 与 `--bytecode` 均无效。对照：同类中最接近的 Backlog.md 同为 Bun + TypeScript，但因使用 Bun 专属 API 而必须发二进制，其 npm 安装量为 67.5 MB（macOS）/ 96.3 MB（Linux）。**45 倍差距来自「源码只用 Node API」这一条决策**，见 DECISIONS D008。curl 安装器先探测 Node ≥ 20：有则装 npm 包，无则下载二进制。 |
 | 安全 | 验证命令仅在按仓库信任后执行，且每次执行前原样打印；看板只绑定回环地址；v0.1 无任何网络访问。文档明确写出：把 `todopi` 加进 agent 的命令白名单**不是**沙箱——`done` 会执行仓库自己的 `verify` 命令，而 agent 的权限检查看不到它。**OS 级沙箱是有效的**：2026-09-16 核实，Claude Code 与 Codex 的沙箱都约束整棵进程树（macOS Seatbelt、Linux bubblewrap+Landlock+seccomp），todopi 派生的 verify 进程继承同一套限制。文档应据此建议：依赖白名单做隔离的用户同时启用 OS 沙箱。 |
@@ -301,7 +301,7 @@ todopi import <file.md> | import beads [path]
 
 ## 15. 待办项
 
-实现默认值（除非有异议即按此执行）：6 位 base36 随机 ID；UTC 秒级时间戳；`.todopi/` 只在仓库根；无 git 时租约回退到 `.cache/`；`prime` 的裁剪顺序如 FR-P1/P1a；token 估算方式**待定**（见下方待决项，原「字符数 ÷ 4」经实测对中文低估 2–3 倍，已撤下）；「本会话」= 自本**会话**上次 `prime` 起，agent 不暴露会话 id 时回退为本 actor；阻塞项关闭即解除阻塞而不论 resolution；无硬删除。
+实现默认值（除非有异议即按此执行）：6 位 base36 随机 ID；UTC 秒级时间戳；`.todopi/` 只在仓库根；无 git 时租约回退到 `.cache/`；`prime` 的裁剪顺序如 FR-P1/P1a；token 估算按字符类别加权（D032；原「字符数 ÷ 4」经实测对中文低估 2–3 倍，已撤下）；「本会话」= 自本**会话**上次 `prime` 起，agent 不暴露会话 id 时回退为本 actor；阻塞项关闭即解除阻塞而不论 resolution；无硬删除。
 
 **带触发条件的推迟项**，避免「以后再说」变成「一直没做」：
 

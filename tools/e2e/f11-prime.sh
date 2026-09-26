@@ -56,6 +56,9 @@ js="$(cli -C "$W" --as me@h --json prime 2>/dev/null)"
 [ "$(printf '%s' "$js" | jget '.held[0].id')" = "$T" ] && [ "$(printf '%s' "$js" | jget '.ready')" = "1" ] \
   && [ "$(printf '%s' "$js" | jget '.held[0].acceptance.length')" = "2" ] \
   && ok "--json：同一个任务、同样的计数与标准" || fail "--json 输出：$js"
+txt="$(cli -C "$W" --as me@h prime 2>/dev/null | tail -1)"
+[ "$(printf '%s' "$js" | jget '.pointer')" = "$txt" ] && ok "--json 的 pointer 与文本最后一行逐字相同" \
+  || fail "pointer 不同：$(printf '%s' "$js" | jget '.pointer') / $txt"
 
 # 5. --budget 的解析；--full 的各节
 cli -C "$W" prime --budget 0x10 >/dev/null 2>&1; rc=$?

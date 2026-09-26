@@ -30,8 +30,8 @@ const prime = (d: string, budget?: number) => runPrime({ directory: d, actor: ME
 const text = (d: string, budget?: number) => renderPrime(prime(d, budget));
 
 /**
- * D010：协议不进 prime。用**白名单**断言——每一行都是认得的几种之一。列一份 AGENTS.md 里的
- * 句子做黑名单证明不了什么：换一句就漏了。
+ * D010：prime 不**生成**协议段。用白名单断言——每一行都是认得的几种之一。这证明的是「输出的结构
+ * 里没有别的东西」，不是「任务内容里不会出现协议里的句子」：任务正文是用户写的，写什么都可以。
  */
 const LINE_KINDS = [
   /^## tp-[0-9a-z]+: /, /^Acceptance criteria[ :(]/, /^- \[[ x]\] \d+\. /, /^Recent log:$/,
@@ -212,4 +212,47 @@ test("parseBudget 从字符串出发：拒绝 0x10、1.5、1e3、负数、空串
   for (const bad of ["0x10", "1.5", "1e3", "-1", "", " 5", "05"]) {
     assert.throws(() => parseBudget(bad), (e: unknown) => e instanceof CliError && e.code === EXIT.usage, bad);
   }
+});
+
+test("--json 与文本是同一份内容：指针行、「另有 N 个」、提到的命令都在 DTO 里（第一轮评审）", () => {
+  const d = repo();
+  const ids = ["old", "mid", "new"].map((title) => bigTask(d, title));
+  ids.forEach((id, k) => edit(d, id, (s) => s.replace(/^updated: ".*"$/m, `updated: "2026-09-26T00:00:0${k}Z"`)));
+  const r = prime(d, 120);
+  const out = renderPrime(JSON.parse(JSON.stringify(r)));
+  assert.equal(out, renderPrime(r), "从 JSON 往返回来的 DTO 渲染出同样的文本");
+  assert.equal(out.trimEnd().split("\n").at(-1), r.pointer);
+  assert.ok(r.moreHeldLine !== null && out.includes(`${r.moreHeldLine}\n`));
+  assert.deepEqual(r.commands, ["todopi ls --mine", "todopi ls --ready", "todopi prime --full"]);
+  for (const c of r.commands) assert.ok(out.includes(`\`${c}\``), c);
+  const none = prime(repo());
+  assert.deepEqual(none.commands, ["todopi ls --ready"]);
+  assert.equal(renderPrime(none), `${none.pointer}\n`);
+});
+
+test("任务内容里的控制字符换成可见转义：输出里没有 ESC（第一轮评审：--ac 里的 ANSI 原样进了输出）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t\x1b[2Jitle", acceptance: ["\x1b[31mRED\x1b[0m"], actor: ME }).id;
+  runClaim({ directory: d, id: t, actor: ME });
+  runNote({ directory: d, id: t, text: "bell\x07 and\ttab\nsecond \x1b]0;x\x07 line", actor: ME });
+  const out = text(d);
+  assertShape(out);
+  assert.doesNotMatch(out, /[\x00-\x08\x0b-\x1f\x7f-\x9f]/);
+  assert.match(out, /\\x1b\[31mRED\\x1b\[0m/);
+  assert.match(out, /bell\\x07 and\ttab\n {2}second \\x1b\]0;x\\x07 line/, "换行与 Tab 保留");
+  const full = renderPrimeFull(runPrimeFull({ directory: d, actor: ME }).report);
+  assert.doesNotMatch(full, /\x1b/);
+});
+
+test("没有持有的任务时无可裁剪：truncated 为假；装不下指针就如实报 overBudget（第一轮评审）", () => {
+  const d = repo();
+  runAdd({ directory: d, title: "a", actor: ME });
+  const r = prime(d, 0);
+  assert.equal(r.truncated, false);
+  assert.equal(r.overBudget, true);
+  assert.equal(prime(d, 600).overBudget, false);
+  const t = bigTask(d);
+  assert.equal(prime(d, 0).overBudget, true, "第一个任务收紧到底仍超预算");
+  assert.equal(prime(d, 5000).overBudget, false);
+  void t;
 });
