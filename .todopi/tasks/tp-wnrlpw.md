@@ -22,15 +22,17 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-- [ ] 全新克隆上跑一次 `setup claude`，Claude Code 会话开始时收到 prime 输出（标题）
-- [ ] 写入项目级 `.claude/settings.json`：SessionStart 与 PostCompact 钩子调用 `prime`
-- [ ] SessionEnd 钩子调用 `handoff --check`
+- [ ] 全新克隆上跑一次 `todopi setup claude` 即装好（标题）
+- [ ] 装好之后，全新克隆上 Claude Code 会话开始时收到 prime 输出（标题）
+- [ ] 写入项目级 `.claude/settings.json` 的 SessionStart 钩子，调用 `prime`
+- [ ] 写入项目级 `.claude/settings.json` 的 PostCompact 钩子，调用 `prime`
+- [ ] 写入 SessionEnd 钩子，调用 `handoff --check`
 - [ ] 确保存在含 `@AGENTS.md` 导入的 CLAUDE.md（FR-Q5a：Claude Code 读 CLAUDE.md 而不读 AGENTS.md，只跑 init 的用户读不到协议）
 - [ ] 幂等：重复运行不产生第二份钩子
 - [ ] 打印写入的每个文件
 - [ ] `--user` 切到用户级
 
-（2026-09-26 由散文拆成勾选项，原文见 git 历史；标「标题」的一条取自任务标题。）
+（2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
 ## Repair
 

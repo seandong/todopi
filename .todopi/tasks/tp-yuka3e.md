@@ -22,14 +22,19 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-- [ ] Cursor 与 Gemini 在没有压缩后事件的情况下，仍能让账本指针活过压缩（标题）
+- [ ] `todopi setup cursor` 装好（标题）
+- [ ] `todopi setup gemini` 装好（标题）
+- [ ] Cursor 在没有压缩后事件的情况下，账本指针活过压缩（标题）
+- [ ] Gemini 在没有压缩后事件的情况下，账本指针活过压缩（标题）
 - [ ] Cursor：写 `.cursor/hooks.json` 的 sessionStart（返回 `additional_context`）
 - [ ] Gemini：写 `settings.json` 的 SessionStart（返回 `hookSpecificOutput.additionalContext`）
-- [ ] 压缩前注入：preCompact / PreCompress 时把 `prime --budget 400` 的输出交给待生成的摘要（FR-A2a）
+- [ ] Cursor 压缩前注入：preCompact 时把 `prime --budget 400` 的输出交给待生成的摘要（FR-A2a）
+- [ ] Gemini 压缩前注入：PreCompress 时把 `prime --budget 400` 的输出交给待生成的摘要（FR-A2a）
 - [ ] Cursor 同时提供规则文件作为回退（它的 CLI 钩子支持一直在变，MUST）
-- [ ] Cursor 在 CLI 与 IDE 两种形态下各手工验证一次
+- [ ] Cursor 在 CLI 形态下手工验证一次
+- [ ] Cursor 在 IDE 形态下手工验证一次
 
-（2026-09-26 由散文拆成勾选项，原文见 git 历史；标「标题」的一条取自任务标题。）
+（2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
 ## Repair
 

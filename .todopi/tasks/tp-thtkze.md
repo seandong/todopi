@@ -22,13 +22,23 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-- [ ] Codex 与 OpenCode 的会话开始与压缩后都能收到注入（标题）
-- [ ] Codex：写 `.codex/hooks.json` 的 SessionStart / PostCompact / SessionEnd
-- [ ] OpenCode：写 `.opencode/plugins/` 下的插件，通过 event 钩子订阅 `session.created` 与 `session.compacted`
-- [ ] 两家的会话 id 都能取到（OpenCode 在事件对象上给 `session_id` 或 `sessionID` 两种拼法，都要处理）
+- [ ] `todopi setup codex` 装好（标题）
+- [ ] `todopi setup opencode` 装好（标题）
+- [ ] Codex 的会话开始时收到注入（标题）
+- [ ] Codex 压缩后收到注入（标题）
+- [ ] OpenCode 的会话开始时收到注入（标题）
+- [ ] OpenCode 压缩后收到注入（标题）
+- [ ] Codex：写 `.codex/hooks.json` 的 SessionStart
+- [ ] Codex：写 `.codex/hooks.json` 的 PostCompact
+- [ ] Codex：写 `.codex/hooks.json` 的 SessionEnd
+- [ ] OpenCode：写 `.opencode/plugins/` 下的插件，通过 event 钩子订阅 `session.created`
+- [ ] OpenCode：同一插件订阅 `session.compacted`
+- [ ] Codex 的会话 id 能取到
+- [ ] OpenCode 的会话 id 能取到：事件对象上给 `session_id` 时
+- [ ] OpenCode 的会话 id 能取到：事件对象上给 `sessionID` 时
 - [ ] 幂等
 
-（2026-09-26 由散文拆成勾选项，原文见 git 历史；标「标题」的一条取自任务标题。）
+（2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
 ## Repair
 

@@ -22,18 +22,21 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
+- [ ] `todopi import beads` 迁移 Beads Classic 导出（标题）
 - [ ] 读 `issues.jsonl`（默认 `.beads/issues.jsonl`）
 - [ ] priority 映射为 rank 顺序
 - [ ] type 映射为 label
 - [ ] blocks 映射为 blocked_by
 - [ ] parent-child 映射为 parent
-- [ ] closed 映射为 closed 加 resolution（Beads 的理由指明时用 wontfix）
+- [ ] closed 映射为 closed
+- [ ] closed 映射时带上 resolution
+- [ ] Beads 的理由指明时 resolution 用 wontfix
 - [ ] 原 id 存入 `external.beads.id`
 - [ ] 导入结果通过 doctor
 
 范围之外：Dolt 时代的导出。
 
-（2026-09-26 由散文拆成勾选项，原文见 git 历史；标「标题」的一条取自任务标题。）
+（2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
 ## Repair
 

@@ -37,7 +37,7 @@
 1. 只读环境诊断（`make doctor`）；
 2. 读当前状态（`PROGRESS.md` + `make status`）并确认基线为绿；
 3. 认领**恰好一个**任务（`todopi ls --ready` → `todopi claim <id>`）；
-4. 实现，逐层验证，不跳层；人核对任务正文的验收判据（散文，机器不查）；
+4. 实现，逐层验证，不跳层；对着验收标准逐条核实，再 `todopi check <id> <n>` 勾上（`done` 会挡下没勾完的）；
 5. `git commit` 代码**加上 `claim` 留下的账本改动**；**评审与修复循环到通过**（必须在
    `done` 之前——关闭之后没有 reverify）；再 `todopi done <id>`——
    它跑任务的 `verify` 并把 `commit=<HEAD7> dirty=<bool>` 记进 Log；放在提交之后

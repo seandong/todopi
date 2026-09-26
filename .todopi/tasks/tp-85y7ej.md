@@ -22,13 +22,16 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-- [ ] pi 的会话开始与压缩后都能收到注入（标题）
-- [ ] 写 `.pi/extensions/` 下的扩展，订阅 `session_start` 与 `session_compact`（压缩后；`session_before_compact` 是压缩前，PRD 1.1 版选错了方向）
+- [ ] `todopi setup pi` 装好（标题）
+- [ ] pi 的会话开始时收到注入（标题）
+- [ ] pi 压缩后收到注入（标题）
+- [ ] 写 `.pi/extensions/` 下的扩展，订阅 `session_start`
+- [ ] 扩展订阅 `session_compact`（压缩后；`session_before_compact` 是压缩前，PRD 1.1 版选错了方向）
 - [ ] 会话 id 调 `ctx.sessionManager.getSessionId()` 自取（不在事件参数里）
 - [ ] 上下文注入走 `before_agent_start`
 - [ ] 幂等
 
-（2026-09-26 由散文拆成勾选项，原文见 git 历史；标「标题」的一条取自任务标题。）
+（2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
 ## Repair
 

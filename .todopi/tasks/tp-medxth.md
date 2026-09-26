@@ -22,15 +22,17 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
+- [ ] `todopi import <plan.md>` 把 Markdown checkbox 计划转成带 id 的任务（标题）
 - [ ] 标题层级映射为 parent
 - [ ] 文档顺序映射为 rank
-- [ ] 已勾选项建成 closed/done 且 forced=true
+- [ ] 已勾选项建成 closed/done
+- [ ] 已勾选项建成的任务带 forced=true
 - [ ] 每个任务记 `created source=<path>`
 - [ ] 按 (source, title) 幂等：重复导入不产生重复任务
 - [ ] 已存在任务的 rank 保留，不重算
 - [ ] 纯解析，不联网（ARCH-001）
 
-（2026-09-26 由散文拆成勾选项，原文见 git 历史；标「标题」的一条取自任务标题。）
+（2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
 ## Repair
 
