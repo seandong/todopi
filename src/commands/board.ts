@@ -12,6 +12,19 @@ import { boardColumn, indexTasks, isReady } from "../domain/derive.ts";
 import { validateFile } from "../domain/validate.ts";
 import { sortTasks } from "../domain/order.ts";
 import { toBoardDto, type BoardDto } from "../output/dto/board.ts";
+import { EXIT, CliError } from "../exit.ts";
+
+/** FR-B1 的默认端口。 */
+export const DEFAULT_PORT = 4747;
+
+/** --port 从字符串出发解析（`ls --limit` 的教训）：1–65535 的十进制整数。 */
+export function parsePort(raw: string): number {
+  const n = Number(raw);
+  if (!/^[1-9][0-9]*$/.test(raw) || n > 65535) {
+    throw new CliError(EXIT.usage, `Option --port needs a whole number from 1 to 65535; got ${JSON.stringify(raw)}.`);
+  }
+  return n;
+}
 
 export function runBoard(opts: { directory: string; actor?: string }): BoardDto {
   const ledger = discoverLedger(opts.directory);

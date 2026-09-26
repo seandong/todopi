@@ -185,7 +185,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-B1** `web [--port 4747] [--open]` 只在 127.0.0.1 提供单页看板。进程在前台运行，随终端退出。
 - **FR-B2** 视图：按显示状态分列（open、blocked、in progress、done、closed）、按容器的树、ready 队列；任务抽屉显示验收标准、Log、验证证据。
 - **FR-B3** v0.1 的看板**只读**。它被声明的目标是「让人一眼看到 agent 在干什么」，而只读完全满足这个目标。四种写操作——跨列拖拽、勾选验收标准、加 note、拖拽排序——移到 v0.2。它们是贵的那一半：每一种都必须走与 CLI 相同的校验与加锁路径，这会迫使 CLI 的写入路径在实现的第一周就被抽成可复用接口；每一种还都需要一个必须填理由的强制对话框。推迟它们，等于在不触碰首发所依赖的任何东西的前提下，从 v0.1 移除一项架构承诺：看板不承担分发价值，而首发演示是一段终端录屏。
-- **FR-B4** 文件变化时页面刷新（目录监听 + SSE）。
+- **FR-B4** 文件变化时页面刷新（目录监听 + SSE）。`fs.watch` 抛错或在 WSL 下（drvfs / 9p 上它不报错但不触发）自动改为轮询；容器挂载卷检测不出来，给 `--poll`（F18，D039）。
 
 ### 7.10 导入器
 
@@ -221,7 +221,7 @@ todopi note <id> <text>
 todopi check <id> <n> [--undo]
 todopi prime [--budget n] [--full] [--json]
 todopi handoff [--check]
-todopi web [--port n] [--open]
+todopi web [--port n] [--open] [--poll]
 todopi doctor [--fix]
 todopi import <file.md> | import beads [path]
 ```

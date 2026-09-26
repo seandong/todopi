@@ -73,13 +73,14 @@ export function startBoardServer(opts: BoardServerOptions): Promise<BoardServer>
         "cache-control": "no-store",
         // 页面只从自己这里取数据；内联的脚本与样式是唯一的资源
         "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:",
-      }).end(req.method === "HEAD" ? undefined : opts.page);
+      }).end(opts.page);
       return;
     }
     if (path === "/events") {
       res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive" });
-      if (last === null) last = frame();
-      res.write(last);
+      // 先刷新：数据若在没有文件事件的情况下变了（比如 stale 随时间出现），已连着的也一起收到，不会停在旧数据上
+      refresh();
+      res.write(last!);
       clients.add(res);
       req.on("close", () => clients.delete(res));
       return;
