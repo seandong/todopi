@@ -286,3 +286,24 @@ test("verify 存在但不是字符串（verify: 123）：报 unreadable，不说
   runPrime({ directory: d, actor: ME });
   assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true }).verifyChanged, []);
 });
+
+test("编辑次数增长在每条路径上都报：prime 之后新建又经 CLI 清掉 verify 的、prime 时读不出来的（评审三轮）", () => {
+  const d = repo();
+  const bad = runAdd({ directory: d, title: "bad", verify: "true", actor: ME }).id;
+  edit(d, bad, (s) => s.replace(/^verify: ".*"$/m, "verify: 123"));
+  runPrime({ directory: d, actor: ME });
+  // prime 之后新建，经 CLI 改了两次，最后没有 verify。
+  const fresh = runAdd({ directory: d, title: "fresh", verify: "true", actor: ME }).id;
+  runEdit({ directory: d, id: fresh, verify: "false", actor: ME });
+  runEdit({ directory: d, id: fresh, verify: "", actor: ME });
+  // prime 时读不出来（verify: 123），手修后经 CLI 改了又清掉。
+  edit(d, bad, (s) => s.replace(/^verify: 123$/m, 'verify: "true"'));
+  runEdit({ directory: d, id: bad, verify: "", actor: ME });
+  const r = runHandoff({ directory: d, actor: ME, check: true });
+  assert.deepEqual(Object.fromEntries((r.verifyChanged ?? []).map((x) => [x.id, [x.state, x.verify]])),
+    { [fresh]: ["edited", null], [bad]: ["edited", null] });
+  // 修好之后又手改回非法类型：现在读不出来，且期间有过 CLI 编辑——报 unreadable。
+  edit(d, bad, (s) => s.replace(/(^---\n)/, "$1verify: 123\n"));
+  const again = runHandoff({ directory: d, actor: ME, check: true });
+  assert.equal(again.verifyChanged?.find((x) => x.id === bad)?.state, "unreadable");
+});

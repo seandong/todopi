@@ -104,13 +104,16 @@ export function runHandoff(opts: HandoffOptions): HandoffReport {
     const [cp, ce] = verifySnapshot(t).split("#");
     const raw = str(t, "verify");
     const row = (state: VerifyRow["state"]): VerifyRow => ({ ...ref(t), verify: raw === undefined ? null : visibleLine(raw), state });
-    if (cp === UNREADABLE) return before?.startsWith(`${UNREADABLE}#`) === true ? null : { ...ref(t), verify: null, state: "unreadable" };
-    if (before === undefined) return cp === "-" ? null : row("new");
-    const [bp, be] = before.split("#");
-    // prime 时读不出来：不知道原来是什么，就不说它变了（评审二轮）。现在没有 verify 则无可担心。
-    if (bp === UNREADABLE) return cp === "-" ? null : row("unknown");
+    const [bp, be] = before === undefined ? [undefined, "0"] : before.split("#");
+    // **先算编辑次数有没有增长**，再按两端的状态决定报什么——计数判断曾被下面几个提前返回的分支
+    // 吞掉：prime 之后新建又经 CLI 改掉 verify 的、prime 时读不出来的，都漏了（评审三轮）。
+    const edited = be !== undefined && Number(ce) > Number(be);
+    if (cp === UNREADABLE) return bp === UNREADABLE && !edited ? null : { ...ref(t), verify: null, state: "unreadable" };
+    if (bp === undefined) return cp !== "-" ? row("new") : edited ? row("edited") : null;
+    // prime 时读不出来：不知道原来是什么，就不说它变了（评审二轮）。现在没有 verify 则只看编辑次数。
+    if (bp === UNREADABLE) return cp !== "-" ? row("unknown") : edited ? row("edited") : null;
     if (bp !== cp) return row(cp === "-" ? "removed" : "changed");
-    return be !== undefined && Number(ce) > Number(be) ? row("edited") : null;
+    return edited ? row("edited") : null;
   };
   const verifyChanged = snap === null ? null
     : all.map((t) => verifyRow(t, snap[t.idFromFilename])).filter((row): row is VerifyRow => row !== null);
