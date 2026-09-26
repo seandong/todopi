@@ -22,12 +22,21 @@ program
 program
   .command("doctor")
   .description("check the ledger against the format spec and report violated invariants")
-  .action(async () => {
+  .option("--fix", "normalize what can be fixed mechanically (never the Log, never `updated`), then check")
+  .action(async (cmdOpts: { fix?: boolean }) => {
     // 动态 import 是为了让 --version 与 --help 不去加载 yaml——实测加载 yaml
     // 模块本身就要 10 ms，而那两条路径根本用不到它。
     const { runDoctor } = await import("./commands/doctor.ts");
-    const { renderText, renderJson } = await import("./output/render/doctor.ts");
+    const { renderText, renderJson, renderFixText } = await import("./output/render/doctor.ts");
     const opts = program.opts();
+    if (cmdOpts.fix === true) {
+      const { runDoctorFix } = await import("./commands/doctor-fix.ts");
+      const fix = runDoctorFix({ directory: (opts["directory"] as string | undefined) ?? process.cwd() });
+      process.stdout.write(opts["json"] ? JSON.stringify(fix, null, 2) + "\n" : renderFixText(fix, { quiet: Boolean(opts["quiet"]) }));
+      // FR-Q1：修完仍有问题则退出 1。
+      if (!fix.after.ok) throw new CliError(EXIT.usage, "");
+      return;
+    }
     const report = runDoctor({ directory: (opts["directory"] as string | undefined) ?? process.cwd() });
     process.stdout.write(
       opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),

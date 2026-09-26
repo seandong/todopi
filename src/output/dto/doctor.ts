@@ -25,3 +25,11 @@ export function toDoctorReport(scanned: number, findings: Finding[]): DoctorRepo
     findings: findings.map((f) => ({ rule: f.rule, path: f.path, message: f.message })),
   };
 }
+
+/** `doctor --fix` 的结果：改了哪些文件、各改了什么，哪些没改成，清掉了哪些租约，以及修完之后的 doctor。 */
+export type DoctorFixReport = {
+  fixed: { path: string; changes: string[] }[];
+  skipped: { path: string; reason: string }[];
+  leasesCleared: string[];
+  after: DoctorReport;
+};

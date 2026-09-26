@@ -296,6 +296,8 @@ A conforming task set satisfies all of the following. `doctor` reports violation
 
 Every write to a task file MUST set `updated` to the current time. `updated` doubles as the cross-machine heartbeat for stale detection (§7.3), so writers that only touch the body (a note, a checkbox) still bump it.
 
+One exception: a repair that only normalizes a file (`doctor --fix`: key order, quoting, timestamp and checkbox form, a backfilled `rank`) is not work on the task, and MUST NOT change `updated` — otherwise running a repair tool would make every stale claim look alive. Such a repair also MUST NOT change the Log.
+
 ## 7. Derived state
 
 Readers compute the following; nothing here is stored.
@@ -374,6 +376,8 @@ Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.
 ### 9.1 Revisions of version 1
 
 The version number protects files and implementations that exist. Until the first release of a tool implementing this document, revisions that fill gaps in version 1 are recorded here instead of incrementing the version; after that, §9 applies without exception.
+
+**2026-09-26** — §6.3 (`updated`). The 2026-09-16 text required every write to bump `updated`. This revision exempts repairs that only normalize a file (`doctor --fix`), which MUST leave `updated` and the Log unchanged, because `updated` is also the stale-detection heartbeat (§7.3). Migration: none; no file changes meaning.
 
 **2026-09-26** — §5.3 (body structure). The 2026-09-16 text said the four headings are recognized "exactly and case-sensitively" and left undefined: headings and list items inside code blocks, HTML blocks and containers; repeated headings; code fences and HTML blocks that are never closed. This revision defines them:
 

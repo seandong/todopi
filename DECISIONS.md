@@ -2004,3 +2004,12 @@ version 与迁移说明。之前我在括注里写「按 §9 不改版本」，�
 的东西，并写明它**不**证明文本是 DTO 的纯函数。**一条规则的措辞，只能宣称它的检查能拒绝的东西。**
 同轮顺带修了 harness：`make test` 按 TAP 的 `# skipped` 读跳过数，却没显式指定 reporter——在终端里跑时
 Node 用 spec reporter，整层被判 blocked。
+
+## D034 — doctor --fix 不刷新 updated，不碰 Log
+
+- 日期：2026-09-26（F13）
+- 背景：规格 §6.3 要求每次写任务文件都刷新 `updated`，而 `updated` 同时是跨机器的心跳（§7.3）。
+- 决策（用户定）：**修复不是对任务的工作**。`doctor --fix` 的规范化 MUST NOT 改 `updated`、MUST NOT 改
+  Log；规格 §6.3 加例外，§9.1 记为发布前修订。否则在一个仓库上跑一次 `--fix`，被改写的过期认领都会
+  看起来又活了。
+- 修复的范围与写前核对见 docs/plans/2026-09-26-f13-doctor-fix.md。

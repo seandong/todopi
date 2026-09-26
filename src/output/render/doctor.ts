@@ -5,7 +5,7 @@
 //
 // 本文件 MUST NOT import src/domain/（ARCH-008）。
 
-import type { DoctorReport, FindingDto } from "../dto/doctor.ts";
+import type { DoctorFixReport, DoctorReport, FindingDto } from "../dto/doctor.ts";
 
 export function renderJson(r: DoctorReport): string {
   return JSON.stringify(r, null, 2);
@@ -36,4 +36,15 @@ export function renderText(r: DoctorReport, opts: { quiet?: boolean } = {}): str
   lines.push("");
   lines.push(`doctor: ${r.scanned} task(s), ${r.findings.length} problem(s).`);
   return lines.join("\n") + "\n";
+}
+
+/** `doctor --fix`：先列修了什么，再是修完之后的 doctor 结果。 */
+export function renderFixText(r: DoctorFixReport, opts: { quiet?: boolean } = {}): string {
+  const lines: string[] = [];
+  for (const f of r.fixed) lines.push(`fixed ${f.path}: ${f.changes.join(", ")}`);
+  for (const s of r.skipped) lines.push(`not fixed ${s.path}: ${s.reason}`);
+  for (const id of r.leasesCleared) lines.push(`cleared expired lease ${id}`);
+  if (lines.length === 0 && !opts.quiet) lines.push("doctor --fix: nothing to normalize.");
+  const head = lines.length === 0 ? "" : `${lines.join("\n")}\n`;
+  return head + renderText(r.after, opts);
 }
