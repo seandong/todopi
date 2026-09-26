@@ -254,22 +254,22 @@
     },
     {
       "id": "ARCH-026",
-      "description": "prime / handoff 的渲染层不生成内容：命令只来自 DTO",
-      "applies_when": "test -f src/output/render/prime.ts",
-      "check": "grep -nE 'todopi ' src/output/render/prime.ts src/output/render/handoff.ts | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\\*)' || true",
+      "description": "prime / handoff 的文本输出只呈现 JSON 里有的内容（命令与任务行）",
+      "applies_when": "test -f src/commands/prime.ts",
+      "check": "node tools/check-injected-output.mjs commands",
       "expect": "empty",
-      "what": "src/output/render/prime.ts 或 handoff.ts 的代码里出现了 `todopi …` 字面量——渲染时现拼了一条命令。",
-      "why": "FR-P2 要求 `prime --json` 与文本是同样的内容；handoff 同理。命令一旦在渲染层现拼，JSON 里就没有它：F11 评审第一轮（指针行）与第三轮（`todopi show <id>`、`--full` 的 `todopi ls --ready`）两次因此 No-Go。命令改在 commands/ 里拼进 DTO（pointer、commands、seeAlso、readyMore），渲染只拼 DTO 的值。其余命令的渲染（ls、add 的 Next 提示）没有这个承诺，不在此列。",
-      "fix": "把命令放进 DTO（commands/prime.ts 或 handoff.ts 里生成），渲染层引用 DTO 字段。"
+      "what": "prime 或 handoff 的文本里出现了一条 JSON 里没有的 `todopi …` 命令，或一行 `- tp-…` / `## tp-…` 的任务 id 不是 JSON 里任何一个 id。",
+      "why": "FR-P2 要求 `prime --json` 与文本是同样的内容，handoff 同理。F11 评审一、三轮两次因为命令只在渲染层现拼、JSON 里没有而 No-Go；F12 评审一轮用多行 verify 在报告里伪造出一行任务。第一版这条规则是一条 grep（渲染层里不许出现 `todopi ` 字面量），F12 评审六轮用 `[\"todopi\",\"show\"].join(\" \")` 就绕过了——**检查代码的形状，比它宣称要守的东西窄**（第十次）。现在检查输出本身：造一个账本，跑 prime（默认、--full）与 handoff（--check、真的写）的文本与 JSON，逐条比对，并自检夹具确实进了输出。",
+      "fix": "命令在 commands/ 里拼进 DTO（pointer、commands、seeAlso、readyMore），渲染只拼 DTO 的值；单行字段经 visibleLine()。"
     },
     {
       "id": "ARCH-027",
       "description": "注入模型上下文的输出（prime、handoff）不含原始控制字符",
       "applies_when": "test -f src/commands/prime.ts",
-      "check": "node tools/check-output-controls.mjs",
+      "check": "node tools/check-injected-output.mjs controls",
       "expect": "empty",
-      "what": "prime（默认 / --full，文本 / --json）或 handoff --check 的输出里出现了 ESC、BEL 之类的原始控制字符，或单行字段里出现了换行。",
-      "why": "这些输出会进模型的上下文，也会打到终端上：一条验收标准或一个 assignee 不该能改终端颜色、挪光标，多行 verify 不该在报告里伪造出一行任务。F11 评审一、二轮与 F12 评审一轮四次找到漏网的字段（标准、assignee、只在渲染时转义导致 JSON 里仍带 ESC、多行 verify）。检查器不做静态分析：造一个每个自由文本字段都带控制字符的账本，逐字节检查全部输出形态，并自检这些字段确实进了输出。",
+      "what": "prime 或 handoff（任一输出形态）的文本里有换行以外的控制字符，或 JSON 里有控制字符，或 `log` 之外的字段里有换行 / Tab。",
+      "why": "这些输出会进模型的上下文，也会打到终端上：一条验收标准或一个 assignee 不该能改终端颜色、挪光标，多行 verify 不该在报告里伪造出一行任务。F11 评审一、二轮与 F12 评审一轮四次找到漏网的字段（标准、assignee、只在渲染时转义导致 JSON 里仍带 ESC、多行 verify）。第一版检查器允许 JSON 字符串里有换行、也没跑不带 --check 的 handoff（F12 评审六轮两个假绿）；现在只有 `log` 条目可以多行，四种输出形态都跑，并自检带控制字符的字段确实进了输出。",
       "fix": "在 commands/ 的投影里经 visible()（多行字段）或 visibleLine()（单行字段）处理，见 src/commands/view.ts。"
     }
   ]
