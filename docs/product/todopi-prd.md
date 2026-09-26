@@ -185,11 +185,11 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-B1** `web [--port 4747] [--open]` 只在 127.0.0.1 提供单页看板。进程在前台运行，随终端退出。
 - **FR-B2** 视图：按显示状态分列（open、blocked、in progress、done、closed）、按容器的树、ready 队列；任务抽屉显示验收标准、Log、验证证据。
 - **FR-B3** v0.1 的看板**只读**。它被声明的目标是「让人一眼看到 agent 在干什么」，而只读完全满足这个目标。四种写操作——跨列拖拽、勾选验收标准、加 note、拖拽排序——移到 v0.2。它们是贵的那一半：每一种都必须走与 CLI 相同的校验与加锁路径，这会迫使 CLI 的写入路径在实现的第一周就被抽成可复用接口；每一种还都需要一个必须填理由的强制对话框。推迟它们，等于在不触碰首发所依赖的任何东西的前提下，从 v0.1 移除一项架构承诺：看板不承担分发价值，而首发演示是一段终端录屏。
-- **FR-B4** 文件变化时页面刷新（目录监听 + SSE）。`fs.watch` 抛错或在 WSL 下（drvfs / 9p 上它不报错但不触发）自动改为轮询；容器挂载卷检测不出来，给 `--poll`（F18，D039）。
+- **FR-B4** 文件变化时页面刷新（目录监听 + SSE）。`fs.watch` 抛错或在 WSL 下（drvfs / 9p 上它不报错但不触发）自动改为轮询；容器挂载卷检测不出来，给 `--poll`（F18，D039）。watch 模式下另有每 5 秒一次的兜底轮询：macOS 的 FSEvents 在高负载下会丢事件。
 
 ### 7.10 导入器
 
-- **FR-I1** `import <file.md>`：解析 Markdown checkbox 列表（Superpowers 计划、spec-kit `tasks.md`、OpenSpec `tasks.md`）。标题变容器，条目变子任务，文档顺序变 `rank`，已勾选条目以 `closed/done` 且 `forced=true` 创建（未跑验证）。每个任务记录 `created source=<path>`；按（source，标题）幂等重复导入。
+- **FR-I1** `import <file.md>`：解析 Markdown checkbox 列表（Superpowers 计划、spec-kit `tasks.md`、OpenSpec `tasks.md`）。标题变容器，条目变子任务，文档顺序变 `rank`，已勾选条目以 `closed/done` 且 `forced=true` 创建（未跑验证）。每个任务记录 `created source=<path>`；按（source，标题）幂等重复导入。「标题」的身份包含父级标题链（同一父级下完全同名的再按出现顺序编号），否则计划里每个 Task 下都有的「Step 1: Write the failing test」只能导进第一个；重复导入不动已有任务（rank、状态都保留），新条目排到最后；分隔线（`---`）结束一级标题以下的小节；没有条目的标题不成任务；标题容器在子项全部勾选时同样建成 `closed/done`（F19，D040）。
 - **FR-I2** `import beads [path]`：读取 Beads Classic 的 `issues.jsonl`（默认 `.beads/issues.jsonl`）。映射：priority → rank 顺序；type → label；`blocks` → `blocked_by`；parent-child → `parent`；closed → `closed` 且 `done`（Beads 原因表明放弃时为 `wontfix`）；原 ID 放 `external.beads.id`。Dolt 时代的导出不在范围内。
 
 ### 7.11 质量与运维
@@ -311,7 +311,7 @@ todopi import <file.md> | import beads [path]
 - **跨仓视图**（`ls --all`）留在 v0.3。它需要一份用户级的仓库注册表和带仓库限定的输出，而且服务的是维护者而不是首发：MVP 的五条验收标准没有一条涉及一个以上的仓库。dogfooding 时若发现日常回路确实跨仓库，再重新考虑——最小形态是一个 flag 加一份自动积累的注册表，约半天工作量，且不占 20 个子命令的额度。在那之前 README 给出基于 `-C` 的 shell 循环写法。
 - ~~**token 估算方式未定。**~~ 已定（2026-09-26，D032）：按字符类别加权。原文： §15 此前把「字符数 ÷ 4」列为默认值，实测（tiktoken）它对英文准确（0.8–1.1×）而对中文低估 2.0–2.8×。FR-P1 把推送内容从 427 降到约 145 token 之后，这条的危害从「每次注入悄悄多吃 2000 token」降为「截断判据偏松，但实际很少触发截断」——因此不再阻塞，但仍须在实现 `prime` 前定下来。候选：真 tokenizer（准确但只能对准一家的 BPE，且多一个 1.6 MB 的依赖）／按 UTF-8 字节数估算／按字符类别加权（ASCII ÷ 4、CJK × 0.6、其余 ÷ 2，实测中英均在 ±15% 内，零依赖且可测）。倾向第三种。
 - **其余五家的规则文件是否在压缩后重读，未核实。** FR-P1 把协议移出 `prime` 的依据是 Claude Code 的官方陈述；Codex、OpenCode、pi、Cursor、Gemini CLI 是否有同样行为需要在做各家接入包时逐一确认。若某家不重读，该家的接入包需要单独把协议放回它的注入点——这是接入包的差异，不是 `prime` 的差异。
-- **导入器与 `forced=true` 的相互作用**（FR-I1/I2，本轮未展开）。FR-I1 规定导入时已勾选的条目建成 `closed/done` 且 `forced=true`，而 `forced=true` 在列表与看板中标记为「未验证」（FR-D3）。导入 500 个 Beads 已关闭 issue 会产生 500 个「未验证」标记——语义上没错（确实没验证过），但会把一个本用于警示「有人跳过了验证」的标记变成噪音。另需定义：重复导入（按 source + title 幂等）时 `rank` 保留还是重算，因为 rank 现在于创建时分配（FR-T1）。拆到导入器 feature 时展开。
+- **导入器与 `forced=true` 的相互作用**（FR-I1/I2，本轮未展开）。FR-I1 规定导入时已勾选的条目建成 `closed/done` 且 `forced=true`，而 `forced=true` 在列表与看板中标记为「未验证」（FR-D3）。导入 500 个 Beads 已关闭 issue 会产生 500 个「未验证」标记——语义上没错（确实没验证过），但会把一个本用于警示「有人跳过了验证」的标记变成噪音。另需定义：重复导入（按 source + title 幂等）时 `rank` 保留还是重算，因为 rank 现在于创建时分配（FR-T1）。拆到导入器 feature 时展开。（F19 定：`rank` 保留，已有任务一个字节都不动，见 FR-I1。`forced=true` 的噪音问题留给 FR-I2。）
 - **裸仓库明确不支持。** 实测裸仓库中 `git rev-parse --git-common-dir` 返回 `.`，租约目录会落在裸仓库内部。规格 §1 定义 `.todopi/` 位于「包含 `.git` 的目录」，而裸仓库没有工作区。应在规格中显式声明不支持，而不是留给实现去猜。（git worktree 场景实测正确：`--git-common-dir` 正确指向共享的 `.git`。）
 - **Windows 的原子 rename 是已知风险点。** 原子写是临时文件 + rename，而 Windows 上 rename 覆盖一个被其他进程打开的文件会失败。Windows 是尽力而为（CI 跑但不阻塞发布），但这一条应当是 Windows CI **明确要测**的用例，而不是等用户报告。本条未经实测，仅为推理。
 - **FR-C4 的「agent 环境推断」这一级未实现，缺事实依据。** §17 核实六家 agent 时没有记录环境变量标记，而实测表明按变量名猜不可靠：`CODEX_HOME` 在一个 Claude Code 会话里同样存在（它是 codex CLI 的配置目录，不是「正在运行的 agent 是 codex」的证据）。猜错身份的代价是任务归属错乱，比少一级回退严重得多。当前解析链是 `--as` > `TODOPI_ACTOR` > `git config user.name`（经 §5.4 规范化）> `unknown@<host>`。做各家接入包时逐一核实各自是否有**唯一且只在自己运行时出现**的标记，核实结果写回 §17 再补这一级。（见 DECISIONS D014）

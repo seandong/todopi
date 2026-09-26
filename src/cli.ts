@@ -461,6 +461,22 @@ function registerTransition(
 }
 
 program
+  .command("import")
+  .argument("<file>", "a Markdown plan with checkbox items (Superpowers plan, spec-kit or OpenSpec tasks.md)")
+  .description("turn a Markdown checkbox plan into tasks: headings become parents, items become tasks, in document order")
+  .action(async (file: string) => {
+    const { runImport } = await import("./commands/import.ts");
+    const { renderImport } = await import("./output/render/import.ts");
+    const opts = program.opts();
+    const report = runImport({
+      directory: (opts["directory"] as string | undefined) ?? process.cwd(),
+      file,
+      actor: opts["as"] as string | undefined,
+    });
+    process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImport(report));
+  });
+
+program
   .command("web")
   .description("serve a read-only board of the ledger on 127.0.0.1 that updates as the files change")
   .option("--port <n>", "port to listen on, on 127.0.0.1 only (default 4747)")

@@ -62,14 +62,19 @@ export function watchTree(dir: string, onChange: () => void,
   let mode: "watch" | "poll" = "poll";
   let stop: () => void = () => undefined;
 
-  const startPolling = (): void => {
-    mode = "poll";
+  const poller = (ms: number): (() => void) => {
     let prev = signature(dir);
     const timer = setInterval(() => {
       const next = signature(dir);
       if (next !== prev) { prev = next; changed(); }
-    }, opts.pollMs ?? 1000);
-    stop = () => clearInterval(timer);
+    }, ms);
+    return () => clearInterval(timer);
+  };
+  const pollMs = opts.pollMs ?? 1000;
+  const startPolling = (): void => {
+    stop();
+    mode = "poll";
+    stop = poller(pollMs);
   };
 
   const root = identity(dir);
@@ -99,7 +104,9 @@ export function watchTree(dir: string, onChange: () => void,
     mode = "watch";
     const w = watcher;
     w.on("error", fallBack);
-    stop = () => w.close();
+    // 兜底的慢速轮询：macOS 的 FSEvents 在高负载下会丢事件（整套测试并行跑时实测，等 10 秒也没来），看板不能因此停在
+    // 旧数据上。fs.watch 负责快，轮询负责最终一定对得上；间隔是轮询模式的 5 倍（默认 5 秒）
+    stop = poller(pollMs * 5);
   } else {
     startPolling();
   }

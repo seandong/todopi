@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `b0a7e6c` —— F18 web 经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `a2b79fb` —— F19 import <plan.md> 经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,12 +19,12 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 23 个任务，18 个 `closed/done`（F01–F18）、5 个 `open`（含从 F15 拆出的 tp-1ssqrw、从 F17 拆出的 tp-zagvp5）。
+- 账本: `.todopi/` 23 个任务，19 个 `closed/done`（F01–F19）、4 个 `open`（含从 F15 拆出的 tp-1ssqrw、从 F17 拆出的 tp-zagvp5）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F18 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+- 代码状态：**F01–F19 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
   `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check` /
-  `edit` / `move` / `dep` / `prime` / `handoff` / `doctor --fix` / `setup claude|codex|opencode|pi|cursor|gemini` / `web` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
+  `edit` / `move` / `dep` / `prime` / `handoff` / `doctor --fix` / `setup claude|codex|opencode|pi|cursor|gemini` / `web` / `import <plan.md>` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
   `TaskDto` 定下了 `--json` 这个公开 API 的第一块形状。
   身份解析（FR-C4 前三级）在 `domain/actor.ts` + `commands/actor.ts`，`ls` 与
@@ -158,6 +158,10 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+41. ~~F19 `import <plan.md>`~~ 已完成（2026-09-26）。Superpowers / spec-kit / OpenSpec 的 checkbox 计划 → 任务（D040）：身份键含父级
+    标题链（每个 Task 下同名的「Step 1」各自独立），重复导入不动已有任务，整次导入一把锁（e2e：去锁时 28 变 49），分隔线结束小节。
+    Codex 评审：键与标题里的 #n 撞、`..notes.md` 被当成项目外 → 修 → Go。**同一分支上修了看板的偶发失败**：macOS 的 FSEvents
+    高负载下会丢事件，watch 模式加每 5 秒的兜底轮询（未经 Codex 评审：额度见底）。
 40. ~~F18 `web`~~ 已完成（2026-09-26）。127.0.0.1 上的只读看板：五列 / 树 / ready 队列，抽屉看验收标准、Log、验证证据；SSE 推全量。
     新层 board/ 只懂 HTTP 与监听（D039）：Host 头校验防 DNS rebinding、CSP、只允许 GET；fs.watch 出错、目录被重建、WSL 下改为轮询，
     另有 --poll。**顺带发现 ARCH-002 / ARCH-014 的注释过滤匹配空串，两条规则一直空转**——修好并补了正反例用例。

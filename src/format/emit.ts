@@ -16,6 +16,8 @@ export type NewTask = {
   id: string;
   title: string;
   status: string;
+  /** 只在 status 为 closed 时（import 把勾选了的条目建成 closed/done） */
+  resolution?: string;
   rank: string;
   created: string;
   updated: string;
@@ -159,7 +161,7 @@ function quote(s: string): string {
 /** 发射一个完整的任务文件。正文小节按 spec §5.3 的顺序，空的不发射。 */
 export function emitTask(t: NewTask): string {
   const fm: Record<string, unknown> = {
-    id: t.id, title: t.title, status: t.status, parent: t.parent,
+    id: t.id, title: t.title, status: t.status, resolution: t.resolution, parent: t.parent,
     blocked_by: t.blocked_by && t.blocked_by.length > 0 ? t.blocked_by : undefined,
     rank: t.rank, verify: t.verify,
     labels: t.labels && t.labels.length > 0 ? t.labels : undefined,
