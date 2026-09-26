@@ -9,8 +9,11 @@
 //
 // 做法：造一个账本，让每个会进输出的自由文本字段都带 ESC、BEL、换行（多行 verify 里藏一行伪造的任务），
 // 把 prime（默认、--full）与 handoff（--check、真的写）各跑文本与 --json 两遍：
-//   - commands：文本里每个 `todopi <子命令> …` 都原样出现在 JSON 的某个字符串里；文本里每一行
-//     `- tp-…` / `## tp-…` 开头的 id 都是 JSON 里某个 `id` 字段的值（伪造的任务行过不了这一条）。
+//   - commands：文本里每个 `todopi <子命令> …`（空白规范化之后）都出现在 JSON 的某个字符串里；文本里
+//     每一行 `- tp-…` / `## tp-…` 的 id 都是 JSON 里的 id，紧跟着的是 JSON 里这个 id 的标题，且行数不多于
+//     JSON 里这个 id 的对象数。
+//   **它不证明**文本是 DTO 的纯函数：渲染层自己拼出的普通文字（标签、标点）它不核对——那靠「渲染只
+//   引用 DTO 字段」的约定与用例。规则措辞只宣称上面这些（F12 评审七轮：措辞宽于检查，第十一次）。
 //   - controls：文本里除换行外没有控制字符；JSON 解码后的字符串里没有控制字符，且只有 `log` 条目
 //     可以含换行（多行 Log 的续行），其余字段都是单行。
 // 并自检：带控制字符的字段确实进了输出——否则「没找到」证明不了什么。
@@ -62,26 +65,38 @@ const strings = (v, key = "", out = []) => {
   else if (v !== null && typeof v === "object") for (const [k, x] of Object.entries(v)) strings(x, k, out);
   return out;
 };
-const ids = (v, out = new Set()) => {
-  if (Array.isArray(v)) for (const x of v) ids(x, out);
-  else if (v !== null && typeof v === "object") for (const [k, x] of Object.entries(v)) { if (k === "id" && typeof x === "string") out.add(x); else ids(x, out); }
+/** JSON 里每个带 id 的对象：id → 它们的 title 列表（同一个 id 可以出现在几节里）。 */
+const refs = (v, out = new Map()) => {
+  if (Array.isArray(v)) for (const x of v) refs(x, out);
+  else if (v !== null && typeof v === "object") {
+    if (typeof v.id === "string") out.set(v.id, [...(out.get(v.id) ?? []), typeof v.title === "string" ? v.title : ""]);
+    for (const x of Object.values(v)) refs(x, out);
+  }
   return out;
 };
+const squash = (s) => s.replace(/[ \t]+/g, " ");
 
 const problems = [];
 for (const r of runs) {
   const all = strings(r.json);
   if (mode === "commands") {
-    // 连同紧跟的那个字符一起比：`todopi show` 是 JSON 里 `todopi show tp-x` 的子串，只比命令本身会放过
-    // 渲染层现拼的一条不完整命令。
-    for (const m of r.text.matchAll(/todopi [a-z][a-z-]*(?: (?:--?[a-z-]+|tp-[0-9a-z]+|<[^>]*>))*/g)) {
-      const cmd = m[0], next = r.text[m.index + cmd.length] ?? "";
-      if (!all.some(({ s }) => s === cmd || s.includes(cmd + next))) problems.push(`${r.name}: 文本里的「${cmd}」不在 JSON 里`);
+    // 空白先规范化（`todopi  show` 在 shell 里就是 `todopi show`，评审七轮），再连同紧跟的那个字符一起比：
+    // `todopi show` 是 JSON 里 `todopi show tp-x` 的子串，只比命令本身会放过一条现拼的不完整命令。
+    const text = squash(r.text), json = all.map(({ s }) => squash(s));
+    for (const m of text.matchAll(/todopi [a-z][a-z-]*(?: (?:--?[a-z-]+|tp-[0-9a-z]+|<[^>]*>))*/g)) {
+      const cmd = m[0], next = text[m.index + cmd.length] ?? "";
+      if (!json.some((s) => s === cmd || s.includes(cmd + next))) problems.push(`${r.name}: 文本里的「${cmd}」不在 JSON 里`);
     }
-    const known = ids(r.json);
-    for (const [, tid] of r.text.matchAll(/^(?:- |## )(tp-[0-9a-z]+)\b/gm)) {
-      if (!known.has(tid)) problems.push(`${r.name}: 文本里有一行任务 ${tid}，JSON 里没有这个 id（伪造的行？）`);
+    // 任务行：id 后面紧跟的必须是 JSON 里这个 id 的标题；同一个 id 的行数不能多于 JSON 里的对象数
+    // （评审七轮：借一个真 id 就能伪造出标题任意的一行）。
+    const known = refs(r.json), seen = new Map();
+    for (const [, tid, rest] of r.text.matchAll(/^(?:- |## )(tp-[0-9a-z]+):? ?(.*)$/gm)) {
+      const titles = known.get(tid);
+      if (titles === undefined) { problems.push(`${r.name}: 文本里有一行任务 ${tid}，JSON 里没有这个 id（伪造的行？）`); continue; }
+      if (!titles.some((t) => rest.startsWith(t))) problems.push(`${r.name}: 任务行「${tid} ${rest}」的标题不是 JSON 里的标题`);
+      seen.set(tid, (seen.get(tid) ?? 0) + 1);
     }
+    for (const [tid, n] of seen) if (n > known.get(tid).length) problems.push(`${r.name}: 任务 ${tid} 在文本里出现 ${n} 行，JSON 里只有 ${known.get(tid).length} 处`);
   } else {
     const m = r.text.match(/[\x00-\x09\x0b-\x1f\x7f-\x9f]/);
     if (m) problems.push(`${r.name}: 文本里有控制字符 ${JSON.stringify(m[0])}`);
