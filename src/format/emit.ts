@@ -25,6 +25,8 @@ export type NewTask = {
   blocked_by?: string[];
   verify?: string;
   labels?: string[];
+  /** spec §5.2 字段 11（import beads 写 `external.beads.id`） */
+  external?: Record<string, unknown>;
   description?: string;
   acceptance?: string[];
   log: string[];
@@ -165,7 +167,7 @@ export function emitTask(t: NewTask): string {
     blocked_by: t.blocked_by && t.blocked_by.length > 0 ? t.blocked_by : undefined,
     rank: t.rank, verify: t.verify,
     labels: t.labels && t.labels.length > 0 ? t.labels : undefined,
-    created: t.created, updated: t.updated,
+    external: t.external, created: t.created, updated: t.updated,
   };
   const parts = ["---", emitFrontmatter(fm).trimEnd(), "---", ""];
   if (t.description) parts.push("## Description", "", t.description, "");

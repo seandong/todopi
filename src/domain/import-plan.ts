@@ -14,6 +14,19 @@ import { sortTasks } from "./order.ts";
 /** spec §5.2：标题最多 200 个字符。 */
 const MAX_TITLE = 200;
 
+/**
+ * 截到 199 个单元再加「…」。**按校验器的数法**（JS 的 `.length`，UTF-16 单元）：按码点数，150 个 emoji 的标题不截断，
+ * 写的时候却被 doctor 的同一条规则拒绝（F20 评审发现，F19 同病）。按码点前进、不劈开代理对。
+ */
+export function truncateTitle(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    if (out.length + ch.length > MAX_TITLE - 1) break;
+    out += ch;
+  }
+  return `${out}\u2026`;
+}
+
 export type PlannedTask = {
   /** 身份键：父级的键 + 标题（+ 同名序号） */
   key: string;
@@ -30,10 +43,8 @@ export type PlannedTask = {
 export type ImportPlan = { tasks: PlannedTask[]; warnings: { line: number; message: string }[] };
 
 function titleOf(text: string): { title: string; description?: string } {
-  // 按字符（码点）数，不按 UTF-16 单元：一个 emoji 不该被劈成两半
-  const chars = [...text];
-  if (chars.length <= MAX_TITLE) return { title: text };
-  return { title: `${chars.slice(0, MAX_TITLE - 1).join("")}…`, description: text };
+  if (text.length <= MAX_TITLE) return { title: text };
+  return { title: truncateTitle(text), description: text };
 }
 
 /** 同一个父级下，同名的第 n 个（从 1 起）；第一个不加序号。 */

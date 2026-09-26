@@ -73,9 +73,14 @@ export function createTaskUnlocked(
   ledger: Ledger,
   make: (ctx: CreateContext) => NewTask,
   validate: Validate,
+  /**
+   * 调用方维护的账本现状（持锁期间它就是磁盘真相）：一次建上千个任务时不必每建一个都重读整个账本
+   * （import beads）。建好的任务会追加进这个数组。不给就读盘。
+   */
+  known?: TaskFile[],
 ): TaskFile {
   {
-    const existing = readTasks(ledger);
+    const existing = known ?? readTasks(ledger);
     const takenIds = new Set(existing.map((t) => t.idFromFilename));
     const lastRank = existing
       .map((t) => t.frontmatter["rank"])
@@ -131,8 +136,17 @@ export function createTaskUnlocked(
           `The file has been left in place for inspection; run "todopi doctor" to see its state.`,
       );
     }
+    known?.push(candidate);
     return candidate;
   }
+}
+
+/**
+ * 不写盘，只把一个 NewTask 发射再读回成 TaskFile（失败时返回说明）。批量写入前预检用：import beads 要在写第一个文件之前
+ * 确认每一个都写得下去，否则中途失败会留下半个导入（F20 评审）。
+ */
+export function candidateFor(task: NewTask): TaskFile | string {
+  return parseCandidate(join("tasks", `${task.id}.md`), task.id, emitTask(task));
 }
 
 /** 把一段任务文本解析成 TaskFile。失败时返回说明问题的字符串。 */
