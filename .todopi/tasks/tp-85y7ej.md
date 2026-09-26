@@ -10,7 +10,7 @@ external:
   harness:
     legacy_id: "F16"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-23T09:40:27Z"
+updated: "2026-09-26T06:21:53Z"
 ---
 
 ## Description
@@ -22,12 +22,17 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-**这一段是散文，不是勾选项。** 勾选要 `check`（F09，尚未实现），
-写成 checkbox 就意味着每次关闭都得手改 markdown。代价是验收门禁对这条
-任务不生效：`done` 通过**不等于**下面这些判据已被机器核对过，关闭前由人
-对着它们逐条看。
+- [ ] `todopi setup pi` 装好（标题）
+- [ ] pi 的会话开始时收到注入（标题）
+- [ ] pi 压缩后收到注入（标题）
+- [ ] 扩展写在 `.pi/extensions/` 下
+- [ ] 扩展订阅 `session_start`
+- [ ] 扩展订阅 `session_compact`（压缩后；`session_before_compact` 是压缩前，PRD 1.1 版选错了方向）
+- [ ] 会话 id 调 `ctx.sessionManager.getSessionId()` 自取（不在事件参数里）
+- [ ] 上下文注入走 `before_agent_start`
+- [ ] 幂等
 
-写 .pi/extensions/ 下的扩展，订阅 session_start 与 session_compact（压缩后；session_before_compact 是压缩前，PRD 1.1 版选错了方向）；会话 id 需调 ctx.sessionManager.getSessionId() 自取，不在事件参数里；上下文注入走 before_agent_start；幂等。
+（2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
 ## Repair
 
@@ -43,3 +48,4 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 ## Log
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F16
+- 2026-09-26T06:21:53Z seandong note: 验收判据由散文拆成勾选项（用户 2026-09-26 定）：逐条对应原文，不增不减；任务标题本身是验收结果的，另列一条并标「标题」。原文见 git 历史。

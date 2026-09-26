@@ -49,7 +49,7 @@
 日常回路（见 AGENTS.md）：
 
 ```
-todopi ls --ready → todopi claim <id> → 干活 → 人核对验收判据
+todopi ls --ready → todopi claim <id> → 干活 → todopi check 逐条勾验收标准
 → git commit（代码 + claim 留下的账本改动）→ todopi done <id>
 → git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
@@ -158,9 +158,11 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
-30. **待决：要不要把 8 条 open 自举任务的散文判据回填成勾选项。** 那是另一个决定：
-    谁来写、写多细、改完之后验收门禁开始对它们生效（`done` 会被没勾完的挡下）。
-    不在 F09 里做。
+30. ~~要不要把 open 自举任务的散文判据回填成勾选项~~ 已做（2026-09-26，用户定「改」）。8 个任务逐条
+    拆分，一条对应一项核对，不增不减；任务标题本身是验收结果的另列一条并标「标题」。唯一改动：安装器任务的「依赖只有三个
+    且都零传递依赖」已被 D031 改变，改为「限定在 ARCH-010 白名单内」。每个任务都记了一条 note。
+    从此验收门禁对这 8 个任务生效（已关闭的仍是散文，不再经过门禁）。评审一轮要求拆细：一条勾选项
+    只对应一项核对，标题结果按原题完整列出。
     F07 的地基已经齐了：Log 行的 `verify=` 现在恒为 `none`，F07 填 `pass`/`fail`；
     门禁骨架在 `commands/transition.ts`，`verify` 那道门加进 `domain/gates.ts` 即可，
     报告与动作走 `gateActions()`（`command` 无占位符、`template` 需填空）。

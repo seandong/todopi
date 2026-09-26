@@ -102,7 +102,7 @@ Layer 3 在改动 cross-component 或跨领域边界时是 required，不是可�
 ```
 todopi claim <id>                    ← 它会改任务文件，那处改动跟着工作走
 干活
-人核对 Acceptance Criteria           ← 散文判据，机器不查
+逐条 todopi check <id> <n>            ← 验收标准是勾选项，done 会挡下没勾完的
 git commit                           ← 代码 **加上** claim 留下的账本改动
 评审 → 修复 → 再提交（循环到通过）      ← 必须在 done 之前，见下
 todopi done <id>                     ← verify 跑在刚提交的那棵树上，dirty=false
@@ -128,9 +128,10 @@ Codex 评审确认了这个顺序）。
 
 ## 完成工作（clock-out）
 
-1. **核对验收判据。** 有勾选项的任务用 `todopi check <id> <n>` 逐条勾，`done` 会挡下
-   没勾完的。**自举迁移来的任务判据是散文**（`show` 会显示它，但不编号），验收门禁对它们
-   不生效——`todopi done` 通过**不等于**这些判据已被机器核对过，由人对着逐条看。
+1. **核对验收判据。** 对着每一条核实做到了，再用 `todopi check <id> <n>` 勾上；`done` 会挡下
+   没勾完的。勾选是一个声明，不是证据——勾之前要有用例或手工核对支撑。（自举迁移来的任务原本是
+   散文判据、门禁不生效；2026-09-26 起**当时 open 的 8 个**拆成了勾选项，用户定。已关闭的仍是散文——它们
+   不再经过门禁。没有任何勾选项的任务，门禁不挡。）
 2. `git commit` —— 代码**加上** `claim` 留下的账本改动。漏掉后者，下一步就会
    `dirty=true`。**一个 commit 一个完整逻辑改动**（atomic）；每次 commit 后仓库都
    MUST 处于一致状态，不提交半成品。commit message 解释 **why**, not just what。

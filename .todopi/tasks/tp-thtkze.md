@@ -10,7 +10,7 @@ external:
   harness:
     legacy_id: "F15"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-23T09:40:27Z"
+updated: "2026-09-26T06:21:53Z"
 ---
 
 ## Description
@@ -22,12 +22,24 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 
 ## Acceptance Criteria
 
-**这一段是散文，不是勾选项。** 勾选要 `check`（F09，尚未实现），
-写成 checkbox 就意味着每次关闭都得手改 markdown。代价是验收门禁对这条
-任务不生效：`done` 通过**不等于**下面这些判据已被机器核对过，关闭前由人
-对着它们逐条看。
+- [ ] `todopi setup codex` 装好（标题）
+- [ ] `todopi setup opencode` 装好（标题）
+- [ ] Codex 的会话开始时收到注入（标题）
+- [ ] Codex 压缩后收到注入（标题）
+- [ ] OpenCode 的会话开始时收到注入（标题）
+- [ ] OpenCode 压缩后收到注入（标题）
+- [ ] Codex：写 `.codex/hooks.json` 的 SessionStart
+- [ ] Codex：写 `.codex/hooks.json` 的 PostCompact
+- [ ] Codex：写 `.codex/hooks.json` 的 SessionEnd
+- [ ] OpenCode：插件写在 `.opencode/plugins/` 下
+- [ ] OpenCode：插件通过 event 钩子订阅 `session.created`
+- [ ] OpenCode：同一插件订阅 `session.compacted`
+- [ ] Codex 的会话 id 能取到
+- [ ] OpenCode 的会话 id 能取到：事件对象上给 `session_id` 时
+- [ ] OpenCode 的会话 id 能取到：事件对象上给 `sessionID` 时
+- [ ] 幂等
 
-Codex 写 .codex/hooks.json 的 SessionStart / PostCompact / SessionEnd；OpenCode 写 .opencode/plugins/ 下的插件，通过 event 钩子订阅 session.created 与 session.compacted；两家的会话 id 取法不同（OpenCode 在事件对象上给 session_id 或 sessionID 两种拼法），都要能取到；幂等。
+（2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
 ## Repair
 
@@ -43,3 +55,4 @@ Codex 写 .codex/hooks.json 的 SessionStart / PostCompact / SessionEnd；OpenCo
 ## Log
 
 - 2026-09-23T09:40:27Z harness@migration created: migrated from feature_list.json F15
+- 2026-09-26T06:21:53Z seandong note: 验收判据由散文拆成勾选项（用户 2026-09-26 定）：逐条对应原文，不增不减；任务标题本身是验收结果的，另列一条并标「标题」。原文见 git 历史。
