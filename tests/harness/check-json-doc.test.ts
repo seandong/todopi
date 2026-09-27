@@ -175,6 +175,10 @@ test("同名类型从两个文件导出：报错（只核对一个定义时，�
   // 写进文档的名字：domain 里两处导出也报
   const dom = run(DOC, DTO_OK, process.env, { "src/domain/x.ts": "export type BItem = { name: string };\n" });
   assert.match(dom.join("\n"), /BItem is exported by src\/domain\/x\.ts and src\/output\/dto\/a\.ts|BItem is exported by src\/output\/dto\/a\.ts and src\/domain\/x\.ts/);
+  // 写进文档、但只在 domain 里的两处导出（没有 dto 参与）：也报
+  const onlyDomain = run(`${DOC}\n### \`Dom\`\n\n\`\`\`ts\ntype Dom = string;\n\`\`\`\n`, DTO_OK, process.env,
+    { "src/domain/x.ts": "export type Dom = string;\n", "src/domain/y.ts": 'export type { Dom } from "./x.ts";\n' });
+  assert.match(onlyDomain.join("\n"), /Dom is exported by src\/domain\/x\.ts and src\/domain\/y\.ts/);
   // 与 --json 无关的 domain 内部转发：不管
   assert.deepEqual(run(DOC, DTO_OK, process.env, { "src/domain/x.ts": "export type L = { a: 1 };\n", "src/domain/y.ts": 'export type { L } from "./x.ts";\n' }), []);
 });
