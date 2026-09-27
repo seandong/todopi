@@ -1,12 +1,13 @@
 ---
 id: "tp-eo6vyg"
 title: "把 --json 的输出契约写成文档，写明兼容与版本承诺（FR-Q3）"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "iqi"
 verify: "make check && make test"
 labels: ["m4"]
 created: "2026-09-27T03:14:16Z"
-updated: "2026-09-27T03:14:25Z"
+updated: "2026-09-27T07:08:28Z"
 ---
 
 ## Description
@@ -23,3 +24,4 @@ updated: "2026-09-27T03:14:25Z"
 
 - 2026-09-27T03:14:16Z seandong created
 - 2026-09-27T03:14:25Z seandong moved
+- 2026-09-27T07:08:28Z claude-code@Seans-MacBook-Pro.local claimed

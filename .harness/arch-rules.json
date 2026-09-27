@@ -271,6 +271,16 @@
       "what": "prime 或 handoff（任一输出形态）的文本里有换行以外的控制字符，或 JSON 里有控制字符，或 `log` 之外的字段里有换行 / Tab。",
       "why": "这些输出会进模型的上下文，也会打到终端上：一条验收标准或一个 assignee 不该能改终端颜色、挪光标，多行 verify 不该在报告里伪造出一行任务。F11 评审一、二轮与 F12 评审一轮四次找到漏网的字段（标准、assignee、只在渲染时转义导致 JSON 里仍带 ESC、多行 verify）。第一版检查器允许 JSON 字符串里有换行、也没跑不带 --check 的 handoff（F12 评审六轮两个假绿）；现在只有 `log` 条目可以多行，四种输出形态都跑，并自检带控制字符的字段确实进了输出。",
       "fix": "在 commands/ 的投影里经 visible()（多行字段）或 visibleLine()（单行字段）处理，见 src/commands/view.ts。"
+    },
+    {
+      "id": "ARCH-028",
+      "description": "docs/json.md 与 --json 真正序列化的类型一致",
+      "applies_when": "test -d src/output/dto && test -x node_modules/.bin/tsc",
+      "check": "node --no-warnings tools/check-json-doc.mjs",
+      "expect": "empty",
+      "what": "docs/json.md（--json 的输出契约）与源码里的类型对不上：某个小节的字段、类型或可选性与同名的导出类型不同，或者 src/output/dto/ 新增了一个导出类型却没有写进文档，或者文档里提到的类型没有自己的小节。",
+      "why": "FR-Q3：--json 的结构有文档并随 CLI 版本化，破坏性变更升主版本。文档与实现一旦漂开，承诺就无从兑现——消费者照着文档解析，拿到的却是另一个形状，而没人知道这是一次破坏性变更。检查把每个小节翻成 TypeScript，与真实类型做精确相等的断言交给 tsc，字段差一个都通不过（F27）。",
+      "fix": "改了 src/output/dto/ 里的类型，就同步改 docs/json.md 对应小节的 Field / Type 表（或 ts 代码块），并按 docs/json.md 的 Compatibility 一节判断这是不是破坏性变更。新增的导出类型若不进 --json（内部投影），把它加进 tools/check-json-doc.mjs 的 INTERNAL 并写明理由。"
     }
   ]
 }
