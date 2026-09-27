@@ -41,6 +41,10 @@ test("缺一个平台、版本号不像版本号：失败，不生成", () => {
   assert.notEqual(miss.status, 0);
   assert.match(miss.stderr, /no checksum for todopi-1\.2\.3-linux-x64\.tar\.gz/);
   assert.equal(miss.stdout, "");
+  const dup = gen("1.2.3", sums([...ALL, `${hex("e")}  todopi-1.2.3-darwin-arm64.tar.gz`]));
+  assert.notEqual(dup.status, 0);
+  assert.match(dup.stderr, /lists todopi-1\.2\.3-darwin-arm64\.tar\.gz twice with different checksums/);
+  assert.equal(gen("1.2.3", sums([...ALL, ALL[0]!])).status, 0, "一模一样的重复无害");
   assert.notEqual(gen("v1.2.3", sums(ALL)).status, 0);
   assert.notEqual(gen("1.2.3; rm -rf /", sums(ALL)).status, 0);
 });

@@ -2441,7 +2441,9 @@ Node 用 spec reporter，整层被判 blocked。
   每个都带 sha256（Homebrew 下载后校验，不符拒装）；没有依赖（二进制自带运行时），`tp` 是链接；test 块核对 `--version` 与 `init`。
   哪个平台缺了、版本号不对就失败，不生成一份装不上的 formula。
 - `release.yml`：生成 formula 并作为 Release 资产附上；仓库有 `HOMEBREW_TAP_TOKEN` 时在建 Release **之后**提交到 `seandong/homebrew-tap`
-  （formula 的地址指向 Release 资产）；没有就跳过。建 tap 仓库、给 token 是维护者的事（`docs/brew.md`）。
+  （formula 的地址指向 Release 资产）；没有就跳过。建 tap 仓库、给 token 是维护者的事（`docs/brew.md`）。**token 只注入更新 tap 的那一步**
+  （job 级 env 只放「有没有」的布尔值）：job 级的 secret 每一步都看得见，`npm ci` 时依赖的装包脚本也读得到（Codex 评审）。
+  SHA256SUMS 里同一个文件出现两次且校验和不同时生成器失败，不按行序挑一个。
 - **本机实测**（2026-09-28，Homebrew 7.0.6，macOS arm64）：用 bun 现编的 darwin-arm64 二进制、file:// 地址生成 formula，放进临时的本地 tap
   安装——下载与 sha256 校验通过（改坏 sha256 时 `Formula reports different checksum` 拒绝），`brew style` 无问题，二进制按 test 块的步骤
   （`--version`、`init`）通过；**安装本身被 Homebrew 拒绝：本机 Command Line Tools 过旧**（更新要 sudo，是维护者机器上的事，没动）。

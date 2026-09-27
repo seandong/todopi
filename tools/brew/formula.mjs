@@ -20,7 +20,10 @@ const base = (baseArg ?? `https://github.com/seandong/todopi/releases/download/v
 const sums = new Map();
 for (const line of readFileSync(sumsPath, "utf8").split("\n")) {
   const m = /^([0-9a-f]{64}) [ *](\S+)$/.exec(line.trim());
-  if (m) sums.set(m[2], m[1]);
+  if (!m) continue;
+  // 同一个文件出现两次、校验和却不同：说不清哪个对，不按行序挑一个（F34 评审）；一模一样的重复无害
+  if (sums.has(m[2]) && sums.get(m[2]) !== m[1]) die(`${sumsPath} lists ${m[2]} twice with different checksums`);
+  sums.set(m[2], m[1]);
 }
 
 const PLATFORMS = [

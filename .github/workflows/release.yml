@@ -14,8 +14,9 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      # Homebrew tap（seandong/homebrew-tap）的推送权限；没有就跳过更新 tap 那一步（formula 仍作为 Release 资产附上，见 docs/brew.md）
-      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      # 只放「有没有」这个布尔值，不放 token 本身：job 级 env 每一步都看得见，npm ci 的依赖装包脚本也读得到（F34 评审）。
+      # token 只注入更新 tap 的那一步。没有就跳过那一步（formula 仍作为 Release 资产附上，见 docs/brew.md）
+      HAS_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,7 +56,9 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes
       # tap 在 Release 之后更新：formula 里的地址指向 Release 资产，先有资产再让 brew 用户看到新版本
       - name: Update Homebrew tap
-        if: env.HOMEBREW_TAP_TOKEN != ''
+        if: env.HAS_TAP_TOKEN == 'true'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           git clone --depth 1 "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/seandong/homebrew-tap.git" tap
           mkdir -p tap/Formula
