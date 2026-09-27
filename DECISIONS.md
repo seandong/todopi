@@ -2480,6 +2480,9 @@ Node 用 spec reporter，整层被判 blocked。
   比较时取绝对差：各进程的时刻在拿锁之前取，等锁的一方会读到比自己还新的记录，那正是刚刚的重复（e2e 里五个并发钩子偶尔注入两次，就是这么漏的）。
   没有会话 id 不去重（按 actor 会让并行的 agent 互相吞掉 prime）；拿不到锁、写不了、账本版本更高：照常注入（宁可重复也不丢）。手动 prime 从不去重。
   `--if-compacted`（Gemini 压缩后下一轮的再注入）不去重：已经由压缩标记把关。
+  事件名的来源：Claude Code / Codex / Gemini / Cursor 的钩子 JSON 自带（`hook_event_name`、`source`）；OpenCode 插件在喂给 prime 的载荷里加
+  `hook_event_name`（`session.created` / `session.compacted`），pi 扩展给不了 stdin，用 `prime --hook-event`（评审二轮：两家的会话开始与
+  压缩原本共用一个键，开始后 10 秒内的压缩被吞掉）。
 - 同进程加载的（OpenCode 插件、pi 扩展）：只靠时间窗挡不住——拿到空输出的一份会在之后每一轮重试。所以同一时刻（5 秒内）加载的第二份不注册；
   过几秒的再加载是重载（pi 的 /reload、切换会话），照常注册——永久的标志会让重载之后唯一的一份也失效（Codex 评审）。OpenCode 在启动时装 npm 插件，
   若两份加载相隔超过 5 秒，会退回到注入两遍（重复，不是丢失）。

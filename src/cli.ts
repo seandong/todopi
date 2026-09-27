@@ -219,7 +219,8 @@ program
   .option("--hook-json <shape>", "wrap the output as the hook JSON an agent expects: cursor, gemini:SessionStart, gemini:BeforeAgent")
   .option("--mark-compacted", "record that this session was just compacted, print nothing (for a pre-compaction hook)")
   .option("--if-compacted", "print only if --mark-compacted was recorded for this session since, and clear it (for a before-turn hook)")
-  .action(async (cmdOpts: { budget?: string; full?: boolean; session?: string; hook?: boolean; hookJson?: string; markCompacted?: boolean; ifCompacted?: boolean }) => {
+  .option("--hook-event <name>", "which agent event this hook call is for, when the hook JSON does not say (the pi extension passes it)")
+  .action(async (cmdOpts: { budget?: string; full?: boolean; session?: string; hook?: boolean; hookJson?: string; markCompacted?: boolean; ifCompacted?: boolean; hookEvent?: string }) => {
     const { runPrime, runPrimeFull, parseBudget } = await import("./commands/prime.ts");
     const { renderPrime, renderPrimeFull } = await import("./output/render/prime.ts");
     const { compactionGate, wrapHookOutput, firstInjection } = await import("./commands/hook.ts");
@@ -241,7 +242,9 @@ program
     // --if-compacted 不在此列：压缩后的再注入已经由压缩标记把关。没有会话 id 不去重。
     if (cmdOpts.hook === true && cmdOpts.ifCompacted !== true && base.session !== undefined) {
       const agent = (opts["agent"] as string | undefined) ?? process.env["TODOPI_AGENT"] ?? "";
-      if (!firstInjection(directory, `${agent}|${hook.occasion ?? ""}|${base.session}`)) return;
+      // 事件：钩子 JSON 里的 hook_event_name / source，或 --hook-event（pi 的扩展给不了 stdin）
+      const occasion = cmdOpts.hookEvent !== undefined ? `${cmdOpts.hookEvent}/` : ("occasion" in hook ? hook.occasion ?? "" : "");
+      if (!firstInjection(directory, `${agent}|${occasion}|${base.session}`)) return;
     }
     const json = opts["json"] === true;
     const { text, warnings } = cmdOpts.full === true

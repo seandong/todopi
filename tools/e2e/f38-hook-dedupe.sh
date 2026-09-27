@@ -54,6 +54,15 @@ changed="$(cli -C "$W" --agent claude-code --json handoff --check --session v | 
 [ -s "$TMP/v1.out" ] && [ ! -s "$TMP/v2.out" ] && [ "$changed" = "$A" ] && ok "被挡下的钩子不挪动 handoff 的 verify 基准" \
   || fail "v1=$(wc -c < "$TMP/v1.out") v2=$(wc -c < "$TMP/v2.out") verifyChanged=$changed"
 
+# pi 与 OpenCode 的真实调用形状（它们的钩子载荷里没有 source）：会话开始之后马上压缩，两次都要注入；同一事件重复才挡（F38 评审二轮）
+pic() { (cd "$W" && cli --agent pi prime --hook --session p1 --hook-event "$1" < /dev/null) > "$2" 2>/dev/null; }
+pic session_start "$TMP/p1.out"; pic session_start "$TMP/p2.out"; pic session_compact "$TMP/p3.out"
+[ -s "$TMP/p1.out" ] && [ ! -s "$TMP/p2.out" ] && [ -s "$TMP/p3.out" ] && ok "pi：session_start 重复被挡，紧接的 session_compact 照常注入" \
+  || fail "pi：$(wc -c < "$TMP/p1.out") / $(wc -c < "$TMP/p2.out") / $(wc -c < "$TMP/p3.out")"
+occ() { printf '%s' "{\"sessionID\":\"o1\",\"hook_event_name\":\"$1\"}" | (cd "$W" && cli --agent opencode prime --hook) > "$2" 2>/dev/null; }
+occ session.created "$TMP/o1.out"; occ session.compacted "$TMP/o2.out"
+[ -s "$TMP/o1.out" ] && [ -s "$TMP/o2.out" ] && ok "OpenCode：session.created 之后马上 session.compacted，两次都注入" || fail "OpenCode 压缩后的 prime 被吞了"
+
 # 别的会话照常
 hook "$TMP/s2.out" "{\"session_id\":\"s2\",\"cwd\":\"$W\"}"
 [ -s "$TMP/s2.out" ] && ok "别的会话照常注入" || fail "s2 没有输出"

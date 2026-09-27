@@ -292,7 +292,7 @@ test("opencode 插件：在 session.created / session.compacted 时跑 prime 并
     return out.system;
   };
   await hooks.event({ event: { type: "session.created", properties: { info: { id: "s1" } } } });
-  assert.deepEqual(calls, ['todopi --agent opencode prime --hook < <payload>|{"sessionID":"s1"}']);
+  assert.deepEqual(calls, ['todopi --agent opencode prime --hook < <payload>|{"sessionID":"s1","hook_event_name":"session.created"}']);
   assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 1"]);
   assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 1"], "缓存：不是每一轮都跑 prime");
   assert.equal(calls.length, 1);
@@ -380,7 +380,7 @@ test("pi 扩展：session_start / session_compact 跑 prime（--session 取自 s
   const ctx = (id: string) => ({ cwd: dir, sessionManager: { getSessionId: () => id } });
   const turn = async (id: string) => handlers.get("before_agent_start")!({ systemPrompt: "BASE" }, ctx(id));
   await handlers.get("session_start")!({ reason: "startup" }, ctx("s1"));
-  assert.deepEqual(calls, [["todopi", "--agent", "pi", "prime", "--hook", "--session", "s1"]]);
+  assert.deepEqual(calls, [["todopi", "--agent", "pi", "prime", "--hook", "--session", "s1", "--hook-event", "session_start"]]);
   assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" });
   assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" }, "缓存：不是每一轮都跑 prime");
   await handlers.get("session_compact")!({ reason: "manual" }, ctx("s1"));
@@ -536,4 +536,13 @@ test("OpenCode 插件与 pi 扩展在同一进程里同一时刻装了两份：�
   again({ on: (ev: string) => later.push(ev), exec: async () => ({ code: 0, stdout: "" }) });
   assert.deepEqual(later, handlers[0], "重载之后照常注册");
   delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt;
+});
+
+test("pi 扩展与 OpenCode 插件给 prime 传各自的事件名：会话开始与压缩不共用去重键（F38 评审二轮）", async () => {
+  const { PI_EXTENSION } = await import("../../src/format/pi-extension.ts");
+  const { OPENCODE_PLUGIN } = await import("../../src/format/opencode-plugin.ts");
+  assert.match(PI_EXTENSION, /"--hook-event", hookEvent/);
+  for (const ev of ["session_start", "session_compact", "before_agent_start"]) assert.match(PI_EXTENSION, new RegExp(`prime\\(ctx, "${ev}"\\)`));
+  assert.match(OPENCODE_PLUGIN, /hook_event_name: hookEvent/);
+  for (const ev of ["session.created", "session.compacted"]) assert.ok(OPENCODE_PLUGIN.includes(`, "${ev}")`), ev);
 });

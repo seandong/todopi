@@ -39,8 +39,9 @@ export const TodopiPlugin = async ({ $, directory }) => {
   if (Date.now() - (globalThis.__todopiPrimeLoadedAt ?? 0) < 5000) return {};
   globalThis.__todopiPrimeLoadedAt = Date.now();
   const primed = new Map();
-  const prime = async (sessionID) => {
-    const payload = Buffer.from(JSON.stringify({ sessionID }));
+  // hook_event_name tells prime which occasion this is: a compaction right after the start is a new injection, not a duplicate.
+  const prime = async (sessionID, hookEvent) => {
+    const payload = Buffer.from(JSON.stringify({ sessionID, hook_event_name: hookEvent }));
     const r = await $\`todopi --agent opencode prime --hook < \${payload}\`.cwd(directory).quiet().nothrow();
     // Failed (e.g. todopi not on PATH yet): don't cache, so the next model call retries.
     if (r.exitCode === 0) primed.set(sessionID, r.stdout.toString().trim());
@@ -48,13 +49,13 @@ export const TodopiPlugin = async ({ $, directory }) => {
   };
   return {
     event: async ({ event }) => {
-      if (event.type === "session.created") await prime(event.properties.info.id);
-      else if (event.type === "session.compacted") await prime(event.properties.sessionID);
+      if (event.type === "session.created") await prime(event.properties.info.id, "session.created");
+      else if (event.type === "session.compacted") await prime(event.properties.sessionID, "session.compacted");
     },
     "experimental.chat.system.transform": async (input, output) => {
       if (!input.sessionID) return;
       // Not primed yet, or primed empty (no ledger then) and a ledger has appeared since: prime now.
-      if (!primed.has(input.sessionID) || (primed.get(input.sessionID) === "" && hasLedger(directory))) await prime(input.sessionID);
+      if (!primed.has(input.sessionID) || (primed.get(input.sessionID) === "" && hasLedger(directory))) await prime(input.sessionID, "chat.system.transform");
       const text = primed.get(input.sessionID);
       if (text) output.system.push(text);
     },
