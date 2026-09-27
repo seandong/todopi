@@ -26,5 +26,6 @@ export function runClose(opts: CloseOptions): TransitionReport {
     frontmatter: (fm) => ({ ...fm, status: "closed", resolution }),
     logLine: (ctx) => logLine("closed", [["resolution", resolution]], ctx),
     dropLease: true,
+    reasonWithoutForce: true,
   });
 }

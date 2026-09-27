@@ -54,6 +54,11 @@ export type TransitionShape = {
   /** 迁移之后租约怎么办。done/close 删掉，reopen 也删——三者都不再有人持有 */
   dropLease: boolean;
   /**
+   * 不带 --force 也能记 --reason（写进 Log 行的文字）。只有 close：放弃一件事的理由本身就值得留下（§8 把 close 的 --reason 与
+   * --force 列为两个独立参数，F23）。done 的理由只在强制时才有意义——正常完成的证据是 verify 与勾选的标准。
+   */
+  reasonWithoutForce?: boolean;
+  /**
    * 跑这个任务的 `verify` 并给出结果。只有 `done` 提供它。
    *
    * 在锁内、其余门禁都过了之后才调用——为一个注定要被未勾复选框挡下的任务跑
@@ -75,7 +80,8 @@ export function runTransition(opts: TransitionOptions, shape: TransitionShape): 
       "--force needs --reason <text>: the reason is what makes an overridden gate reviewable later.");
   }
   if (!forced && opts.reason !== undefined) {
-    throw new CliError(EXIT.usage, "--reason only applies together with --force.");
+    if (shape.reasonWithoutForce !== true) throw new CliError(EXIT.usage, "--reason only applies together with --force.");
+    if (opts.reason.trim() === "") throw new CliError(EXIT.usage, "--reason needs some text.");
   }
 
   return withLockConflictMapped(() => withLedgerLock(ledger, () => {
@@ -167,7 +173,8 @@ export function logLine(
   const pairs = [...args];
   if (ctx.forced) pairs.push(["forced", "true"]);
   const head = [ctx.now, ctx.actor, verb, ...pairs.map(([k, v]) => `${k}=${v}`)].join(" ");
-  if (!ctx.forced || ctx.reason === undefined) return head;
+  // 理由在 runTransition 里已经把关（done 只在强制时收，close 不强制也收），这里有就写
+  if (ctx.reason === undefined) return head;
   // 只把换行（含续行的缩进）压成一个空格。原来用 \s+ 会把理由里的制表符与
   // 连续空格一并折叠，那不是 §5.3.3 要求的——它只禁止 Log 行跨行。
   return `${head}: ${ctx.reason.replace(/\r?\n\s*/g, " ").trim()}`;

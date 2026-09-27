@@ -1,12 +1,13 @@
 ---
 id: "tp-n7r8ph"
 title: "CLI 表面补齐：FR-Q4 别名、close --reason、--quiet 覆盖、done 被拒时提示 todopi check"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "ini"
 verify: "make check && make test && bash tools/e2e/f23-cli-surface.sh"
 labels: ["m4"]
 created: "2026-09-27T03:14:16Z"
-updated: "2026-09-27T03:14:25Z"
+updated: "2026-09-27T04:04:04Z"
 ---
 
 ## Description
@@ -24,3 +25,4 @@ updated: "2026-09-27T03:14:25Z"
 
 - 2026-09-27T03:14:16Z seandong created
 - 2026-09-27T03:14:25Z seandong moved
+- 2026-09-27T04:04:04Z claude-code@Seans-MacBook-Pro.local claimed

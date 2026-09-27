@@ -80,10 +80,11 @@ export function gateActions(r: Omit<GateReport, "actions">): GateAction[] {
           });
         break;
       case "acceptance":
-        // `todopi check` 要到 F09 才有；在它落地前能真正做到这件事的是改文件。
-        out.push({ for: "acceptance",
-          detail: "Change `- [ ]` to `- [x]` for criteria " +
-            `${refusal.unchecked.map((c) => c.n).join(", ")} in .todopi/tasks/${r.id}.md.` });
+        // 用 check 勾，不叫人改文件（协议：Never edit those files by hand，F23）。每条一个命令：勾之前要逐条核对
+        for (const c of refusal.unchecked) {
+          out.push({ for: "acceptance", command: `todopi check ${r.id} ${c.n}`,
+            detail: `Once criterion ${c.n} is actually met.` });
+        }
         // 同时还有子任务没关时，这条命令仍会被 children 门禁挡住——
         // 不把这一点说出来，agent 会以为它是条能立刻见效的出路（Codex 第三轮评审）。
         out.push({ for: "acceptance", command: `todopi close ${r.id} --resolution wontfix`,

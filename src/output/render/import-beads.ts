@@ -6,7 +6,8 @@ import type { ImportBeadsReport } from "../dto/import-beads.ts";
 /** 警告可能上百条：文本里只列前 20 条，全部在 --json 里。 */
 const SHOWN_WARNINGS = 20;
 
-export function renderImportBeads(r: ImportBeadsReport): string {
+/** quiet 去掉 Next 提示，结果与警告保留。 */
+export function renderImportBeads(r: ImportBeadsReport, opts: { quiet?: boolean } = {}): string {
   const n = r.created.length;
   const closed = r.created.filter((t) => t.status === "closed").length;
   const lines = [`Imported ${n} Beads issue${n === 1 ? "" : "s"} from ${r.source} (${n - closed} open, ${closed} closed).`];
@@ -29,6 +30,6 @@ export function renderImportBeads(r: ImportBeadsReport): string {
   if (dropped.length > 0) lines.push(`Not carried over: ${dropped.join("; ")}.`);
   for (const w of r.warnings.slice(0, SHOWN_WARNINGS)) lines.push(`warning: ${w}`);
   if (r.warnings.length > SHOWN_WARNINGS) lines.push(`... and ${r.warnings.length - SHOWN_WARNINGS} more warnings (see --json).`);
-  if (n > 0) lines.push("", "Next: todopi ls --ready");
+  if (n > 0 && opts.quiet !== true) lines.push("", "Next: todopi ls --ready");
   return lines.join("\n") + "\n";
 }
