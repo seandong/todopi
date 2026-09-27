@@ -102,7 +102,8 @@ function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLe
   const snapshots: Record<string, string> = {};
   const tasks = read.filter((t) => {
     const ok = isDisplayable(validateFile(t));
-    snapshots[t.idFromFilename] = verifySnapshot(t);
+    // 快照原来在 record 的 try 里算：它出错只影响 handoff 的对比，不能让 prime 的输出跟着没了——出错记成「不知道」
+    try { snapshots[t.idFromFilename] = verifySnapshot(t); } catch { snapshots[t.idFromFilename] = "?#?"; }
     return ok;
   });
   const stale = staleInputFor(ledger);
