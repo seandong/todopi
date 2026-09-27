@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `f27f936` —— Codex 额度恢复后对子代理评审过的改动补审，修复合入。
+- Last commit: `e405adf` —— Codex 补审修复合入；Install 工作流改用 root 自己的 HOME。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
