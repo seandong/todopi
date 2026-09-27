@@ -34,7 +34,9 @@ export function assertSupportedVersionIfPresent(dir: string): number | null {
 
 /** 账本的格式版本比本实现高：可以按 v1 的规则读，不能写（spec §9）。 */
 export function isNewerVersion(ledger: Ledger): boolean {
-  return ledger.config.version > SUPPORTED_VERSION;
+  // 读**磁盘上此刻**的版本，不用发现账本时的快照：命令跑到一半账本可能已被新版 todopi 升了版（Codex 评审实测）。
+  // 不在锁里的写（prime 的会话状态）因此只剩「判完到写完」这一瞬的窗口
+  return readConfig(ledger.dir).version > SUPPORTED_VERSION;
 }
 
 /**
@@ -42,7 +44,7 @@ export function isNewerVersion(ledger: Ledger): boolean {
  * （withLedgerLock、init、verify），不在读取口（F25；在那之前读也被拒，ls 都用不了）。
  */
 export function assertWritable(ledger: Ledger): void {
-  // 读**磁盘上此刻**的版本，不用发现账本时的快照：等锁期间别的（新版）todopi 可能已经把账本升了版（Codex 评审实测）
+  // 磁盘上此刻的版本（见 isNewerVersion）：等锁期间别的（新版）todopi 可能已经把账本升了版
   const version = readConfig(ledger.dir).version;
   if (version > SUPPORTED_VERSION) throw readOnlyError(version);
 }

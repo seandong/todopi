@@ -95,9 +95,19 @@ LOCK="$(git -C "$R" rev-parse --absolute-git-dir)/todopi/leases/lock"
 mkdir -p "$(dirname "$LOCK")"
 printf '{"pid":%s,"host":"%s","at":"2026-01-01T00:00:00Z","nonce":"held-by-e2e"}' "$$" "$(hostname)" > "$LOCK"
 # claim 先写租约、再写任务文件：只有「拿到锁之后再判一次」挡得住租约
+# 握手：子进程每试一次拿锁都会在租约目录里建、删一个临时文件，目录的 mtime 变了，就说明它已经过了锁前的那次判断、
+# 正在等锁（固定睡一段时间证明不了这一点：子进程起得慢时锁前那次就挡住了，测不到锁内那次——Codex 复审实测的假绿）
+mt() { node -e 'console.log(require("fs").statSync(process.argv[1]).mtimeMs)' "$1"; }
+base="$(mt "$(dirname "$LOCK")")"
 cli -C "$R" claim "$RT" > "$TMP/race.out" 2>&1 &
 RP=$!
-node -e 'setTimeout(()=>{},800)'
+node -e '
+  const fs = require("fs"), [d, base] = process.argv.slice(1), t0 = Date.now();
+  (function wait() {
+    if (String(fs.statSync(d).mtimeMs) !== base) process.exit(0);
+    if (Date.now() - t0 > 4000) process.exit(1);
+    setTimeout(wait, 5);
+  })();' "$(dirname "$LOCK")" "$base" || fail "握手超时：子进程没有进入等锁"
 sed 's/^version: 1$/version: 2/' "$R/.todopi/config.yml" > "$TMP/c2" && cat "$TMP/c2" > "$R/.todopi/config.yml"
 rm -f "$LOCK"
 wait "$RP"; rc=$?

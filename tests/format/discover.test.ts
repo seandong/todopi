@@ -70,3 +70,19 @@ test("config.yml 的未知键被保留", () => {
   const l = discoverLedger(root);
   assert.equal(l.config.raw["future_key"], "keep-me");
 });
+
+test("会话状态的闸门也看磁盘上此刻的版本：拿着 v1 时发现的 ledger 对象，升版之后不写、不取走", () => {
+  const root = makeLedger(1);
+  const l = discoverLedger(root);
+  markCompacted(l, { actor: "a" });
+  writeFileSync(join(root, ".todopi", "config.yml"), "version: 2\nid_prefix: tp\n");
+  assert.equal(l.config.version, 1);
+  assert.equal(isNewerVersion(l), true);
+  recordPrime(l, { actor: "a" }, "2026-01-01T00:00:00Z");
+  markCompacted(l, { actor: "b" });
+  assert.equal(takeCompacted(l, { actor: "a" }), false);
+  writeFileSync(join(root, ".todopi", "config.yml"), "version: 1\nid_prefix: tp\n");
+  assert.equal(readLastPrime(l, { actor: "a" }), null);
+  assert.equal(takeCompacted(l, { actor: "b" }), false);
+  assert.equal(takeCompacted(l, { actor: "a" }), true);
+});
