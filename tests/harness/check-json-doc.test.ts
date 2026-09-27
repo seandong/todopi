@@ -30,10 +30,10 @@ const DOC = `# t
 type BItem = { name: string };
 \`\`\`
 `;
-function run(doc: string, dto = DTO, env: NodeJS.ProcessEnv = process.env): string[] {
+function run(doc: string, dto = DTO, env: NodeJS.ProcessEnv = process.env, extra: Record<string, string> = {}): string[] {
   const root = mkdtempSync(join(tmpdir(), "todopi-arch028-"));
   // 与本仓库一样是 ES 模块（没有它 tsc 按 CommonJS 判，dto 里的 export const 会报错）
-  const files: Record<string, string> = { "docs/json.md": doc, "src/output/dto/a.ts": dto, "package.json": '{ "type": "module" }\n' };
+  const files: Record<string, string> = { "docs/json.md": doc, "src/output/dto/a.ts": dto, "package.json": '{ "type": "module" }\n', ...extra };
   for (const [name, body] of Object.entries(files)) {
     mkdirSync(dirname(join(root, name)), { recursive: true });
     writeFileSync(join(root, name), body);
@@ -158,4 +158,11 @@ test("注释、行首空白、导出列表里的注释都认得：照样要求�
   assert.deepEqual(run(DOC, `${DTO_OK}export const re = /export type Q = 1/;\n`), []);
   // 注释与字符串里的 export、名叫 export 的属性不是导出
   assert.deepEqual(run(DOC, `${DTO_OK}// export type X = 1;\nconst s = "export type Y = 1";\nconst t = "q\\\" export type Z = { a: 1 }; \\\"";\ntype P = { export: string };\n`), []);
+});
+
+test("子目录里的 dto 也查（只看一层时它绕过了检查）", () => {
+  const out = run(DOC, DTO_OK, process.env, { "src/output/dto/nested/deeper/b.ts": "export type NewReport = { id: string };\n" });
+  assert.match(out.join("\n"), /NewReport \(src\/output\/dto\/nested\/deeper\/b\.ts\) is part of the --json output but has no section/);
+  const bad = run(DOC, DTO_OK, process.env, { "src/output/dto/nested/b.ts": "export default interface D { id: string }\n" });
+  assert.match(bad.join("\n"), /src\/output\/dto\/nested\/b\.ts: unsupported export form/);
 });

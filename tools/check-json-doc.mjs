@@ -133,8 +133,10 @@ function runTsc(config) {
 
 // 导出清单从**编译器产出的声明文件**里读，而不是从源码里猜：.d.ts 里没有注释、没有正则字面量、没有函数体，声明都是规范形式。
 // 自己写词法去剥源码（注释、字符串、正则……）每一轮评审都能再找到一处认错的（F27 五轮），那条路走不完。
+// 递归：子目录里的 dto 也是 dto（只看一层时，src/output/dto/nested/a.ts 的导出绕过了检查——Codex 六轮）
 const sourceFiles = SOURCES.flatMap((dir) => existsSync(join(root, dir))
-  ? readdirSync(join(root, dir)).filter((x) => x.endsWith(".ts") && !x.endsWith(".d.ts")).sort().map((f) => `${dir}/${f}`) : []);
+  ? readdirSync(join(root, dir), { recursive: true }).map(String).filter((x) => x.endsWith(".ts") && !x.endsWith(".d.ts"))
+    .map((f) => `${dir}/${f.split("\\").join("/")}`).sort() : []);
 const dts = join(work, "dts");
 const emitted = runTsc({
   compilerOptions: { ...COMPILER, declaration: true, emitDeclarationOnly: true, removeComments: true, outDir: dts, rootDir: join(root, "src") },
@@ -143,40 +145,37 @@ const emitted = runTsc({
 
 /** name → 源文件（相对 root） */
 const exported = new Map();
-for (const dir of SOURCES) {
-  const abs = join(root, dir);
-  if (!existsSync(abs)) continue;
-  for (const f of readdirSync(abs).filter((x) => x.endsWith(".ts")).sort()) {
-    const decl = join(dts, relative(join(root, "src"), join(abs, f)).replace(/\.ts$/, ".d.ts"));
-    if (!existsSync(decl)) {
-      say(`${dir}/${f}: tsc did not emit declarations for it, so its exports cannot be checked${emitted.failed ? `: ${emitted.output.split("\n")[0]}` : ""}`);
-      continue;
-    }
-    // 声明文件里只剩字面量类型里的字符串：仍去掉它们的内容，免得 "export" 这样的字面量被当成导出
-    const text = code(readFileSync(decl, "utf8"));
-    // **失败关闭**：每一个 `export` 都必须是认得的形式之一，认不得的直接报错——而不是用行首正则去猜。四轮评审各找到一种绕过
-    // 「每个导出都要有小节」的写法（interface、导出列表、export type *、注释 / 缩进 / default / namespace……），
-    // 追着列举永远列不完；只放行下面几种，别的一律拒绝。
-    for (const m of text.matchAll(/\bexport\b/g)) {
-      const rest = text.slice(m.index);
-      // 名叫 export 的属性（`{ export: string }`）不是导出
-      if (/^export\s*[?:(,;)]/.test(rest)) continue;
-      const decl = /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)\s*(?:[=<{]|extends\b)/.exec(rest);
-      const list = /^export\s+(?:type\s+)?\{([^}]*)\}/.exec(rest);
-      if (decl !== null) {
-        if (!exported.has(decl[1])) exported.set(decl[1], `${dir}/${f}`);
-      } else if (list !== null) {
-        for (const item of list[1].split(",").map((x) => x.trim()).filter((x) => x !== "")) {
-          const name = item.replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim();
-          if (/^[A-Za-z_$][\w$]*$/.test(name)) { if (!exported.has(name)) exported.set(name, `${dir}/${f}`); }
-          else if (dir === "src/output/dto") say(`${dir}/${f}: cannot read the export ${JSON.stringify(item)}`);
-        }
-      } else if (/^export\s+(?:declare\s+)?(?:async\s+)?(?:function|const)\b/.test(rest)) {
-        // 运行时的映射函数（toDoctorReport 之类）：不是类型，不进契约
-      } else if (dir === "src/output/dto") {
-        say(`${dir}/${f}: unsupported export form ${JSON.stringify(rest.slice(0, 40).replace(/\s+/g, " "))}; `
-          + "export --json types as `export type Name = …` or `export interface Name …`, or list them by name");
+for (const source of sourceFiles) {
+  const isDto = source.startsWith("src/output/dto/");
+  const declFile = join(dts, relative(join(root, "src"), join(root, source)).replace(/\.ts$/, ".d.ts"));
+  if (!existsSync(declFile)) {
+    say(`${source}: tsc did not emit declarations for it, so its exports cannot be checked${emitted.failed ? `: ${emitted.output.split("\n")[0]}` : ""}`);
+    continue;
+  }
+  // 声明文件里只剩字面量类型里的字符串：仍去掉它们的内容，免得 "export" 这样的字面量被当成导出
+  const text = code(readFileSync(declFile, "utf8"));
+  // **失败关闭**：每一个 `export` 都必须是认得的形式之一，认不得的直接报错——而不是用行首正则去猜。四轮评审各找到一种绕过
+  // 「每个导出都要有小节」的写法（interface、导出列表、export type *、注释 / 缩进 / default / namespace……），
+  // 追着列举永远列不完；只放行下面几种，别的一律拒绝。
+  for (const m of text.matchAll(/\bexport\b/g)) {
+    const rest = text.slice(m.index);
+    // 名叫 export 的属性（`{ export: string }`）不是导出
+    if (/^export\s*[?:(,;)]/.test(rest)) continue;
+    const decl = /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)\s*(?:[=<{]|extends\b)/.exec(rest);
+    const list = /^export\s+(?:type\s+)?\{([^}]*)\}/.exec(rest);
+    if (decl !== null) {
+      if (!exported.has(decl[1])) exported.set(decl[1], source);
+    } else if (list !== null) {
+      for (const item of list[1].split(",").map((x) => x.trim()).filter((x) => x !== "")) {
+        const name = item.replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim();
+        if (/^[A-Za-z_$][\w$]*$/.test(name)) { if (!exported.has(name)) exported.set(name, source); }
+        else if (isDto) say(`${source}: cannot read the export ${JSON.stringify(item)}`);
       }
+    } else if (/^export\s+(?:declare\s+)?(?:async\s+)?(?:function|const)\b/.test(rest)) {
+      // 运行时的映射函数（toDoctorReport 之类）：不是类型，不进契约
+    } else if (isDto) {
+      say(`${source}: unsupported export form ${JSON.stringify(rest.slice(0, 40).replace(/\s+/g, " "))}; `
+        + "export --json types as `export type Name = …` or `export interface Name …`, or list them by name");
     }
   }
 }
