@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `a08abd8` —— F24 建好之后改验收标准与 Plan、--edit 经 todopi done 关闭（verify=pass；dirty=true 只是账本自身的 note / check 改动未提交）。
+- Last commit: `28dbdb2` —— F25 格式版本更高的账本只读 经 todopi done 关闭（verify=pass；dirty 只是账本自身的 note / check 改动）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 36 个任务，25 个 `closed/done`、11 个 `open`：v0.1 缺口审计建的 13 个（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
+- 账本: `.todopi/` 36 个任务，26 个 `closed/done`、10 个 `open`：v0.1 缺口审计建的 13 个（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,8 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+50. ~~F25 格式版本更高的账本：读照常、写退出 4（spec §9）~~ 已完成（2026-09-28）：闸门从读取口挪到写入口（withLedgerLock 拿锁前后各判一次、
+    init、各落盘处），读磁盘上此刻的版本；createTask 原先绕过了闸门（e2e 发现）。handoff 整条退出 4，prime 会话状态不写不取。D046。Codex 四轮 → Go。
 49. ~~F24 建好之后改验收标准与 Plan；add / edit --edit（FR-T4）~~ 已完成（2026-09-28）：edit 的 --plan、--ac-add / --ac-set / --ac-rm
     （编号是编辑前的编号），add --plan，add / edit --edit（只在终端里开 $VISUAL / $EDITOR）。已勾选的标准文字与编号都不变，AC 小节里的
     嵌套项与普通文字原样保留（spec §5.3.2），编辑器开着时任务被改则冲突退出。D045。Codex 三轮 → Go。
