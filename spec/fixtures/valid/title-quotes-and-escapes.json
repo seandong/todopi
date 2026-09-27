@@ -1,5 +1,5 @@
 {
-  "note": "标题含双引号与反斜杠。写入端必须转义 \\\\ 与 \\\"，读取端必须还原。",
+  "note": "The title contains double quotes and backslashes. Writers must escape \\\\ and \\\"; readers must restore them.",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "He said \"yes\" then left C:\\path",

@@ -1,5 +1,5 @@
 {
   "violates": "invariant-4",
-  "reason": "blocked_by 指向不存在的任务。常见于手工删除文件或合并冲突解错。",
+  "reason": "blocked_by points at a task that does not exist. Usually the result of deleting a file by hand or resolving a merge conflict wrongly.",
   "reader_must": "reject or report; MUST NOT silently accept"
 }

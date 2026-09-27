@@ -1,5 +1,5 @@
 {
   "violates": "invariant-6",
-  "reason": "updated < created。通常是时钟回拨或手工编辑。",
+  "reason": "updated < created. Usually a clock that went backwards, or a hand edit.",
   "reader_must": "reject or report; MUST NOT silently accept"
 }

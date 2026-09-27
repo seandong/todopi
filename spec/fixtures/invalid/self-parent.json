@@ -1,5 +1,5 @@
 {
   "violates": "invariant-5",
-  "reason": "parent 等于自身。长度为 1 的环。",
+  "reason": "parent equals the task itself: a cycle of length 1.",
   "reader_must": "reject or report; MUST NOT silently accept"
 }

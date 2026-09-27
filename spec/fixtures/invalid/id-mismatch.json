@@ -1,5 +1,5 @@
 {
   "violates": "invariant-1",
-  "reason": "frontmatter 的 id 与文件名不符。文件名是 id-mismatch.md，id 是 tp-999999。",
+  "reason": "The frontmatter id does not match the file name. The file name is id-mismatch.md; the id is tp-999999.",
   "reader_must": "reject or report; MUST NOT silently accept"
 }

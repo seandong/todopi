@@ -1,5 +1,5 @@
 {
-  "note": "标题形似数字。不加引号时被解析为浮点 1.2，回写丢掉尾零。",
+  "note": "The title looks like a number. Unquoted it parses as the float 1.2, and writing it back loses the trailing zero.",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "1.20",

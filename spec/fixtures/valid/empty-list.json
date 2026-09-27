@@ -1,5 +1,5 @@
 {
-  "note": "空列表等价于字段缺失，但必须能被解析。",
+  "note": "An empty list is equivalent to the field being absent, but it must still parse.",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "No labels",

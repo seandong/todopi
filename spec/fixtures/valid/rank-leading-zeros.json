@@ -1,5 +1,5 @@
 {
-  "note": "rank 形似数字。规格定义 rank 是字符串，不加引号时变成整数 7，排序语义被破坏。",
+  "note": "The rank looks like a number. The spec defines rank as a string; unquoted it becomes the integer 7 and the ordering breaks.",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "Ranked task",

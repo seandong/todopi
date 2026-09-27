@@ -1,5 +1,5 @@
 {
-  "note": "十二个字段全部出现。",
+  "note": "All twelve fields present.",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "Support passkeys on /login",

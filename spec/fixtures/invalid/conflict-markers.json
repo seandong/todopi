@@ -1,5 +1,5 @@
 {
   "violates": "invariant-7",
-  "reason": "未解决的 git 冲突标记出现在行首。v0.1 接受手工解决冲突，doctor 负责检出。",
+  "reason": "Unresolved git conflict markers at the start of a line. v0.1 allows conflicts to be resolved by hand; doctor detects any markers left unresolved.",
   "reader_must": "reject or report; MUST NOT silently accept"
 }

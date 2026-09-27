@@ -1,5 +1,5 @@
 {
   "violates": "invariant-3",
-  "reason": "assignee 在 open 时 MUST 缺席。reopen 若只移除 resolution 就会产出这个形态——这是规格 1.1 修掉的缺陷。",
+  "reason": "assignee MUST be absent while the task is open. A reopen that only removes resolution produces this shape — a defect fixed in spec revision 1.1.",
   "reader_must": "reject or report; MUST NOT silently accept"
 }

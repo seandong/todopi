@@ -1,5 +1,5 @@
 {
-  "note": "人手写、不加引号。读取端 MUST 接受（§5.1 的引号规则只约束写入端）。注意 created/updated 在此处会被 YAML 解析为时间戳类型而非字符串，读取端须归一化为 RFC 3339 字符串。doctor --fix 会把这个文件规范化为加引号形态。",
+  "note": "Written by hand, without quotes. Readers MUST accept it (the quoting rule in §5.1 binds writers only). Note that YAML parses created/updated here as timestamps rather than strings; readers must normalize them to RFC 3339 strings. doctor --fix rewrites the other fields into the quoted form but keeps the updated entry byte for byte, unquoted as it is (§6.3).",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "A hand-written task",
