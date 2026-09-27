@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `c2e4ab5` —— F37 语料说明译成英文 经 todopi done 关闭（verify=pass；dirty 只是账本自身的 note / check 改动）。
+- Last commit: `9e05e1e` —— 首发清单状态更新（README、import beads 两项勾上）；建 tp-lv7y3h。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 39 个任务，37 个 `closed/done`、2 个 `open`，都等维护者：tp-ujjc6y（brew：代码已合并，只差在 CLT 较新的机器上 brew install 实测一次）、tp-zagvp5（Cursor 实机验证）。
+- 账本: `.todopi/` 40 个任务，37 个 `closed/done`、3 个 `open`：tp-lv7y3h（首发后跟进的准备：六家市场 / 注册表的包与 awesome 条目，label m5），加两个等维护者的：tp-ujjc6y（brew：只差在 CLT 较新的机器上 brew install 实测一次）、tp-zagvp5（Cursor 实机验证）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
