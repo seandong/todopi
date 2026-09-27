@@ -95,8 +95,8 @@ for (const dir of SOURCES) {
         .map((x) => x.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim()).filter((x) => /^[A-Za-z][A-Za-z0-9]*$/.test(x))),
     ];
     for (const n of names) if (!exported.has(n)) exported.set(n, `${dir}/${f}`);
-    // `export * from` 导出了什么这里看不见：dto 里不许用，逐个写出来
-    if (dir === "src/output/dto" && /^export\s+\*/m.test(text)) say(`${dir}/${f}: \`export *\` hides which types are part of --json; export them by name`);
+    // `export * from`、`export type * from`（含 `* as Ns`）导出了什么这里看不见：dto 里不许用，逐个写出来
+    if (dir === "src/output/dto" && /^export\s+(?:type\s+)?\*/m.test(text)) say(`${dir}/${f}: \`export *\` hides which types are part of --json; export them by name`);
   }
 }
 

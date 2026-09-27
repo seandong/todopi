@@ -123,6 +123,8 @@ test("interface、declare、导出列表与重导出也算导出：没写进文�
   assert.match(run(doc("number"), "export interface NewReport { id: string }\n").join("\n"), /NewReport does not match/);
 });
 
-test("dto 里的 export *：报出来（看不见导出了什么）", () => {
-  assert.match(run(DOC, `${DTO_OK}export * from "./b.ts";\n`).join("\n"), /`export \*` hides which types/);
+test("dto 里的 export * / export type *（含 * as Ns）：报出来（看不见导出了什么）", () => {
+  for (const line of ['export * from "./b.ts";', 'export type * from "./b.ts";', 'export * as Ns from "./b.ts";', 'export type * as Ns from "./b.ts";']) {
+    assert.match(run(DOC, `${DTO_OK}${line}\n`).join("\n"), /`export \*` hides which types/, line);
+  }
 });
