@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `8e9951c` —— tp-1ssqrw（OpenCode 压缩后注入实测）经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `f27f936` —— Codex 额度恢复后对子代理评审过的改动补审，修复合入。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -158,6 +158,10 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+45. Codex 补审（2026-09-28）：额度恢复后，把只经子代理评审的 F20 / F21 / 探针 / 看板兜底轮询交给 Codex 再审。发现并修好：Beads 自己挡自己的
+    边被静默丢（改为计数并警告）；install.sh 的安装目录竞态——临时文件名可预测、别人可写的目录、上级目录与路径里的符号链接、ACL（含上级目录；
+    macOS 家目录默认的 deny ACL 不算）、getfacl 读失败时误判为安全。最终做法：解析成物理路径一次、此后只用它，逐级查属主 / 权限位 / ACL，
+    临时文件用 mktemp。六轮 → Go。
 44. ~~tp-1ssqrw OpenCode 压缩后注入实测~~ 已完成（2026-09-27）。不需要凭据：OpenCode 自带的自定义 provider 指向本地假 OpenAI 兼容服务器
     （tools/probes/openai-fake-api.mjs），在真实运行时里看请求体——压缩后第一个请求的系统提示里出现压缩前刚记的标记，之前（含压缩摘要请求）
     都没有。验收标准 #1 原文「模型能原样引出」按替代验证改写（假模型不回显；看请求体更直接），Log 里写明。子代理评审 Go。

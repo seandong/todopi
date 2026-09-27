@@ -72,6 +72,45 @@ sha256_of() {
   fi
 }
 
+# The install dir and every directory above it must be out of other users' reach, or someone else could replace the
+# directory or a file in it mid-install. The path is resolved to its physical form first (pwd -P) and only that form is used
+# from then on: a symlink anywhere in what the user gave (an attacker-owned link under /tmp, a trailing slash) is followed
+# once, checked, and never looked at again. Each level of the physical path must be owned by us or root, not writable by
+# group or others unless sticky (others cannot rename or delete our entries there, as in /tmp), and carry no ACL entry that
+# lets anyone else write (ACL rights do not show in the mode bits). Deny entries such as macOS's default
+# "group:everyone deny delete" on home directories are fine.
+acl_lets_others_write() { # dir
+  case "$(ls -ld "$1" | awk '{ print $1 }')" in *+) ;; *) return 1 ;; esac
+  if [ "$(uname -s)" = "Darwin" ]; then
+    ls -led "$1" | awk -v me="user:$(id -un)" 'NR > 1 && $0 ~ / allow / && $0 !~ me " allow" &&
+      $0 ~ /add_file|add_subdirectory|delete_child|write|append|delete|chown|writesecurity/ { found = 1 } END { exit !found }'
+    return $?
+  fi
+  command -v getfacl >/dev/null 2>&1 || return 0 # an ACL we cannot read: assume the worst
+  # Capture first and check getfacl's own status: piping straight into awk would turn a failed read into "no risky ACL"
+  acl=$(getfacl -cp "$1" 2>/dev/null) || return 0
+  [ -n "$acl" ] || return 0
+  printf '%s\n' "$acl" | awk -F: -v me="$(id -un)" '
+    $1 == "mask" { mask = $3 }
+    ($1 == "user" && $2 != "" && $2 != me) || ($1 == "group" && $2 != "") { if ($3 ~ /w/) named = 1 }
+    END { exit !(named && (mask == "" || mask ~ /w/)) }'
+}
+
+safe_path() { # dir -> prints the physical path, or dies
+  phys=$(cd "$1" 2>/dev/null && pwd -P) || die "cannot enter ${1}"
+  uid=$(id -u)
+  d=$phys
+  while :; do
+    [ -n "$(find "$d" -prune \( -user "$uid" -o -user 0 \) \( \( ! -perm -020 ! -perm -002 \) -o -perm -1000 \) 2>/dev/null)" ] \
+      || die "${d} is owned by another user or writable by other users; refusing to install into ${phys} (set TODOPI_INSTALL_DIR to a directory only you control)"
+    acl_lets_others_write "$d" && die "${d} has an access control list that lets other users write to it; refusing to install into ${phys}"
+    [ "$d" = "/" ] && break
+    d=$(dirname "$d")
+  done
+  [ -n "$(find "$phys" -prune -user "$uid" 2>/dev/null)" ] || die "${phys} must be owned by you; refusing to install into it"
+  printf '%s\n' "$phys"
+}
+
 platform() {
   case "$(uname -s)" in
     Darwin) os=darwin ;;
@@ -155,8 +194,13 @@ install_binary() {
   # mounted noexec; running it before the rename means a binary that cannot start here (for example on musl-based Linux such
   # as Alpine, which the glibc builds do not support) is never reported as installed; the rename means an interrupted install
   # never leaves half a binary in place.
-  new="$INSTALL_DIR/.todopi.new.$$"
-  cp "$work/x/todopi" "$new" && chmod 755 "$new" || { rm -f "$new"; die "could not write to ${INSTALL_DIR}"; }
+  # Writing into a directory another user can modify cannot be made race-free with shell tools: they can swap a file we
+  # just created for a symlink between two commands, and cp / chmod would follow it to a file elsewhere. The installer is
+  # meant to be run by the user who owns the install dir; safe_path refuses anything else, then mktemp is enough.
+  INSTALL_DIR=$(safe_path "$INSTALL_DIR") || exit 1
+  new=$(mktemp "$INSTALL_DIR/.todopi.new.XXXXXX") || die "could not create a temporary file in ${INSTALL_DIR}"
+  cp "$work/x/todopi" "$new" && [ -f "$new" ] && [ ! -L "$new" ] && chmod 755 "$new" \
+    || { rm -f "$new"; die "could not write a regular file to ${INSTALL_DIR}"; }
   if ! "$new" --version >/dev/null 2>&1; then
     rm -f "$new"
     if [ "$NPM_FAILED" = "1" ]; then die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)), and the npm package could not be installed either (see above)"

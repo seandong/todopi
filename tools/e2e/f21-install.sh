@@ -104,7 +104,7 @@ out="$(binstall "$TMP/b1" TODOPI_FORCE_BINARY=1)"; rc=$?
 
 # 没有 Node 的 PATH：只放安装器要用的工具
 NB="$TMP/nonode"; mkdir -p "$NB"
-for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr; do
+for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr find id; do
   p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$NB/$t"
 done
 out="$(PATH="$NB" binstall "$TMP/b2")"; rc=$?
@@ -164,7 +164,7 @@ printf '%s  %s\n' "$(sha "$REL/v$FV/$ASSET")" "$ASSET" > "$REL/v$FV/SHA256SUMS"
 
 # npm 这条路走不通时退回二进制（F21 评审）：有 Node 没有 npm；npm 装不上（包不存在）；之前装过二进制、npm 撞上已有文件
 NN="$TMP/nodenonpm"; mkdir -p "$NN"
-for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr node; do
+for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr find id node; do
   p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$NN/$t"
 done
 out="$(PATH="$NN" binstall "$TMP/c1")"; rc=$?
@@ -209,6 +209,56 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "^${FV}-fake$" && ok "/tmp 挂成 noexec：照样装得上" || fail "noexec /tmp：rc=${rc}：$out"
 else
   note "没有 docker：noexec /tmp 的用例跳过"
+fi
+
+# 安装目录里的临时文件名不可预测（mktemp），也不留下：预先放好的 PID 名链接不会被跟随（Codex 补审）
+out="$(binstall "$TMP/c8" TODOPI_FORCE_BINARY=1)"; rc=$?
+[ "$rc" -eq 0 ] && [ -z "$(ls -A "$TMP/c8/.local/bin" | grep '^\.todopi\.new')" ] && ok "安装后不留临时文件" || fail "rc=${rc}：$(ls -A "$TMP/c8/.local/bin")"
+grep -q 'mktemp "$INSTALL_DIR/.todopi.new.XXXXXX"' install.sh && ! grep -q '\.todopi\.new\.\$\$' install.sh \
+  && ok "安装目录里的临时文件用 mktemp 独占创建，不用可预测的 PID 名" || fail "install.sh 仍用 PID 名的临时文件"
+
+# 安装目录别人可写（组可写 / 所有人可写）：拒绝——在那种目录里写文件做不到无竞态（Codex 补审复核）
+mkdir -p "$TMP/c9/shared"; chmod 775 "$TMP/c9/shared"
+out="$(binstall "$TMP/c9" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c9/shared")"; rc=$?
+[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "writable by other users" && [ ! -e "$TMP/c9/shared/todopi" ] \
+  && ok "组可写的安装目录：拒绝安装" || fail "rc=${rc}：$out"
+chmod 757 "$TMP/c9/shared"
+out="$(binstall "$TMP/c9" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c9/shared")"; rc=$?
+[ "$rc" -ne 0 ] && [ ! -e "$TMP/c9/shared/todopi" ] && ok "所有人可写的安装目录：拒绝安装" || fail "rc=${rc}：$out"
+chmod 755 "$TMP/c9/shared"
+# 上级目录别人可写（可以把整个安装目录换掉）、安装目录是符号链接、安装目录带 ACL：都拒绝（Codex 补审复核）
+mkdir -p "$TMP/c10/open/bin"; chmod 777 "$TMP/c10/open"
+out="$(binstall "$TMP/c10" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c10/open/bin")"; rc=$?
+[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "c10/open is owned by another user or writable" && [ ! -e "$TMP/c10/open/bin/todopi" ] \
+  && ok "上级目录别人可写：拒绝安装" || fail "rc=${rc}：$out"
+chmod 1777 "$TMP/c10/open"
+out="$(binstall "$TMP/c10" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c10/open/bin")"; rc=$?
+[ "$rc" -eq 0 ] && ok "上级目录带 sticky 位（/tmp 那样）：允许" || fail "rc=${rc}：$out"
+chmod 755 "$TMP/c10/open"
+# 路径里的符号链接（安装目录本身、上级目录、末尾带斜杠）：解析成物理路径一次、只用它——装进链接指向的真实目录（Codex 补审再复核）
+mkdir -p "$TMP/c11/real/bin"; ln -s "$TMP/c11/real" "$TMP/c11/link"
+out="$(binstall "$TMP/c11" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c11/link/bin/")"; rc=$?
+[ "$rc" -eq 0 ] && [ -x "$TMP/c11/real/bin/todopi" ] && [ -L "$TMP/c11/link" ] && ok "路径里有符号链接、末尾带斜杠：解析成物理路径后装进真实目录" || fail "rc=${rc}：$out"
+grep -q 'INSTALL_DIR=$(safe_path "$INSTALL_DIR")' install.sh && ok "检查之后只用解析出的物理路径（链接事后改指也改不到写入位置）" || fail "install.sh 没有改用物理路径"
+if [ "$(uname -s)" = "Darwin" ]; then
+  mkdir -p "$TMP/c12/bin" && chmod +a "everyone allow add_file,delete_child" "$TMP/c12/bin"
+  out="$(binstall "$TMP/c12" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c12/bin")"; rc=$?
+  [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "access control list" && [ ! -e "$TMP/c12/bin/todopi" ] && ok "安装目录带允许他人写的 ACL：拒绝安装" || fail "rc=${rc}：$out"
+  mkdir -p "$TMP/c13/up/bin" && chmod +a "everyone allow add_file,delete_child" "$TMP/c13/up"
+  out="$(binstall "$TMP/c13" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c13/up/bin")"; rc=$?
+  [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "c13/up has an access control list" && [ ! -e "$TMP/c13/up/bin/todopi" ] && ok "上级目录带允许他人写的 ACL：拒绝安装" || fail "rc=${rc}：$out"
+  mkdir -p "$TMP/c14/home/bin" && chmod +a "group:everyone deny delete" "$TMP/c14/home"
+  out="$(binstall "$TMP/c14" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c14/home/bin")"; rc=$?
+  [ "$rc" -eq 0 ] && ok "只有 deny 条目的 ACL（macOS 家目录默认那条）：允许" || fail "rc=${rc}：$out"
+fi
+
+# ACL 读不出来（getfacl 报错）：当作不安全，拒绝（Codex 补审第五轮）。用一个会失败的 getfacl 桩、并让 ls 报告 + 来走到这一支
+if [ "$(uname -s)" != "Darwin" ]; then
+  FB="$TMP/failacl"; mkdir -p "$FB"
+  printf '#!/bin/sh\nexit 1\n' > "$FB/getfacl"; chmod +x "$FB/getfacl"
+  printf '#!/bin/sh\n/bin/ls "$@" | sed "1s/^\\([^ ]*\\)/\\1+/"\n' > "$FB/ls"; chmod +x "$FB/ls"
+  out="$(PATH="$FB:$PATH" binstall "$TMP/c15" TODOPI_FORCE_BINARY=1)"; rc=$?
+  [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "access control list" && ok "ACL 读不出来：拒绝安装（不当成安全）" || fail "rc=${rc}：$out"
 fi
 
 # PATH 提示按 shell 给出该写的文件

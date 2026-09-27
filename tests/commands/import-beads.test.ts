@@ -338,3 +338,10 @@ test("一万五千个任务的 blocks 链：不爆栈，建的顺序正确", () 
   assert.equal(p.tasks.length, n);
   assert.deepEqual(p.tasks.slice(0, 3).map((t) => t.beadsId), ["x0", "x1", "x2"]);
 });
+
+test("自己挡自己的 blocks 边：计入 cycleEdges 并警告（Codex 补审）", () => {
+  const p = planBeadsImport([{ id: "x", title: "self", dependencies: [dep("x", "x", "blocks")] }] as BeadsIssue[], new Set(), () => true);
+  assert.deepEqual(p.tasks[0]!.blockedBy, []);
+  assert.equal(p.dropped.cycleEdges, 1);
+  assert.match(p.warnings.join("\n"), /x: blocks itself/);
+});
