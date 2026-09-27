@@ -1,6 +1,6 @@
 # 发布：推送 v<version> 标签时构建 npm 包与四个平台的单二进制，生成 SHA256SUMS，建 GitHub Release 并附上。
 # install.sh 从这里取二进制（/releases/latest 与 /releases/download/v<version>/...）。
-# 发 npm 需要仓库 secret NPM_TOKEN；没有就跳过那一步（发布是维护者的事，工作流不替人决定）。
+# 发 npm 需要仓库 secret NPM_TOKEN；没有就整个失败（先发 npm 再建 Release，见下）。发布是维护者的动作。
 name: Release
 
 on:
@@ -33,13 +33,15 @@ jobs:
             tar -czf out/todopi-$VERSION-$t.tar.gz -C build/$t todopi
           done
           (cd out && sha256sum todopi-$VERSION-*.tar.gz > SHA256SUMS)
-      - name: GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes
+      # 先发 npm，再建 Release：install.sh 在有 Node 的机器上装 todopi@<version>，Release 出现而 npm 上没有这个版本时，
+      # 那些机器会拿到 404（F21 评审）。所以没有 NPM_TOKEN、或发布失败，整个任务失败、不建 Release。
       - name: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then echo "NPM_TOKEN is not set; skipping npm publish"; exit 0; fi
+          if [ -z "$NODE_AUTH_TOKEN" ]; then echo "NPM_TOKEN is not set: refusing to create a release that npm does not have"; exit 1; fi
           npm publish out/todopi-${GITHUB_REF_NAME#v}.tgz --access public
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes

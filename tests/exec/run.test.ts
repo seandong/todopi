@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, statSy
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runCommand } from "../../src/exec/run.ts";
+import { runCommand, RUNNER_ENV } from "../../src/exec/run.ts";
 
 const dir = () => mkdtempSync(join(tmpdir(), "todopi-run-"));
 
@@ -258,4 +258,14 @@ test("日志目标慢下来时有背压 —— 子进程跟着停，输出不堆
 
   assert.equal(finishedWhileStalled, false,
     "日志写不动时子进程照样跑完了 —— 说明输出被整个吞进了缓冲，没有背压");
+});
+
+test("runner 读完内部环境变量就删掉：verify 命令看不到它（里面再调 todopi 不会被当成 runner，F21）", () => {
+  const d = dir();
+  const runner = join(import.meta.dirname, "../../src/exec/runner.ts");
+  const payload = JSON.stringify({ command: 'echo "[${TODOPI_INTERNAL_VERIFY_RUNNER:-unset}]"', cwd: d, timeoutMs: null, graceMs: 1000, maxOutputBytes: 65536, logPath: null });
+  const r = spawnSync(process.execPath, [runner], { encoding: "utf8", env: { ...process.env, [RUNNER_ENV]: payload } });
+  const out = JSON.parse(r.stdout) as { code: number; output: string };
+  assert.equal(out.code, 0);
+  assert.match(out.output, /\[unset\]/);
 });

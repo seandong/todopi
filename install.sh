@@ -41,9 +41,16 @@ fetch() { # fetch <url> <output file>
 
 latest_version() {
   # The redirect of /releases/latest names the tag: .../releases/tag/v1.2.3
-  need curl
   releases=${TODOPI_RELEASES_URL:-"$DEFAULT_BASE"}
-  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "${releases}/latest") || die "could not reach ${releases}/latest"
+  if command -v curl >/dev/null 2>&1; then
+    url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "${releases}/latest") || die "could not reach ${releases}/latest"
+  elif command -v wget >/dev/null 2>&1; then
+    # wget follows the redirect; the last Location header it printed is the tag page
+    url=$(wget -q -O /dev/null --server-response "${releases}/latest" 2>&1 | awk 'tolower($1) == "location:" { l = $2 } END { print l }' | tr -d '\r')
+    [ -n "$url" ] || die "could not reach ${releases}/latest"
+  else
+    die "this installer needs curl or wget"
+  fi
   tag=${url##*/}
   case "$tag" in
     v[0-9]*) printf '%s\n' "${tag#v}" ;;
@@ -91,22 +98,27 @@ fi
 
 mkdir -p "$INSTALL_DIR" || die "cannot create ${INSTALL_DIR}"
 
-if [ "${TODOPI_FORCE_BINARY:-}" != "1" ] && node_ok; then
-  need npm
+install_npm() { # returns non-zero (and says why) instead of dying: the caller falls back to the binary
   spec=${TODOPI_NPM_SPEC:-"todopi@${VERSION}"}
   # npm puts the command in <prefix>/bin: with prefix ~/.local that is ~/.local/bin
   prefix=$(dirname "$INSTALL_DIR")
   say "Node.js $(node -p 'process.versions.node') found; installing the npm package ${spec} into ${prefix}"
-  npm install --global --prefix "$prefix" "$spec" >/dev/null || die "npm install failed"
-  [ -x "$INSTALL_DIR/todopi" ] || die "npm finished but ${INSTALL_DIR}/todopi is not there (is TODOPI_INSTALL_DIR a bin directory?)"
-else
+  if ! log=$(npm install --global --prefix "$prefix" "$spec" 2>&1); then
+    printf '%s\n' "$log" | tail -5 >&2
+    say "npm could not install ${spec}; falling back to the binary"
+    return 1
+  fi
+  [ -x "$INSTALL_DIR/todopi" ] || { say "npm finished but ${INSTALL_DIR}/todopi is not there; falling back to the binary"; return 1; }
+}
+
+install_binary() {
   target=$(platform)
   asset="todopi-${VERSION}-${target}.tar.gz"
   base="${BASE}/v${VERSION}"
   need tar
   work=$(mktemp -d 2>/dev/null || mktemp -d -t todopi)
   trap 'rm -rf "$work"' EXIT INT TERM
-  say "no Node.js >= 20 found; downloading ${asset}"
+  say "downloading ${asset}"
   fetch "${base}/${asset}" "$work/$asset" || die "could not download ${base}/${asset}"
 
   if [ "${TODOPI_SKIP_CHECKSUM:-}" = "1" ]; then
@@ -135,7 +147,23 @@ else
   tar -xzf "$work/$asset" -C "$work/x"
   [ -f "$work/x/todopi" ] && [ ! -L "$work/x/todopi" ] || die "the archive does not contain a regular file named todopi"
   chmod 755 "$work/x/todopi"
-  mv -f "$work/x/todopi" "$INSTALL_DIR/todopi"
+  # Run it before installing: a binary that cannot start here (for example on musl-based Linux such as Alpine,
+  # which the glibc builds do not support) must not be reported as installed.
+  "$work/x/todopi" --version >/dev/null 2>&1 || die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)); install Node.js >= 20 and run: npm i -g todopi"
+  # Copy next to the target, then rename: an interrupted install never leaves half a binary in place.
+  cp "$work/x/todopi" "$INSTALL_DIR/.todopi.new.$$" && mv -f "$INSTALL_DIR/.todopi.new.$$" "$INSTALL_DIR/todopi" \
+    || { rm -f "$INSTALL_DIR/.todopi.new.$$"; die "could not write ${INSTALL_DIR}/todopi"; }
+}
+
+# The npm path needs Node >= 20, npm, and an install dir named bin (npm puts commands in <prefix>/bin).
+if [ "${TODOPI_FORCE_BINARY:-}" != "1" ] && node_ok && command -v npm >/dev/null 2>&1 && [ "$(basename "$INSTALL_DIR")" = "bin" ] \
+  && install_npm; then
+  :
+else
+  if ! node_ok; then say "no Node.js >= 20 found"
+  elif ! command -v npm >/dev/null 2>&1; then say "Node.js found but npm is not; installing the binary"
+  fi
+  install_binary
 fi
 
 say "installed: $("$INSTALL_DIR/todopi" --version 2>/dev/null || echo "$INSTALL_DIR/todopi") at ${INSTALL_DIR}/todopi"
@@ -143,7 +171,12 @@ say "installed: $("$INSTALL_DIR/todopi" --version 2>/dev/null || echo "$INSTALL_
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) say "next: cd into a repository and run \`todopi init\`" ;;
   *)
+    case "${SHELL:-}" in
+      */zsh) rc="~/.zshrc" ;;
+      */bash) if [ "$(uname -s)" = "Darwin" ]; then rc="~/.bash_profile"; else rc="~/.bashrc"; fi ;;
+      *) rc="~/.profile" ;;
+    esac
     say "${INSTALL_DIR} is not on your PATH. Add it, then open a new shell:"
-    say "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.profile"
+    say "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ${rc}"
     ;;
 esac

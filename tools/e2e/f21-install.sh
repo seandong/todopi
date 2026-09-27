@@ -42,14 +42,40 @@ out="$(HOME="$A" TODOPI_VERSION="$VERSION" TODOPI_NPM_SPEC="$TGZ" sh ./install.s
 [ "$rc" -eq 0 ] && [ -x "$A/.local/bin/todopi" ] && printf '%s' "$out" | grep -q "installing the npm package" \
   && ok "install.sh：有 Node ≥ 20 时装 npm 包，装到 ~/.local/bin" || fail "rc=${rc}：$out"
 printf '%s' "$out" | grep -q "is not on your PATH" && ok "~/.local/bin 不在 PATH 时提示怎么加" || fail "没有 PATH 提示：$out"
+# 装出来的每个依赖（含间接依赖）的 engines 都要接受 Node 20.0.0（F21 评审：commander 15 要 >=22.12，engine-strict 下装不上）
+node -e '
+const fs = require("fs"), path = require("path");
+const ver = [20, 0, 0];
+const cmp = (a, b) => { for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) - (b[i] || 0); return 0; };
+const parse = (v) => v.replace(/^v/, "").split(".").map((x) => Number(x));
+function ok1(r) { // 一个比较集：空格分开的若干条件，全部满足
+  return r.trim().split(/\s+/).filter(Boolean).every((c) => {
+    if (c === "*" || c === "x") return true;
+    let m;
+    if ((m = /^>=\s*(.+)$/.exec(c))) return cmp(ver, parse(m[1])) >= 0;
+    if ((m = /^>\s*(.+)$/.exec(c))) return cmp(ver, parse(m[1])) > 0;
+    if ((m = /^<\s*(.+)$/.exec(c))) return cmp(ver, parse(m[1])) < 0;
+    if ((m = /^\^(\d+)/.exec(c))) return ver[0] === Number(m[1]) && cmp(ver, parse(c.slice(1))) >= 0;
+    throw new Error("unknown range " + c);
+  });
+}
+const sat = (range) => range.replace(/>=\s+/g, ">=").split("||").some(ok1);
+const root = process.argv[1], bad = [];
+for (const name of fs.readdirSync(root).filter((n) => !n.startsWith("."))) {
+  const pj = JSON.parse(fs.readFileSync(path.join(root, name, "package.json"), "utf8"));
+  const r = pj.engines && pj.engines.node;
+  if (r && !sat(r)) bad.push(name + " " + r);
+}
+if (bad.length) { console.error(bad.join("; ")); process.exit(1); }' "$A/.local/lib/node_modules/todopi/node_modules" 2>"$TMP/engines.err" \
+  && ok "装出来的依赖（含间接）的 engines 都接受 Node 20.0.0" || fail "依赖的 engines 不接受 Node 20：$(cat "$TMP/engines.err")"
 R="$TMP/repoA"; mkdir -p "$R"; git -C "$R" init -q
 (cd "$R" && "$A/.local/bin/todopi" init >/dev/null 2>&1 && "$A/.local/bin/todopi" add "first" >/dev/null 2>&1 && "$A/.local/bin/todopi" ls | grep -q first) \
   && ok "装好的命令跑通第一条命令（init / add / ls）" || fail "装好的 todopi 跑不通"
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  out="$(docker run --rm -v "$TGZ:/pkg.tgz:ro" node:20.0.0-slim sh -c 'npm i -g /pkg.tgz >/dev/null 2>&1 && cd /tmp && todopi init >/dev/null && todopi add first >/dev/null && todopi ls && node --version' 2>&1)"; rc=$?
-  [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "first" && printf '%s' "$out" | grep -q "^v20.0.0$" \
-    && ok "干净的 node:20.0.0 容器里 npm i -g 这个包、跑通第一条命令" || fail "node:20.0.0 容器：rc=${rc}：$out"
+  out="$(docker run --rm -v "$TGZ:/pkg.tgz:ro" node:20.0.0-slim sh -c 'npm i -g /pkg.tgz >/dev/null 2>&1 && cd /tmp && todopi init >/dev/null && todopi add first --verify "true" >/dev/null && ID=$(todopi ls | cut -d" " -f1) && todopi --as ci claim $ID >/dev/null && todopi --as ci done $ID --yes 2>/dev/null && todopi ls --all && node --version' 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "\[done\] first" && printf '%s' "$out" | grep -q "^v20.0.0$" \
+    && ok "干净的 node:20.0.0 容器里 npm i -g 这个包、跑通第一条命令与 done（走 dist 里的 verify runner）" || fail "node:20.0.0 容器：rc=${rc}：$out"
 else
   note "没有 docker：Node 20.0.0 的干净容器测试跳过（.github/workflows/install.yml 里覆盖）"
 fi
@@ -78,7 +104,7 @@ out="$(binstall "$TMP/b1" TODOPI_FORCE_BINARY=1)"; rc=$?
 
 # 没有 Node 的 PATH：只放安装器要用的工具
 NB="$TMP/nonode"; mkdir -p "$NB"
-for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm dirname sha256sum shasum cat env head; do
+for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr; do
   p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$NB/$t"
 done
 out="$(PATH="$NB" binstall "$TMP/b2")"; rc=$?
@@ -107,12 +133,15 @@ evil() { # evil <entry name>...：写一个含这些条目的 tar.gz 当资产�
   node -e '
 const zlib = require("zlib"), fs = require("fs");
 const blocks = [];
-for (const name of process.argv.slice(1)) {
-  const body = Buffer.from("#!/bin/sh\necho evil\n");
+for (const arg of process.argv.slice(1)) {
+  // name 或 name=>linktarget（符号链接条目）
+  const [name, link] = arg.split("=>");
+  const body = link === undefined ? Buffer.from("#!/bin/sh\necho evil\n") : Buffer.alloc(0);
   const h = Buffer.alloc(512);
   h.write(name, 0, 100); h.write("0000755\0", 100); h.write("0000000\0", 108); h.write("0000000\0", 116);
   h.write(body.length.toString(8).padStart(11, "0") + "\0", 124); h.write("00000000000\0", 136);
-  h.write("        ", 148); h.write("0", 156); h.write("ustar\0", 257); h.write("00", 263);
+  h.write("        ", 148); h.write(link === undefined ? "0" : "2", 156); if (link !== undefined) h.write(link, 157, 100);
+  h.write("ustar\0", 257); h.write("00", 263);
   let sum = 0; for (const b of h) sum += b;
   h.write(sum.toString(8).padStart(6, "0") + "\0 ", 148);
   blocks.push(h, body, Buffer.alloc((512 - (body.length % 512)) % 512));
@@ -120,7 +149,7 @@ for (const name of process.argv.slice(1)) {
 blocks.push(Buffer.alloc(1024));
 fs.writeFileSync(process.env.OUT, zlib.gzipSync(Buffer.concat(blocks)));' "$@"
 }
-for case in "/tmp/todopi-evil-abs|absolute path" "../todopi|contains .." "a/../../todopi|contains .." "todopi evil-extra|unexpected archive entry"; do
+for case in "/tmp/todopi-evil-abs|absolute path" "../todopi|contains .." "a/../../todopi|contains .." "todopi evil-extra|unexpected archive entry" "todopi=>/etc/hosts|not contain a regular file"; do
   names="${case%%|*}"; want="${case#*|}"
   # shellcheck disable=SC2086
   OUT="$REL/v$FV/$ASSET" evil $names
@@ -132,6 +161,35 @@ for case in "/tmp/todopi-evil-abs|absolute path" "../todopi|contains .." "a/../.
 done
 tar -czf "$REL/v$FV/$ASSET" -C "$TMP/fake" todopi
 printf '%s  %s\n' "$(sha "$REL/v$FV/$ASSET")" "$ASSET" > "$REL/v$FV/SHA256SUMS"
+
+# npm 这条路走不通时退回二进制（F21 评审）：有 Node 没有 npm；npm 装不上（包不存在）；之前装过二进制、npm 撞上已有文件
+NN="$TMP/nodenonpm"; mkdir -p "$NN"
+for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr node; do
+  p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$NN/$t"
+done
+out="$(PATH="$NN" binstall "$TMP/c1")"; rc=$?
+[ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "npm is not" && [ "$("$TMP/c1/.local/bin/todopi")" = "$FV-fake" ] \
+  && ok "有 Node 没有 npm：装二进制" || fail "rc=${rc}：$out"
+out="$(binstall "$TMP/c2" TODOPI_NPM_SPEC="$TMP/does-not-exist.tgz")"; rc=$?
+[ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "falling back to the binary" && [ "$("$TMP/c2/.local/bin/todopi")" = "$FV-fake" ] \
+  && ok "npm 装不上：说明原因、退回二进制" || fail "rc=${rc}：$out"
+out="$(binstall "$TMP/c1" TODOPI_NPM_SPEC="$TGZ")"; rc=$?
+[ "$rc" -eq 0 ] && [ -x "$TMP/c1/.local/bin/todopi" ] && "$TMP/c1/.local/bin/todopi" --version >/dev/null 2>&1 \
+  && ok "之前装过二进制、再走 npm：不失败（npm 撞上已有文件时退回二进制）" || fail "rc=${rc}：$out"
+
+# 二进制在这台机器上跑不起来（musl 之类）：拒绝，不报「装好了」
+mkdir -p "$TMP/broken"; printf '#!/bin/sh\nexit 127\n' > "$TMP/broken/todopi"; chmod +x "$TMP/broken/todopi"
+tar -czf "$REL/v$FV/$ASSET" -C "$TMP/broken" todopi
+printf '%s  %s\n' "$(sha "$REL/v$FV/$ASSET")" "$ASSET" > "$REL/v$FV/SHA256SUMS"
+out="$(binstall "$TMP/c3" TODOPI_FORCE_BINARY=1)"; rc=$?
+[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "does not run on this system" && [ ! -e "$TMP/c3/.local/bin/todopi" ] \
+  && ok "二进制跑不起来：拒绝安装，什么都没装" || fail "rc=${rc}：$out"
+tar -czf "$REL/v$FV/$ASSET" -C "$TMP/fake" todopi
+printf '%s  %s\n' "$(sha "$REL/v$FV/$ASSET")" "$ASSET" > "$REL/v$FV/SHA256SUMS"
+
+# PATH 提示按 shell 给出该写的文件
+out="$(binstall "$TMP/c4" TODOPI_FORCE_BINARY=1 SHELL=/bin/zsh)"
+printf '%s' "$out" | grep -q ">> ~/.zshrc" && ok "zsh 用户的 PATH 提示写 ~/.zshrc" || fail "$out"
 
 # 钉版本：不存在的版本下载失败；不钉时从 /latest 的 302 解析
 out="$(env HOME="$TMP/b7" TODOPI_VERSION=1.2.3 TODOPI_DOWNLOAD_BASE="file://$REL" TODOPI_FORCE_BINARY=1 sh ./install.sh 2>&1)"; rc=$?

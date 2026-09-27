@@ -2215,4 +2215,12 @@ Node 用 spec reporter，整层被判 blocked。
   （`tools/check-cjk.mjs`，语义与原规则逐条一致，补了与 locale 无关的反例）；③ 两条权限用例要求非 root，容器里 root 跑会红——那是
   设计如此（「无从验证」必须和「通过」长得不一样），GitHub 的 runner 不是 root。
 - 流程上的教训：合并推送之后要看远端 CI 的结果，不能只看本地三层。
+- 子代理评审（F21）：安全方面没有问题（runner 重启自身、竞态修复、归档检查、校验和格式都实测过），入口处五个 P2 已修：
+  ① commander 15 要求 Node ≥ 22.12，与包承诺的 ≥ 20 冲突（engine-strict 下装不上）——降到 commander 14.0.3（>=20）；f21 的 e2e 加一条：
+  装出来的每个依赖（含间接）的 engines 都要接受 Node 20.0.0。② 有 Node 没 npm 时直接失败 ③ 装过二进制再走 npm 撞 EEXIST
+  ——npm 这条路走不通（没有 npm、装不上、撞上已有文件、安装目录不叫 bin）一律说明原因后退回二进制。④ 二进制跑不起来（Alpine / musl）
+  也报「装好了」——装之前先在临时目录里跑一次 `--version`，跑不起来就拒绝；装的时候先复制到目标目录再 rename，中断不会留半个文件。
+  ⑤ 没有 NPM_TOKEN 时照样建 Release，有 Node 的机器会装到不存在的 npm 版本——改为先发 npm、失败就不建 Release。
+  另：PATH 提示按 shell 给出该写的文件（zsh → ~/.zshrc）；只有 wget 时也能解析 latest；补了 symlink 条目、runner 删环境变量、
+  Node 20.0.0 容器里跑 done 的用例。npm 上 `todopi` 这个名字目前还没人注册（PRD 里「产品负责人的动作」一节已列了占位）。
 
