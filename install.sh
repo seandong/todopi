@@ -105,7 +105,7 @@ install_npm() { # returns non-zero (and says why) instead of dying: the caller f
   say "Node.js $(node -p 'process.versions.node') found; installing the npm package ${spec} into ${prefix}"
   if ! log=$(npm install --global --prefix "$prefix" "$spec" 2>&1); then
     printf '%s\n' "$log" | tail -5 >&2
-    say "npm could not install ${spec}; falling back to the binary"
+    say "WARNING: npm could not install ${spec} (see above); installing the standalone binary instead"
     return 1
   fi
   [ -x "$INSTALL_DIR/todopi" ] || { say "npm finished but ${INSTALL_DIR}/todopi is not there; falling back to the binary"; return 1; }
@@ -146,13 +146,26 @@ install_binary() {
   mkdir "$work/x"
   tar -xzf "$work/$asset" -C "$work/x"
   [ -f "$work/x/todopi" ] && [ ! -L "$work/x/todopi" ] || die "the archive does not contain a regular file named todopi"
-  chmod 755 "$work/x/todopi"
-  # Run it before installing: a binary that cannot start here (for example on musl-based Linux such as Alpine,
-  # which the glibc builds do not support) must not be reported as installed.
-  "$work/x/todopi" --version >/dev/null 2>&1 || die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)); install Node.js >= 20 and run: npm i -g todopi"
-  # Copy next to the target, then rename: an interrupted install never leaves half a binary in place.
-  cp "$work/x/todopi" "$INSTALL_DIR/.todopi.new.$$" && mv -f "$INSTALL_DIR/.todopi.new.$$" "$INSTALL_DIR/todopi" \
-    || { rm -f "$INSTALL_DIR/.todopi.new.$$"; die "could not write ${INSTALL_DIR}/todopi"; }
+  # Copy next to the target first, then run it there, then rename. Running it from the temp dir would fail wherever /tmp is
+  # mounted noexec; running it before the rename means a binary that cannot start here (for example on musl-based Linux such
+  # as Alpine, which the glibc builds do not support) is never reported as installed; the rename means an interrupted install
+  # never leaves half a binary in place.
+  new="$INSTALL_DIR/.todopi.new.$$"
+  cp "$work/x/todopi" "$new" && chmod 755 "$new" || { rm -f "$new"; die "could not write to ${INSTALL_DIR}"; }
+  if ! "$new" --version >/dev/null 2>&1; then
+    rm -f "$new"
+    if node_ok; then die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)), and the npm package could not be installed either (see above)"
+    else die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)); install Node.js >= 20 and run this installer again"
+    fi
+  fi
+  mv -f "$new" "$INSTALL_DIR/todopi" || { rm -f "$new"; die "could not write ${INSTALL_DIR}/todopi"; }
+  # A `tp` left by an earlier npm install still points at the old package: point it at the binary. A `tp` from another tool
+  # is left alone.
+  if [ -L "$INSTALL_DIR/tp" ]; then
+    case "$(readlink "$INSTALL_DIR/tp")" in
+      *node_modules/todopi/*) ln -sf todopi "$INSTALL_DIR/tp" && say "pointed ${INSTALL_DIR}/tp at the binary too" ;;
+    esac
+  fi
 }
 
 # The npm path needs Node >= 20, npm, and an install dir named bin (npm puts commands in <prefix>/bin).
@@ -160,8 +173,10 @@ if [ "${TODOPI_FORCE_BINARY:-}" != "1" ] && node_ok && command -v npm >/dev/null
   && install_npm; then
   :
 else
-  if ! node_ok; then say "no Node.js >= 20 found"
+  if [ "${TODOPI_FORCE_BINARY:-}" = "1" ]; then :
+  elif ! node_ok; then say "no Node.js >= 20 found"
   elif ! command -v npm >/dev/null 2>&1; then say "Node.js found but npm is not; installing the binary"
+  elif [ "$(basename "$INSTALL_DIR")" != "bin" ]; then say "npm installs commands into a directory named bin, and ${INSTALL_DIR} is not one; installing the binary"
   fi
   install_binary
 fi
@@ -171,12 +186,13 @@ say "installed: $("$INSTALL_DIR/todopi" --version 2>/dev/null || echo "$INSTALL_
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) say "next: cd into a repository and run \`todopi init\`" ;;
   *)
-    case "${SHELL:-}" in
-      */zsh) rc="~/.zshrc" ;;
-      */bash) if [ "$(uname -s)" = "Darwin" ]; then rc="~/.bash_profile"; else rc="~/.bashrc"; fi ;;
-      *) rc="~/.profile" ;;
-    esac
     say "${INSTALL_DIR} is not on your PATH. Add it, then open a new shell:"
-    say "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ${rc}"
+    case "${SHELL:-}" in
+      */fish) say "  fish_add_path ${INSTALL_DIR}" ;;
+      */zsh) say "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.zshrc" ;;
+      */bash) if [ "$(uname -s)" = "Darwin" ]; then say "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bash_profile"
+              else say "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bashrc"; fi ;;
+      *) say "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.profile" ;;
+    esac
     ;;
 esac

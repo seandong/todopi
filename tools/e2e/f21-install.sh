@@ -171,7 +171,7 @@ out="$(PATH="$NN" binstall "$TMP/c1")"; rc=$?
 [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "npm is not" && [ "$("$TMP/c1/.local/bin/todopi")" = "$FV-fake" ] \
   && ok "有 Node 没有 npm：装二进制" || fail "rc=${rc}：$out"
 out="$(binstall "$TMP/c2" TODOPI_NPM_SPEC="$TMP/does-not-exist.tgz")"; rc=$?
-[ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "falling back to the binary" && [ "$("$TMP/c2/.local/bin/todopi")" = "$FV-fake" ] \
+[ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "WARNING: npm could not install" && [ "$("$TMP/c2/.local/bin/todopi")" = "$FV-fake" ] \
   && ok "npm 装不上：说明原因、退回二进制" || fail "rc=${rc}：$out"
 out="$(binstall "$TMP/c1" TODOPI_NPM_SPEC="$TGZ")"; rc=$?
 [ "$rc" -eq 0 ] && [ -x "$TMP/c1/.local/bin/todopi" ] && "$TMP/c1/.local/bin/todopi" --version >/dev/null 2>&1 \
@@ -187,9 +187,35 @@ out="$(binstall "$TMP/c3" TODOPI_FORCE_BINARY=1)"; rc=$?
 tar -czf "$REL/v$FV/$ASSET" -C "$TMP/fake" todopi
 printf '%s  %s\n' "$(sha "$REL/v$FV/$ASSET")" "$ASSET" > "$REL/v$FV/SHA256SUMS"
 
+# npm 装过（tp 是指向 npm 包的链接）、这次 npm 失败改装二进制：tp 也改指向二进制，不留旧版本
+out="$(binstall "$TMP/c5" TODOPI_NPM_SPEC="$TGZ")"; rc=$?
+[ -L "$TMP/c5/.local/bin/tp" ] || fail "npm 路径没装出 tp 链接：$out"
+out="$(binstall "$TMP/c5" TODOPI_NPM_SPEC="$TMP/does-not-exist.tgz")"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(readlink "$TMP/c5/.local/bin/tp")" = "todopi" ] && [ "$("$TMP/c5/.local/bin/tp")" = "$FV-fake" ] \
+  && ok "npm 失败改装二进制时，旧 npm 留下的 tp 也改指向二进制" || fail "tp 仍指向 $(readlink "$TMP/c5/.local/bin/tp")：$out"
+out="$(binstall "$TMP/c6" TODOPI_INSTALL_DIR="$TMP/c6/tools")"; rc=$?
+[ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "is not one; installing the binary" && [ -x "$TMP/c6/tools/todopi" ] \
+  && ok "安装目录不叫 bin：说明为什么不用 npm、装二进制" || fail "rc=${rc}：$out"
+
+# /tmp 挂成 noexec 的机器：试跑在安装目录里做，照样装得上（F21 复审：在临时目录里试跑会误判「跑不起来」）
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  for a in x64 arm64; do
+    L="todopi-${FV}-linux-${a}.tar.gz"
+    cp "$REL/v$FV/$ASSET" "$REL/v$FV/$L" 2>/dev/null || true
+    grep -q " $L\$" "$REL/v$FV/SHA256SUMS" || printf '%s  %s\n' "$(sha "$REL/v$FV/$L")" "$L" >> "$REL/v$FV/SHA256SUMS"
+  done
+  out="$(docker run --rm --tmpfs /tmp:rw,noexec -v "$REL:/rel:ro" -v "$ROOT/install.sh:/install.sh:ro" node:22-bookworm sh -c \
+    'TODOPI_VERSION=9.9.9 TODOPI_DOWNLOAD_BASE=file:///rel TODOPI_FORCE_BINARY=1 sh /install.sh && ~/.local/bin/todopi' 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "^${FV}-fake$" && ok "/tmp 挂成 noexec：照样装得上" || fail "noexec /tmp：rc=${rc}：$out"
+else
+  note "没有 docker：noexec /tmp 的用例跳过"
+fi
+
 # PATH 提示按 shell 给出该写的文件
 out="$(binstall "$TMP/c4" TODOPI_FORCE_BINARY=1 SHELL=/bin/zsh)"
 printf '%s' "$out" | grep -q ">> ~/.zshrc" && ok "zsh 用户的 PATH 提示写 ~/.zshrc" || fail "$out"
+out="$(binstall "$TMP/c7" TODOPI_FORCE_BINARY=1 SHELL=/usr/bin/fish)"
+printf '%s' "$out" | grep -q "fish_add_path" && ok "fish 用户的 PATH 提示用 fish_add_path" || fail "$out"
 
 # 钉版本：不存在的版本下载失败；不钉时从 /latest 的 302 解析
 out="$(env HOME="$TMP/b7" TODOPI_VERSION=1.2.3 TODOPI_DOWNLOAD_BASE="file://$REL" TODOPI_FORCE_BINARY=1 sh ./install.sh 2>&1)"; rc=$?

@@ -39,8 +39,11 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          # 重跑时（npm 已发、上次建 Release 失败）不再发：同一版本发第二次必然失败，会卡住后面建 Release 那一步
+          if npm view "todopi@$VERSION" version >/dev/null 2>&1; then echo "todopi@$VERSION is already on npm; skipping publish"; exit 0; fi
           if [ -z "$NODE_AUTH_TOKEN" ]; then echo "NPM_TOKEN is not set: refusing to create a release that npm does not have"; exit 1; fi
-          npm publish out/todopi-${GITHUB_REF_NAME#v}.tgz --access public
+          npm publish out/todopi-$VERSION.tgz --access public
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

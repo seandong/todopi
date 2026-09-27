@@ -2223,4 +2223,8 @@ Node 用 spec reporter，整层被判 blocked。
   ⑤ 没有 NPM_TOKEN 时照样建 Release，有 Node 的机器会装到不存在的 npm 版本——改为先发 npm、失败就不建 Release。
   另：PATH 提示按 shell 给出该写的文件（zsh → ~/.zshrc）；只有 wget 时也能解析 latest；补了 symlink 条目、runner 删环境变量、
   Node 20.0.0 容器里跑 done 的用例。npm 上 `todopi` 这个名字目前还没人注册（PRD 里「产品负责人的动作」一节已列了占位）。
+- 子代理复审二轮：「装前先试跑」放在临时目录里做，/tmp 挂成 noexec 的机器会误判「跑不起来」并拒绝安装——改为先复制到安装目录的临时名、
+  在那里试跑、再 rename（docker 里 `--tmpfs /tmp:noexec` 的用例钉住，旧版在这条上失败）。另修：npm 失败改装二进制时醒目告警，旧 npm
+  留下的 `tp` 链接改指向二进制（别的工具的 `tp` 不动）；安装目录不叫 bin 时说明为什么不用 npm；试跑失败只在没有 Node 时才建议装 Node；
+  fish 给 `fish_add_path`；发布工作流重跑时 npm 上已有这个版本就跳过发布，不卡住建 Release。
 
