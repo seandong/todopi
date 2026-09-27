@@ -56,6 +56,12 @@ test("不变量 6：updated 早于 created", () => {
   assert.ok(rules(t).includes("invariant-6"));
 });
 
+test("不变量 6：只在两边都是规范形态时比先后——同一时刻写成 +00:00 不是「更早」（只报格式）", () => {
+  const t = task({ created: "2026-09-14T09:00:00Z", updated: "2026-09-14T09:00:00+00:00" });
+  assert.deepEqual(rules(t).filter((r) => r === "invariant-6"), []);
+  assert.ok(rules(t).includes("field"));
+});
+
 test("不变量 7：行首的冲突标记", () => {
   const t = task({}, { body: "\n## Description\n\n<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n" });
   assert.ok(rules(t).includes("invariant-7"));

@@ -105,7 +105,10 @@ export function validateFile(t: TaskFile): Finding[] {
       at("field", `${name} must be an RFC 3339 UTC second-precision timestamp such as 2026-09-14T09:00:00Z; found ${JSON.stringify(v)}`);
     }
   }
-  if (typeof created === "string" && typeof updated === "string" && updated < created) {
+  // 按字符串比先后只在两边都是规范形态（UTC 秒级 Z）时成立；不规范的已经由上面那条报了，再比只会误报——
+  // `…+00:00` 与同一时刻的 `…Z` 按字符串比是「更早」（F30 实测）
+  if (typeof created === "string" && typeof updated === "string" && TIMESTAMP_RE.test(created) && TIMESTAMP_RE.test(updated)
+    && updated < created) {
     at("invariant-6", `updated (${updated}) is earlier than created (${created})`);
   }
 
