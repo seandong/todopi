@@ -59,7 +59,8 @@ function readOnlyError(version: number): CliError {
 
 /** 读命令在高版本账本上给的一句提示（stderr）。 */
 export function newerVersionNote(ledger: Ledger): string {
-  return `note: this ledger is format version ${ledger.config.version}, newer than this todopi supports (${SUPPORTED_VERSION}). `
+  // 与 isNewerVersion 一样读磁盘：判断与提示说的是同一个版本（Codex 评审）
+  return `note: this ledger is format version ${readConfig(ledger.dir).version}, newer than this todopi supports (${SUPPORTED_VERSION}). `
     + "Reading it by version-1 rules; any change will be refused. Upgrade todopi.";
 }
 

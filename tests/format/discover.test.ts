@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverLedger, assertWritable, isNewerVersion } from "../../src/format/discover.ts";
+import { discoverLedger, assertWritable, isNewerVersion, newerVersionNote } from "../../src/format/discover.ts";
 import { withLedgerLock } from "../../src/format/write.ts";
 import { recordPrime, markCompacted, readLastPrime, takeCompacted } from "../../src/format/session.ts";
 import { EXIT, CliError } from "../../src/exit.ts";
@@ -78,6 +78,7 @@ test("会话状态的闸门也看磁盘上此刻的版本：拿着 v1 时发现�
   writeFileSync(join(root, ".todopi", "config.yml"), "version: 2\nid_prefix: tp\n");
   assert.equal(l.config.version, 1);
   assert.equal(isNewerVersion(l), true);
+  assert.match(newerVersionNote(l), /format version 2, newer than this todopi supports \(1\)/);
   recordPrime(l, { actor: "a" }, "2026-01-01T00:00:00Z");
   markCompacted(l, { actor: "b" });
   assert.equal(takeCompacted(l, { actor: "a" }), false);
