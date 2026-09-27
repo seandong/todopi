@@ -1,12 +1,13 @@
 ---
 id: "tp-qf0vch"
 title: "规格措辞：doctor --fix 保留 updated 的原写法（§5.1 与 §6.3 的例外写清楚）"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "it"
 verify: "make check && make test"
 labels: ["m4"]
 created: "2026-09-27T03:14:03Z"
-updated: "2026-09-27T03:14:03Z"
+updated: "2026-09-27T09:24:29Z"
 ---
 
 ## Description
@@ -21,3 +22,4 @@ updated: "2026-09-27T03:14:03Z"
 ## Log
 
 - 2026-09-27T03:14:03Z seandong created
+- 2026-09-27T09:24:29Z claude-code@Seans-MacBook-Pro.local claimed

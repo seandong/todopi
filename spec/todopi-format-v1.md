@@ -78,13 +78,13 @@ verify_timeout_seconds: 600
 - Encoding UTF-8, line endings LF, no BOM.
 - The file MUST begin with a line `---`, followed by a YAML mapping, followed by a line `---`, followed by the Markdown body. The body MAY be empty.
 - Writers MUST emit frontmatter keys in the order listed in §5.2 so that diffs are stable. Readers MUST accept any order.
-- **Writers MUST quote every scalar value with double quotes**, escaping `\` as `\\` and `"` as `\"`, and MUST write lists in flow style with each element quoted the same way (`labels: ["auth", "web"]`; an empty list is `[]`). This applies to every value a writer emits, including ones that look like plain words.
+- **Writers MUST quote every scalar value with double quotes**, escaping `\` as `\\` and `"` as `\"`, and MUST write lists in flow style with each element quoted the same way (`labels: ["auth", "web"]`; an empty list is `[]`). This applies to every value a writer emits, including ones that look like plain words. The one exception is the `updated` entry during a normalizing repair, which is kept exactly as found (§6.3).
 
   This rule exists because YAML infers a type from an unquoted scalar, and task titles routinely defeat that inference. `title: feat: add login` is a parse error that makes the whole file unreadable. `title: fix #42` silently becomes `fix`, because `#` opens a comment. `rank: 007` becomes the integer `7`, and writing it back loses the leading zeros the ordering depends on. `title: null` becomes no title at all. None of these are exotic: a task title that mirrors a commit subject contains a colon by convention, and issue references contain `#`.
 
   Quoting removes the ambiguity rather than enumerating the cases. It also makes the frontmatter a regular sub-language — every value is a quoted string or a flow list of quoted strings — which a reader may exploit with a simple scanner, falling back to a full YAML parser for any line that departs from that shape.
 
-  Readers MUST NOT require quoting: a file written by hand is still valid YAML and MUST be read as such. `doctor --fix` normalizes such files.
+  Readers MUST NOT require quoting: a file written by hand is still valid YAML and MUST be read as such. `doctor --fix` normalizes such files, except for their `updated` entry (§6.3).
 
 ### 5.2 Frontmatter fields
 
@@ -296,7 +296,9 @@ A conforming task set satisfies all of the following. `doctor` reports violation
 
 Every write to a task file MUST set `updated` to the current time. `updated` doubles as the cross-machine heartbeat for stale detection (§7.3), so writers that only touch the body (a note, a checkbox) still bump it.
 
-One exception: a repair that only normalizes a file (`doctor --fix`: key order, quoting, timestamp and checkbox form, a backfilled `rank`) is not work on the task, and MUST NOT change `updated` — otherwise running a repair tool would make every stale claim look alive. Such a repair also MUST NOT change the Log.
+One exception: a repair that only normalizes a file (`doctor --fix`: key order, quoting, the timestamp form of `created`, checkbox form, a backfilled `rank`) is not work on the task, and MUST NOT change `updated` — otherwise running a repair tool would make every stale claim look alive. Such a repair also MUST NOT change the Log.
+
+Not changing `updated` includes its spelling: the repair keeps the `updated` entry byte for byte — its quoting, its timestamp form, any trailing comment — even where §5.1 and §5.2 ask for something else. This is the only place a conforming writer emits a scalar it did not quote. Rewriting an unquoted `updated` into quotes, or `2026-09-14T09:00:00+00:00` into `2026-09-14T09:00:00Z`, would already be a change, and the one field a repair may not touch is the one that says whether anyone is still working. So a non-canonical `updated` survives a repair: when its value is not a UTC second-precision timestamp, `doctor` keeps reporting it, and the next write that is work on the task replaces it with the current time in canonical form.
 
 ## 7. Derived state
 
@@ -377,6 +379,8 @@ Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.
 
 The version number protects files and implementations that exist. Until the first release of a tool implementing this document, revisions that fill gaps in version 1 are recorded here instead of incrementing the version; after that, §9 applies without exception.
 
+**2026-09-28** — §5.1, §6.3 (`updated` during a repair). The 2026-09-26 revision said a normalizing repair MUST NOT change `updated`, while §5.1 still told every writer to quote every scalar, so a repair of a hand-written file seemed to have to choose between the two. This revision says which wins: the repair keeps the `updated` entry byte for byte, quoting and timestamp form included, and it is the only exception to the quoting rule. Migration: none; tools that already kept `updated` untouched conform, and a tool that re-quoted or re-formatted `updated` during a repair should stop.
+
 **2026-09-26** — §6.3 (`updated`). The 2026-09-16 text required every write to bump `updated`. This revision exempts repairs that only normalize a file (`doctor --fix`), which MUST leave `updated` and the Log unchanged, because `updated` is also the stale-detection heartbeat (§7.3). Migration: none; no file changes meaning.
 
 **2026-09-26** — §5.3 (body structure). The 2026-09-16 text said the four headings are recognized "exactly and case-sensitively" and left undefined: headings and list items inside code blocks, HTML blocks and containers; repeated headings; code fences and HTML blocks that are never closed. This revision defines them:
@@ -439,6 +443,6 @@ remains the fallback.
 - [ ] Assign a `rank` when creating a task.
 - [ ] Normalize actor strings (§5.4); never emit one containing whitespace or `:`.
 - [ ] Append to Log; never rewrite earlier lines, and never append for a refused transition.
-- [ ] Bump `updated` on every write, except a normalizing repair (`doctor --fix`), which leaves `updated` and the Log unchanged (§6.3).
+- [ ] Bump `updated` on every write, except a normalizing repair (`doctor --fix`), which leaves the `updated` entry byte for byte (quoting and form included) and the Log unchanged (§6.3).
 - [ ] Hold the write lock; write via temp file and rename.
 - [ ] Refuse to write when `config.yml` `version` is unknown.
