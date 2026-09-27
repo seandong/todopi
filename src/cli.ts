@@ -69,7 +69,8 @@ program
 program
   .command("add")
   .aliases(["new", "create"])
-  .argument("<title>", "what the task is")
+  // 用 --edit 时标题可以留到编辑器里写
+  .argument("[title]", "what the task is (optional with --edit)")
   // commander 的帮助只列第一个别名：把全部写进描述，create 才看得见（Codex 评审）
   .description("create a task in the ledger (also: new, create)")
   .option("-d, --description <text>", "longer description for the task body")
@@ -79,16 +80,22 @@ program
   .option("--parent <id>", "make this a child of another task")
   .option("--blocked-by <id...>", "tasks that must close before this one is ready")
   .option("--from <id>", "the task being worked on when this one was discovered")
-  .action(async (title: string, cmdOpts: {
+  .option("--plan <text>", "the Plan section: how the work will be done")
+  .option("--edit", "open $VISUAL / $EDITOR on the new task (prefilled from the other options) before creating it")
+  .action(async (title: string | undefined, cmdOpts: {
     description?: string; ac?: string[]; label?: string[];
-    verify?: string; parent?: string; blockedBy?: string[]; from?: string;
+    verify?: string; parent?: string; blockedBy?: string[]; from?: string; plan?: string; edit?: boolean;
   }) => {
-    const { runAdd } = await import("./commands/add.ts");
+    if (title === undefined && cmdOpts.edit !== true) {
+      throw new CliError(EXIT.usage, "add needs a title: todopi add \"<title>\" (or --edit to write it in an editor).");
+    }
+    const { runAdd, runAddInEditor } = await import("./commands/add.ts");
     const { renderText, renderJson } = await import("./output/render/add.ts");
     const opts = program.opts();
-    const report = runAdd({
+    const report = (cmdOpts.edit === true ? runAddInEditor : runAdd)({
+      plan: cmdOpts.plan,
       directory: (opts["directory"] as string | undefined) ?? process.cwd(),
-      title,
+      title: title ?? "",
       description: cmdOpts.description,
       acceptance: cmdOpts.ac,
       labels: cmdOpts.label,
@@ -308,20 +315,36 @@ const collect = (v: string, prev: string[]): string[] => [...prev, v];
 
 program
   .command("edit")
-  .description("change a task's title, description, verify command, labels or parent")
+  .description("change a task's title, description, verify command, labels, parent, acceptance criteria or plan")
   .argument("<id>", "the task to edit")
   .option("--title <text>", "a new title")
   .option("-d, --description <text>", "replace the Description section; an empty string removes it")
   .option("--verify <command>", "a new verify command; an empty string removes it")
   .option("--label <label>", "+name adds a label, -name removes it; repeat for several", collect, [])
   .option("--parent <id>", "make it a child of another task; `none` detaches it")
-  .action(async (id: string, o: { title?: string; description?: string; verify?: string; label: string[]; parent?: string }) => {
-    const { runEdit } = await import("./commands/edit.ts");
+  .option("--plan <text>", "replace the Plan section; an empty string removes it")
+  .option("--ac-add <text>", "add an unchecked acceptance criterion; repeat for several", collect, [])
+  .option("--ac-set <n=text>", "change the text of unchecked criterion n; repeat for several", collect, [])
+  .option("--ac-rm <n>", "remove unchecked criterion n; repeat for several", collect, [])
+  .option("--edit", "open $VISUAL / $EDITOR on the title, description, acceptance criteria and plan")
+  .action(async (id: string, o: {
+    title?: string; description?: string; verify?: string; label: string[]; parent?: string;
+    plan?: string; acAdd: string[]; acSet: string[]; acRm: string[]; edit?: boolean;
+  }) => {
+    const { runEdit, runEditInEditor, parseCriterionNumber } = await import("./commands/edit.ts");
     const { renderEdit, renderPlanJson } = await import("./output/render/plan.ts");
-    const report = runEdit({
+    const set = new Map<number, string>();
+    for (const raw of o.acSet) {
+      const at = raw.indexOf("=");
+      if (at < 0) throw new CliError(EXIT.usage, `--ac-set needs <n>=<text>; got ${JSON.stringify(raw)}.`);
+      set.set(parseCriterionNumber(raw.slice(0, at), "--ac-set"), raw.slice(at + 1));
+    }
+    const criteria = { add: o.acAdd, set, remove: new Set(o.acRm.map((n) => parseCriterionNumber(n, "--ac-rm"))) };
+    const report = (o.edit === true ? runEditInEditor : runEdit)({
       directory: dir(), id, actor: asActor(),
       title: o.title, description: o.description, verify: o.verify,
       labels: o.label.length > 0 ? o.label : undefined, parent: o.parent,
+      plan: o.plan, criteria,
     });
     process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderEdit(report));
   });

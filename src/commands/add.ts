@@ -6,6 +6,9 @@ import { validateWrite, logEntries } from "../domain/validate.ts";
 import { parseAcceptance, sectionLines } from "../domain/acceptance.ts";
 import { structure } from "../markdown/sections.ts";
 import { currentActor } from "./actor.ts";
+import { buildBuffer, parseBuffer } from "../domain/edit-buffer.ts";
+import { editText } from "../exec/editor.ts";
+import { editOrExplain } from "./edit.ts";
 import { EXIT, CliError } from "../exit.ts";
 import { LockBusyError } from "../fs/lock.ts";
 import type { AddReport } from "../output/dto/add.ts";
@@ -15,6 +18,7 @@ export type AddOptions = {
   title: string;
   description?: string;
   acceptance?: string[];
+  plan?: string;
   labels?: string[];
   verify?: string;
   parent?: string;
@@ -79,6 +83,7 @@ export function runAdd(opts: AddOptions): AddReport {
       labels: opts.labels,
       description: opts.description,
       acceptance: opts.acceptance,
+      plan: opts.plan === undefined || opts.plan.trim() === "" ? undefined : opts.plan.trim(),
       log: [`${ctx.now} ${actor} created${opts.from ? ` from=${opts.from}` : ""}`],
     }),
     // 校验器与 doctor 用的是同一对函数，所以「通过校验」与「通过 doctor」是同一件事——
@@ -104,11 +109,12 @@ function readsBack(body: string, opts: AddOptions): string | null {
   const want = (opts.acceptance ?? []).map((a) => a.trim());
   const got = parseAcceptance(body);
   const desc = sectionLines(body, "## Description").map((l) => l.text).join("\n").trim();
+  const plan = sectionLines(body, "## Plan").map((l) => l.text).join("\n").trim();
   if (JSON.stringify(got.map((c) => c.text)) === JSON.stringify(want) && got.every((c) => !c.checked)
-    && desc === (opts.description ?? "").trim() && logEntries(body).length === 1
+    && desc === (opts.description ?? "").trim() && plan === (opts.plan ?? "").trim() && logEntries(body).length === 1
     && structure(body.split("\n")).reparsedAt < 0) return null;
   throw new CliError(EXIT.usage,
-    "The description or an acceptance criterion would change how the task body is read: it contains a line that "
+    "The description, plan or an acceptance criterion would change how the task body is read: it contains a line that "
     + "starts a section (`## …`) or a block that is never closed. Indent that line by four spaces or put it in a "
     + "closed code fence, then retry.");
 }
@@ -121,4 +127,25 @@ function withLockConflictMapped<T>(fn: () => T): T {
     if (err instanceof LockBusyError) throw new CliError(EXIT.conflict, err.message);
     throw err;
   }
+}
+
+/**
+ * `add --edit`：用命令行给的标题、描述、验收标准、Plan 预填编辑器，保存后照常 runAdd。验收标准那一节只能是没勾的复选框行
+ * （新任务没有「已核对」的东西）；标题行为空视为放弃。`edit` 是注入点，用例用假编辑器。
+ */
+export function runAddInEditor(opts: AddOptions, edit: (text: string) => string = editText): AddReport {
+  const edited = parseBuffer(editOrExplain(edit, buildBuffer({
+    title: opts.title, description: opts.description ?? "",
+    acceptance: (opts.acceptance ?? []).map((a) => `- [ ] ${a}`).join("\n"), plan: opts.plan ?? "",
+  })));
+  if (edited === null) throw new CliError(EXIT.usage, "Aborted: the title line is empty. No task was created.");
+  const body = `## Acceptance Criteria\n\n${edited.acceptance}\n`;
+  const criteria = parseAcceptance(body);
+  const listed = new Set(criteria.map((c) => c.line));
+  const stray = body.split("\n").slice(2).filter((l, i) => l.trim() !== "" && !listed.has(i + 2));
+  if (criteria.some((c) => c.checked) || stray.length > 0) {
+    throw new CliError(EXIT.usage,
+      "In a new task the Acceptance Criteria section can only hold unchecked `- [ ] …` lines. No task was created.");
+  }
+  return runAdd({ ...opts, title: edited.title, description: edited.description, acceptance: criteria.map((c) => c.text), plan: edited.plan });
 }

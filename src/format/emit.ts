@@ -29,6 +29,8 @@ export type NewTask = {
   external?: Record<string, unknown>;
   description?: string;
   acceptance?: string[];
+  /** spec §5.3.1 的 Plan（F24：add --plan / add --edit） */
+  plan?: string;
   log: string[];
 };
 
@@ -174,6 +176,7 @@ export function emitTask(t: NewTask): string {
   if (t.acceptance && t.acceptance.length > 0) {
     parts.push("## Acceptance Criteria", "", ...t.acceptance.map((a) => `- [ ] ${a}`), "");
   }
+  if (t.plan) parts.push("## Plan", "", t.plan, "");
   parts.push("## Log", "", ...t.log.map((l) => `- ${l}`), "");
   return parts.join("\n");
 }

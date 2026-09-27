@@ -1,12 +1,13 @@
 ---
 id: "tp-anx7e2"
 title: "建好之后能改验收标准与 Plan；add / edit 支持 --edit（打开 $EDITOR）（FR-T4）"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "io"
 verify: "make check && make test && bash tools/e2e/f24-edit-body.sh"
 labels: ["m4"]
 created: "2026-09-27T03:14:02Z"
-updated: "2026-09-27T03:14:02Z"
+updated: "2026-09-27T04:26:46Z"
 ---
 
 ## Description
@@ -23,3 +24,4 @@ updated: "2026-09-27T03:14:02Z"
 ## Log
 
 - 2026-09-27T03:14:02Z seandong created
+- 2026-09-27T04:26:46Z claude-code@Seans-MacBook-Pro.local claimed
