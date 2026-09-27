@@ -11,7 +11,8 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
-import { leaseDirFor } from "./lease.ts";
+import { leaseDirFor, leasePaths } from "./lease.ts";
+import { withLock } from "../fs/lock.ts";
 import { isNewerVersion, type Ledger } from "./discover.ts";
 import { TIMESTAMP_RE } from "../domain/types.ts";
 
@@ -107,4 +108,24 @@ export function takeCompacted(ledger: Ledger, key: PrimeKey): boolean {
   if (!existsSync(path)) return false;
   rmSync(path, { force: true });
   return true;
+}
+
+/**
+ * 钩子注入去重（F38）：同一个会话在 `windowMs` 内第二次来要 prime 时返回 false（调用方什么都不印）。一个 agent 同时加载了
+ * `todopi setup` 写的钩子与市场装的包时，会话开始会跑两遍 prime、注入两遍。在账本的写锁里读、写上次注入的时刻——两个钩子
+ * 并发地来，恰好一个拿到 true。窗口只挡「同一时刻的重复」：resume、压缩之后的再注入都在窗口之外。
+ * 版本更高的账本不写会话状态：返回 true（照常注入，宁可重复也不丢）。
+ */
+export function claimHookInjection(ledger: Ledger, session: string, nowMs: number, windowMs = 10_000): boolean {
+  if (isNewerVersion(ledger)) return true;
+  const path = pathFor(ledger, { session }).replace(/\.json$/, ".hooked");
+  return withLock(leasePaths(ledger).lockPath, () => {
+    let last = NaN;
+    // 没有记录就当从没注入过
+    try { last = Number(readFileSync(path, "utf8").trim()); } catch { last = NaN; }
+    if (Number.isFinite(last) && nowMs >= last && nowMs - last < windowMs) return false;
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileAtomic(path, `${nowMs}\n`, undefined, { fsync: false });
+    return true;
+  });
 }

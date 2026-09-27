@@ -33,6 +33,10 @@ const hasLedger = (dir) => {
 };
 
 export const TodopiPlugin = async ({ $, directory }) => {
+  // Loaded twice (this file and the npm package, or two copies)? Only the first one injects: the other returns no hooks.
+  // A copy that got an empty prime would keep retrying and inject a second time on a later turn.
+  if (globalThis.__todopiPrimeLoaded) return {};
+  globalThis.__todopiPrimeLoaded = true;
   const primed = new Map();
   const prime = async (sessionID) => {
     const payload = Buffer.from(JSON.stringify({ sessionID }));

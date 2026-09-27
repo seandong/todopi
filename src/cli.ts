@@ -222,7 +222,7 @@ program
   .action(async (cmdOpts: { budget?: string; full?: boolean; session?: string; hook?: boolean; hookJson?: string; markCompacted?: boolean; ifCompacted?: boolean }) => {
     const { runPrime, runPrimeFull, parseBudget } = await import("./commands/prime.ts");
     const { renderPrime, renderPrimeFull } = await import("./output/render/prime.ts");
-    const { compactionGate, wrapHookOutput } = await import("./commands/hook.ts");
+    const { compactionGate, wrapHookOutput, firstInjection } = await import("./commands/hook.ts");
     const opts = program.opts();
     const explicit = opts["directory"] as string | undefined;
     const hook = cmdOpts.hook === true ? await hookContext(explicit) : { skip: false, session: undefined, directory: explicit ?? process.cwd() };
@@ -241,6 +241,9 @@ program
       ? ((r) => ({ text: json ? JSON.stringify(r.report, null, 2) + "\n" : renderPrimeFull(r.report), warnings: r.warnings }))(runPrimeFull(base))
       : ((r) => ({ text: json ? JSON.stringify(r.report, null, 2) + "\n" : renderPrime(r.report), warnings: r.warnings }))(
         runPrime({ ...base, budget: cmdOpts.budget === undefined ? undefined : parseBudget(cmdOpts.budget) }));
+    // 钩子里：同一会话 10 秒内的第二次注入什么都不印（setup 的钩子与市场包同时装了，F38）。--if-compacted 不在此列：
+    // 压缩后的再注入是有意的，而且已经由压缩标记把关（只有第一个取走标记的钩子会印）
+    if (cmdOpts.hook === true && cmdOpts.ifCompacted !== true && text.trim() !== "" && !firstInjection(directory, base.session)) return;
     process.stdout.write(cmdOpts.hookJson === undefined ? text : wrapHookOutput(cmdOpts.hookJson, text));
     for (const w of warnings) process.stderr.write(`${w}\n`);
   });

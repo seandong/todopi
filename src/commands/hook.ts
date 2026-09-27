@@ -8,7 +8,7 @@
 // 2. 用户级钩子会在**每个**项目里触发，包括没有 `.todopi/` 的；那里什么都不输出、退出 0。
 
 import { discoverLedger, findLedger } from "../format/discover.ts";
-import { markCompacted, takeCompacted } from "../format/session.ts";
+import { claimHookInjection, markCompacted, takeCompacted } from "../format/session.ts";
 import { currentActor } from "./actor.ts";
 import { EXIT, CliError } from "../exit.ts";
 
@@ -69,4 +69,17 @@ export function compactionGate(directory: string, mode: "mark" | "take", session
   const key = session !== undefined ? { session } : { actor: currentActor(ledger.root, actor) };
   if (mode === "mark") { markCompacted(ledger, key); return false; }
   return takeCompacted(ledger, key);
+}
+
+/**
+ * `prime --hook` 该不该印（F38）：有会话 id 时，同一会话 10 秒内只印第一次——setup 的钩子与市场包同时装了时，会话开始不注入两遍。
+ * 没有会话 id 不去重：退回按 actor 时，同一 actor 并行起的几个 agent 会互相吞掉 prime。占不到锁、写不了：照常印（宁可重复也不丢）。
+ */
+export function firstInjection(directory: string, session: string | undefined): boolean {
+  if (session === undefined) return true;
+  try {
+    return claimHookInjection(discoverLedger(directory), session, Date.now());
+  } catch {
+    return true;
+  }
 }
