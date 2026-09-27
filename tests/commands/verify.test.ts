@@ -266,6 +266,17 @@ test("有终端、答 y：原样给出命令问一次，执行并记住信任（
   });
 });
 
+test("确认提示里的命令是可见转义：控制序列擦不掉它（执行的仍是原文）", () => {
+  withConfig(() => {
+    const d = repo();
+    const t = runAdd({ directory: d, title: "T", verify: "echo x > ran.txt #\u001b[2K\r", actor: ME });
+    const y = asker(false);
+    assert.throws(() => runDone({ directory: d, id: t.id, actor: ME, ask: y.ask }));
+    assert.match(y.asked[0]!, /echo x > ran\.txt #\\x1b\[2K\\r/);
+    assert.equal(y.asked[0]!.includes("\u001b"), false);
+  });
+});
+
 test("有终端、答 n：退出 2，verify 没跑，任务与信任都没变", () => {
   withConfig(() => {
     const d = repo();

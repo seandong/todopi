@@ -10,6 +10,7 @@ import { runCommand } from "../exec/run.ts";
 import { isTrusted, recordTrust, trustFilePath } from "../exec/trust.ts";
 import { canAsk, askYesNo } from "../exec/prompt.ts";
 import { readTasks } from "../format/read.ts";
+import { visible } from "../domain/visible.ts";
 import type { VerifyOutcome } from "../domain/gates.ts";
 import type { Ledger } from "../format/discover.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -46,7 +47,7 @@ function ensureTrusted(ledger: Ledger, command: string, opts: VerifyOptions): vo
     throw new CliError(EXIT.gate,
       `This repository has not been trusted to run verify commands yet, and there is no ` +
       `terminal to ask on.\n` +
-      `  The command that would run: ${command}\n` +
+      `  The command that would run: ${visible(command)}\n` +
       `  Approve it once with \`todopi done <id> --yes\`, or set CI=true.\n` +
       `  Trust is recorded in ${trustFilePath()} — never inside the repository.`);
   }
@@ -54,7 +55,7 @@ function ensureTrusted(ledger: Ledger, command: string, opts: VerifyOptions): vo
   // 问题没人看得见），或者确认之后到拿锁之间信任记录没了。照旧要求显式的 --yes。
   throw new CliError(EXIT.gate,
     `This repository has not been trusted to run verify commands yet.\n` +
-    `  The command that would run: ${command}\n` +
+    `  The command that would run: ${visible(command)}\n` +
     `  Approve it once with \`todopi done <id> --yes\`.\n` +
     `  Trust is recorded in ${trustFilePath()} — never inside the repository.`);
 }
@@ -73,8 +74,8 @@ export function confirmTrustBeforeLock(
   const command = task?.frontmatter["verify"];
   if (typeof command !== "string" || command.trim() === "") return;
   const yes = ask.askYesNo(
-    `This repository has not been trusted to run verify commands yet. todopi done ${id} would run:\n  ${command}\n` +
-    `Trust ${ledger.root} to run its verify commands? This is recorded in ${trustFilePath()}, never inside the repository.`);
+    `This repository has not been trusted to run verify commands yet. todopi done ${id} would run:\n  ${visible(command)}\n` +
+    `Trust ${visible(ledger.root)} to run its verify commands? This is recorded in ${trustFilePath()}, never inside the repository.`);
   if (!yes) {
     throw new CliError(EXIT.gate, `Not approved: verify was not run and ${id} is unchanged. Run \`todopi done ${id}\` again to be asked again.`);
   }
@@ -94,7 +95,8 @@ export function runVerify(
 ): VerifyOutcome {
   ensureTrusted(ledger, command, opts);
 
-  process.stderr.write(`Running verify for ${id}:\n  ${command}\n`);
+  // 显示用可见转义（控制字符不交给终端解释）；执行的是原文
+  process.stderr.write(`Running verify for ${id}:\n  ${visible(command)}\n`);
 
   // 路径先定下来再执行：日志是**边跑边写**的，不是跑完再写。于是 todopi 自己
   // 被杀、或者命令跑到一半炸掉时，已经产生的输出仍然留在盘上。
