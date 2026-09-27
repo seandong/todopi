@@ -2243,4 +2243,6 @@ Node 用 spec reporter，整层被判 blocked。
   第三次复核：上级路径里的符号链接会被跟随、末尾斜杠能绕过链接检查、上级目录的 ACL 没查。改为先 `cd … && pwd -P` 解析成物理路径、此后只用它
   （链接事后改指改不到写入位置，也不必拒绝 macOS 的 /var 这类系统链接）；每一级都查 ACL，但只拒绝把写类权限给别人的 allow 条目——macOS 家目录
   默认的 `group:everyone deny delete` 若也拒绝，默认的 ~/.local/bin 就装不进去。Linux 用 getfacl 看具名用户 / 组的 w 与 mask，读不到 ACL 时保守拒绝。
+  合入后远端 Install 的无 Node 任务失败：GitHub 容器任务的 HOME 是挂进来的 /github/home，属主是 runner（uid 1001）而容器以 root 运行，安全路径检查
+  按设计拒绝「以 root 装进别人的目录」。改工作流（用 root 自己的 HOME=/root、失败时也打印安装器输出），不改安装器。
 
