@@ -44,11 +44,51 @@ export function normalizeActor(raw: string): string | null {
   return out === "" ? null : out;
 }
 
+/**
+ * FR-C4 第三级：各家 agent 给自己**工具子进程**设的环境变量（2026-09-28 按一手资料核实，F22；证据见 DECISIONS D043）。
+ *
+ * 只认运行时自己设的变量，不认用户配置类的（`CODEX_HOME` 在任何装了 codex 的 shell 里都有，那不是「正在运行的是 codex」的证据）。
+ *
+ * agent 会嵌套（本仓库就是 Claude Code 调 Codex），内层的环境会继承外层的变量，光看环境分不出哪层在跑——所以不止一个信号在时不推断
+ * （见 agentFromEnv）。
+ */
+export const AGENT_SIGNALS: readonly { agent: string; env: string; value?: string }[] = [
+  { agent: "codex", env: "CODEX_THREAD_ID" },
+  { agent: "gemini", env: "GEMINI_CLI", value: "1" },
+  { agent: "opencode", env: "OPENCODE", value: "1" },
+  { agent: "pi", env: "PI_SESSION_ID" },
+  { agent: "cursor", env: "CURSOR_AGENT", value: "1" },
+  { agent: "claude-code", env: "CLAUDECODE", value: "1" },
+];
+
+/** `--agent` / `TODOPI_AGENT` 接受的名字。 */
+export const AGENT_NAMES: readonly string[] = AGENT_SIGNALS.map((s) => s.agent);
+
+/**
+ * 认出正在运行的 agent：**恰好一个**信号在时才算；一个都没有、或不止一个（嵌套：内层继承了外层的变量），返回 undefined。
+ *
+ * 嵌套时光看环境分不出哪一层在跑——Codex 里起的 Gemini，环境里 CODEX_THREAD_ID 与 GEMINI_CLI 都在（Codex 评审）。猜错的代价
+ * 是任务记到别的 agent 名下、写入端的严格匹配拒绝它（D014 的原则：少一级回退好过猜错）。嵌套里跑的 agent 用 `--agent`、
+ * `TODOPI_AGENT` 或 `TODOPI_ACTOR` 说清楚；setup 写出的钩子本来就带 `--agent`。
+ */
+export function agentFromEnv(env: Record<string, string | undefined>): string | undefined {
+  const found = AGENT_SIGNALS.filter((s) => {
+    const v = env[s.env];
+    return v !== undefined && v !== "" && (s.value === undefined || v === s.value);
+  });
+  return found.length === 1 ? found[0]!.agent : undefined;
+}
+
 export type ActorFacts = {
   /** --as 的值 */
   explicit?: string;
   /** TODOPI_ACTOR 的值 */
   env?: string;
+  /**
+   * 正在运行的 agent：`--agent` / `TODOPI_AGENT` 给的（setup 写进钩子的就是它——钩子子进程里不一定有下面那些信号），
+   * 没给就是 agentFromEnv 从环境认出来的
+   */
+  agent?: string;
   /** git config user.name 的值 */
   gitName?: string;
   /** 本机主机名 */
@@ -58,17 +98,13 @@ export type ActorFacts = {
 };
 
 /**
- * FR-C4 的解析链：`--as` > `TODOPI_ACTOR` > agent 环境推断 > `git config user.name`。
+ * FR-C4 的解析链：`--as` > `TODOPI_ACTOR` > agent（`<agent>@<host>`）> `git config user.name`。
  *
- * **agent 环境推断这一级没有实现**，因为没有可依据的事实：PRD §17 记录的六家
- * agent 外部事实里没有环境变量标记，而实测表明按变量名猜是不可靠的——
- * `CODEX_HOME` 在一个 Claude Code 会话里同样存在（它是 codex CLI 的配置目录，
- * 不是「正在运行的 agent 是 codex」的证据）。猜错身份的代价是任务归属错乱，
- * 比少一级回退严重得多。这一级作为待核实项记在 PRD §15。
+ * actor 标识的是工作者而不是会话：同一台机器上同一个 agent 跨会话不变，所以是 agent 名加主机名，不带会话 id。
  *
  * `--as` 与 `TODOPI_ACTOR` 是人手输入的，**不规范化**：悄悄改掉会让人纳闷
  * 自己的过滤器为什么不匹配，报错则当场说清楚。只有 `git config user.name`
- * 属于 spec §5.4 说的「取自外部来源的值」，需要规范化。
+ * 属于 spec §5.4 说的「取自外部来源的值」，需要规范化；agent 那一级的主机名同理（含冒号或空白时规范化）。
  */
 export function resolveActor(facts: ActorFacts): string {
   const onInvalid = facts.onInvalid ?? ((source, value) => {
@@ -77,6 +113,11 @@ export function resolveActor(facts: ActorFacts): string {
   for (const [source, value] of [["--as", facts.explicit], ["TODOPI_ACTOR", facts.env]] as const) {
     if (value === undefined || value === "") continue;
     return ACTOR_RE.test(value) ? value : onInvalid(source, value);
+  }
+  if (facts.agent !== undefined && facts.agent !== "") {
+    const raw = `${facts.agent}@${facts.host}`;
+    const actor = ACTOR_RE.test(raw) ? raw : normalizeActor(raw);
+    if (actor !== null) return actor;
   }
   if (facts.gitName !== undefined && facts.gitName !== "") {
     const normalized = normalizeActor(facts.gitName);

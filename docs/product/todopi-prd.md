@@ -93,7 +93,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 - **FR-C1** `claim <id> [--as <actor>]` 设置 `status: in_progress` 与 `assignee`，原子创建租约，记录 `claimed`。ready 队列给出的任务一定能被认领：租约已过期的 in_progress 任务直接重新认领，不需要额外仪式——队列把任务摆出来、claim 又拒绝它，两者会自相矛盾。只有**未过期**的租约才拒绝（退出码 3），`--steal` 用于覆盖它。无论哪种情况，替换了他人的 `assignee` 都记录 `steal=true` 并写明被替换者。
 - **FR-C2** `release <id>` 清空 assignee、删除租约、记录 `released`。
 - **FR-C3** 持有者的每次写入都刷新租约心跳和 `updated`。
-- **FR-C4** actor 解析：`--as` > `TODOPI_ACTOR` > agent 环境推断（`claude-code@<host>`、`codex@<host>` 等）> `git config user.name`。actor 标识的是**工作者而非会话**，因此同一机器上同一工具跨会话保持不变——否则续做自己昨天的任务都要先抢占。取自 `git config` 的值按格式规格 §5.4 规范化（这类值常含空格，而 actor 语法禁止空格）。`--as` 同时覆盖写入身份与查询身份，人不必做任何配置就能查看另一个 actor 的工作。
+- **FR-C4** actor 解析：`--as` > `TODOPI_ACTOR` > agent 环境推断（`claude-code@<host>`、`codex@<host>` 等；`--agent <name>` / `TODOPI_AGENT` 可显式给出，setup 写出的钩子就这么做，见 D043）> `git config user.name`。actor 标识的是**工作者而非会话**，因此同一机器上同一工具跨会话保持不变——否则续做自己昨天的任务都要先抢占。取自 `git config` 的值按格式规格 §5.4 规范化（这类值常含空格，而 actor 语法禁止空格）。`--as` 同时覆盖写入身份与查询身份，人不必做任何配置就能查看另一个 actor 的工作。
 - **FR-C6** 身份有两种匹配方式，由命令是否写入决定。**写入严格匹配**：`note`、`check`、`edit`、`dep`、`move`、`done`、`close`、心跳刷新，以及 `handoff` 追加的笔记，在任务 `assignee` 是另一个 actor 时拒绝（退出码 3），两个工作者因此不会在同一个任务上交错写入。`dep` 与 `move` 是 2026-09-24 补进名单的：它们改写的是被阻塞 / 被挪动的那个任务的文件与 Log，若它正被别人持有就是交错写入。F10 起初按字面名单把它们当规划操作放行，理由是「与 `add --blocked-by` 同类」——这个类比是错的，`add` 写的是一个新任务（见 DECISIONS D030）。**展示宽松匹配**：`ls --mine`、`prime` 和 `handoff` 打印的报告把 assignee 等于当前解析出的 actor **或**以 `@<本机 host>` 结尾的任务都算作「我的」。人在终端上因此能看到自己的 agent 在做什么——这正是这三个命令存在的意义；不需要任何配置，也不需要保存一份 actor 清单。
 - **FR-C5** 租约放在 `.git/todopi/leases/`（worktree 间共享）；无 git 时回退到 `.todopi/.cache/leases/`。同一目录承载其余机器本地运行时状态，包括每个会话上次 `prime` 的时间（FR-P1）。会话身份留在这里，永不进入任务文件。
 
@@ -314,7 +314,11 @@ todopi import <file.md> | import beads [path]
 - **导入器与 `forced=true` 的相互作用**（FR-I1/I2，本轮未展开）。FR-I1 规定导入时已勾选的条目建成 `closed/done` 且 `forced=true`，而 `forced=true` 在列表与看板中标记为「未验证」（FR-D3）。导入 500 个 Beads 已关闭 issue 会产生 500 个「未验证」标记——语义上没错（确实没验证过），但会把一个本用于警示「有人跳过了验证」的标记变成噪音。另需定义：重复导入（按 source + title 幂等）时 `rank` 保留还是重算，因为 rank 现在于创建时分配（FR-T1）。拆到导入器 feature 时展开。（F19 定：`rank` 保留，已有任务一个字节都不动，见 FR-I1。F20 定：Beads 迁来的已关闭任务不标 `forced=true`，出处记在 `imported` 事件里，不显示为「未验证」——那个标记留给「有人在 todopi 里跳过了门禁」，D041。）
 - **裸仓库明确不支持。** 实测裸仓库中 `git rev-parse --git-common-dir` 返回 `.`，租约目录会落在裸仓库内部。规格 §1 定义 `.todopi/` 位于「包含 `.git` 的目录」，而裸仓库没有工作区。应在规格中显式声明不支持，而不是留给实现去猜。（git worktree 场景实测正确：`--git-common-dir` 正确指向共享的 `.git`。）
 - **Windows 的原子 rename 是已知风险点。** 原子写是临时文件 + rename，而 Windows 上 rename 覆盖一个被其他进程打开的文件会失败。Windows 是尽力而为（CI 跑但不阻塞发布），但这一条应当是 Windows CI **明确要测**的用例，而不是等用户报告。本条未经实测，仅为推理。
-- **FR-C4 的「agent 环境推断」这一级未实现，缺事实依据。** §17 核实六家 agent 时没有记录环境变量标记，而实测表明按变量名猜不可靠：`CODEX_HOME` 在一个 Claude Code 会话里同样存在（它是 codex CLI 的配置目录，不是「正在运行的 agent 是 codex」的证据）。猜错身份的代价是任务归属错乱，比少一级回退严重得多。当前解析链是 `--as` > `TODOPI_ACTOR` > `git config user.name`（经 §5.4 规范化）> `unknown@<host>`。做各家接入包时逐一核实各自是否有**唯一且只在自己运行时出现**的标记，核实结果写回 §17 再补这一级。（见 DECISIONS D014）
+- ~~**FR-C4 的「agent 环境推断」这一级未实现，缺事实依据。**~~ **2026-09-28 已实现（F22，D043）。** 六家的标记都按一手资料核实：
+  只认各家运行时给自己**工具子进程**设的变量——Claude Code `CLAUDECODE=1`、Codex `CODEX_THREAD_ID`、Gemini CLI `GEMINI_CLI=1`、
+  OpenCode `OPENCODE=1`、pi `PI_SESSION_ID`、Cursor `CURSOR_AGENT=1`——不认 `CODEX_HOME` 这类用户配置。不止一个信号在（嵌套）时分不出哪层在跑，
+  不推断。钩子子进程里不一定有这些变量，所以 setup 写出的钩子命令都显式带 `--agent <name>`。原文：「§17 核实六家 agent 时没有记录
+  环境变量标记，而实测表明按变量名猜不可靠：`CODEX_HOME` 在一个 Claude Code 会话里同样存在……（见 DECISIONS D014）」
 - **`verify` 的完整日志没有大小上限，磁盘是已知风险点。** FR-D4a 要求完整输出一律写入 `.cache/verify/`，实现改成流式落盘之后这一条才真正成立（早先超过 1 MiB 的部分在写盘前就丢了）。代价是：一条疯狂刷屏的 `verify` 在默认 600 秒超时内可以写出几十 GB。没有悄悄加文件上限，因为那等于改契约——「完整输出」就不再完整。缓解在于 `.cache/` 按规格 §2 可随时删除，且 `verify` 本来就有超时。若 dogfooding 期间真的撑爆过磁盘，再把「日志上限」作为一次明确的契约变更提出来，而不是现在偷偷加。本条未经实测，仅为推理。
 - **`verify` 命令里含 NUL 字节时 runner 起不来。** 实测：Node 的 `spawn` 拒绝含 NUL 的参数，`runCommand` 于是报「runner 退出 1」而不是一条说得清的错。YAML 标量里几乎不会出现 NUL，所以没有现在修；要修的话应在 `exec/run.ts` 入口处明确拒绝并说明。
 - **自举第一天问出来的五条。** 2026-09-23 本仓库从 `feature_list.json` 迁到

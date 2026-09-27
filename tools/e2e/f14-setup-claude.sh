@@ -5,6 +5,8 @@
 # 「Claude Code 真的把输出放进上下文」要真的 agent，在 PRD §17 记了 2026-09-26 的实测，不在这里跑。
 
 set -u
+# 与跑它的 agent 无关（F22）：agent 的环境信号会让默认身份变成 <agent>@<host>，脚本里的身份断言按 git 用户名写
+unset CLAUDECODE CODEX_THREAD_ID GEMINI_CLI OPENCODE PI_SESSION_ID CURSOR_AGENT TODOPI_AGENT TODOPI_ACTOR
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 2
 
@@ -35,7 +37,7 @@ out="$(todopi -C "$W" setup claude 2>&1)"
 
 # 2. 照 settings.json 里写的命令，喂 Claude Code 形状的载荷去跑
 cmd="$(node -e 'const s=require(process.argv[1]);console.log(s.hooks.SessionStart[0].hooks[0].command)' "$W/.claude/settings.json")"
-[ "$cmd" = "todopi prime --hook" ] && ok "SessionStart 钩子命令是 todopi prime --hook" || fail "钩子命令是：$cmd"
+[ "$cmd" = "todopi --agent claude-code prime --hook" ] && ok "SessionStart 钩子命令是 todopi --agent claude-code prime --hook" || fail "钩子命令是：$cmd"
 payload='{"session_id":"e2e-sess-1","hook_event_name":"SessionStart","source":"compact","cwd":"'"$W"'"}'
 out="$(cd "$W" && printf '%s' "$payload" | sh -c "$cmd" 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] && printf '%s\n' "$out" | tail -1 | grep -q "^No task in progress" && ok "钩子命令跑通，输出 prime" || fail "rc=${rc}：$out"

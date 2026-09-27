@@ -14,7 +14,15 @@ program
   .option("--json", "emit structured data instead of human-readable text")
   .option("--quiet", "suppress progress and hints; keep results and errors")
   .option("--as <actor>", "act as this actor, for both writes and queries")
+  .option("--agent <name>", "the coding agent running this command (claude-code, codex, gemini, opencode, pi, cursor); "
+    + "sets the actor to <name>@<host>. Hooks installed by `todopi setup` pass it; agents are also recognized from their environment")
   .exitOverride();
+
+// --agent 交给身份解析（只在本进程里，不放进环境——见 setAgentOption）。F22
+program.hook("preAction", async () => {
+  const { setAgentOption } = await import("./commands/actor.ts");
+  setAgentOption(program.opts()["agent"] as string | undefined);
+});
 
 program
   .command("doctor")

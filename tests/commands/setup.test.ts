@@ -27,8 +27,8 @@ test("项目级：写 .claude/settings.json 的 SessionStart 与 SessionEnd 钩�
   assert.deepEqual(r.files.map((f) => [f.path, f.status]), [
     [join(d, ".claude", "settings.json"), "created"], [join(d, "CLAUDE.md"), "created"]]);
   const s = json(join(d, ".claude", "settings.json"));
-  assert.deepEqual(commands(s, "SessionStart"), ["todopi prime --hook"]);
-  assert.deepEqual(commands(s, "SessionEnd"), ["todopi handoff --check --hook"]);
+  assert.deepEqual(commands(s, "SessionStart"), ["todopi --agent claude-code prime --hook"]);
+  assert.deepEqual(commands(s, "SessionEnd"), ["todopi --agent claude-code handoff --check --hook"]);
   assert.equal(s.hooks.SessionStart[0].matcher, undefined, "不设 matcher：覆盖 startup / resume / clear / compact / fork");
   assert.equal("PostCompact" in s.hooks, false, "压缩后注入靠 SessionStart 的 compact 来源（PRD §17 重核）");
   assert.equal(readFileSync(join(d, "CLAUDE.md"), "utf8"), "@AGENTS.md\n");
@@ -55,7 +55,7 @@ test("已有的 settings.json：别的键、别的钩子原样保留，只补我
   const s = json(p);
   assert.equal(s.model, "opus");
   assert.deepEqual(s.permissions, { allow: ["Bash(ls)"] });
-  assert.deepEqual(commands(s, "SessionStart"), ["echo hi", "todopi prime --hook"]);
+  assert.deepEqual(commands(s, "SessionStart"), ["echo hi", "todopi --agent claude-code prime --hook"]);
   assert.deepEqual(commands(s, "PreToolUse"), ["guard.sh"]);
   assert.equal(ensureClaudeHooks(p).status, "unchanged");
 });
@@ -135,8 +135,8 @@ test("更新已有的 settings.json 与 CLAUDE.md：权限位不变（用户的�
 test("只认我们写出的标准组（无 matcher / 空 / *）；限定过 matcher 的同名组不改、另补标准组并提示可能重复（评审一至四轮）", () => {
   const d = tmp();
   const p = join(d, "settings.json");
-  const end = [{ hooks: [{ type: "command", command: "todopi handoff --check --hook" }] }];
-  const ours = (matcher?: string) => ({ ...(matcher === undefined ? {} : { matcher }), hooks: [{ type: "command", command: "todopi prime --hook" }] });
+  const end = [{ hooks: [{ type: "command", command: "todopi --agent claude-code handoff --check --hook" }] }];
+  const ours = (matcher?: string) => ({ ...(matcher === undefined ? {} : { matcher }), hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook" }] });
   // 不猜 Claude Code 怎么解释 matcher（精确列表、正则）：限定过的一律不算装好。
   for (const matchers of [["startup"], ["startup", "compact"], ["startup, compact"], ["startup|compact|resume"], [".*"], ["^star"]]) {
     writeFileSync(p, JSON.stringify({ hooks: { SessionStart: matchers.map(ours), SessionEnd: end } }));
@@ -161,35 +161,35 @@ test("用户别的钩子不校验、原样保留（那是 Claude Code 的事）�
   assert.equal(ensureClaudeHooks(p).status, "updated");
   const s = json(p);
   assert.deepEqual(s.hooks.SessionStart.slice(0, 4), odd, "原有条目逐个原样");
-  assert.deepEqual(s.hooks.SessionStart[4], { hooks: [{ type: "command", command: "todopi prime --hook" }] });
+  assert.deepEqual(s.hooks.SessionStart[4], { hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook" }] });
 });
 
 test("同一命令但可能不运行、或输出不进上下文的（if、async、陌生键、非法正则 matcher）：不算装好，补一组标准的（评审三轮）", () => {
-  const end = [{ hooks: [{ type: "command", command: "todopi handoff --check --hook" }] }];
+  const end = [{ hooks: [{ type: "command", command: "todopi --agent claude-code handoff --check --hook" }] }];
   for (const group of [
-    { hooks: [{ type: "command", command: "todopi prime --hook", if: "Bash(ls)" }] },
-    { hooks: [{ type: "command", command: "todopi prime --hook", async: true }] },
-    { hooks: [{ type: "command", command: "todopi prime --hook", something: 1 }] },
-    { matcher: "[", hooks: [{ type: "command", command: "todopi prime --hook" }] },
+    { hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook", if: "Bash(ls)" }] },
+    { hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook", async: true }] },
+    { hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook", something: 1 }] },
+    { matcher: "[", hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook" }] },
   ]) {
     const d = tmp();
     const p = join(d, "settings.json");
     writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [group], SessionEnd: end } }));
     assert.equal(ensureClaudeHooks(p).status, "updated", JSON.stringify(group));
     const s = json(p);
-    assert.deepEqual(s.hooks.SessionStart, [group, { hooks: [{ type: "command", command: "todopi prime --hook" }] }]);
+    assert.deepEqual(s.hooks.SessionStart, [group, { hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook" }] }]);
   }
   // timeout、statusMessage 的值类型不对：不算（评审四轮）。
   for (const extra of [{ timeout: "bad" }, { timeout: 0 }, { statusMessage: { x: 1 } }]) {
     const d = tmp();
     const p = join(d, "settings.json");
-    writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "todopi prime --hook", ...extra }] }], SessionEnd: end } }));
+    writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook", ...extra }] }], SessionEnd: end } }));
     assert.equal(ensureClaudeHooks(p).status, "updated", JSON.stringify(extra));
   }
   // timeout（正数）、statusMessage（字符串）不影响运行与注入：算装好。
   const d = tmp();
   const p = join(d, "settings.json");
-  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "todopi prime --hook", timeout: 30, statusMessage: "priming" }] }], SessionEnd: end } }));
+  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook", timeout: 30, statusMessage: "priming" }] }], SessionEnd: end } }));
   assert.equal(ensureClaudeHooks(p).status, "unchanged");
 });
 
@@ -234,8 +234,8 @@ test("codex：写 .codex/hooks.json（与 Claude Code 同构：SessionStart 不�
   const r = runSetup({ directory: d, agent: "codex" });
   assert.deepEqual(r.files.map((f) => [f.path, f.status]), [[join(d, ".codex", "hooks.json"), "created"]]);
   const s = json(join(d, ".codex", "hooks.json"));
-  assert.deepEqual(commands(s, "SessionStart"), ["todopi prime --hook"]);
-  assert.deepEqual(commands(s, "SessionEnd"), ["todopi handoff --check --hook"]);
+  assert.deepEqual(commands(s, "SessionStart"), ["todopi --agent codex prime --hook"]);
+  assert.deepEqual(commands(s, "SessionEnd"), ["todopi --agent codex handoff --check --hook"]);
   assert.equal("PostCompact" in s.hooks, false, "Codex 压缩后 SessionStart(compact) 与 PostCompact 都会触发——两个都装会注入两遍");
   assert.ok(r.notes.some((n) => /trust/.test(n)));
   assert.equal(existsSync(join(d, "CLAUDE.md")), false, "Codex 原生读 AGENTS.md");
@@ -291,7 +291,7 @@ test("opencode 插件：在 session.created / session.compacted 时跑 prime 并
     return out.system;
   };
   await hooks.event({ event: { type: "session.created", properties: { info: { id: "s1" } } } });
-  assert.deepEqual(calls, ['todopi prime --hook < <payload>|{"sessionID":"s1"}']);
+  assert.deepEqual(calls, ['todopi --agent opencode prime --hook < <payload>|{"sessionID":"s1"}']);
   assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 1"]);
   assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 1"], "缓存：不是每一轮都跑 prime");
   assert.equal(calls.length, 1);
@@ -377,7 +377,7 @@ test("pi 扩展：session_start / session_compact 跑 prime（--session 取自 s
   const ctx = (id: string) => ({ cwd: dir, sessionManager: { getSessionId: () => id } });
   const turn = async (id: string) => handlers.get("before_agent_start")!({ systemPrompt: "BASE" }, ctx(id));
   await handlers.get("session_start")!({ reason: "startup" }, ctx("s1"));
-  assert.deepEqual(calls, [["todopi", "prime", "--hook", "--session", "s1"]]);
+  assert.deepEqual(calls, [["todopi", "--agent", "pi", "prime", "--hook", "--session", "s1"]]);
   assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" });
   assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" }, "缓存：不是每一轮都跑 prime");
   await handlers.get("session_compact")!({ reason: "manual" }, ctx("s1"));
@@ -455,4 +455,53 @@ test("项目级：路径上的目录是指向项目外的符号链接时拒绝�
   const elsewhere = tmp();
   symlinkSync(elsewhere, join(home, ".pi"));
   assert.equal(runSetup({ directory: d, agent: "pi", user: true, home }).files[0]!.status, "created");
+});
+
+test("旧版 setup 装的钩子（没有 --agent）：重跑 setup 就地改成新命令，不另加一组（F22）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  writeFileSync(p, JSON.stringify({ hooks: {
+    SessionStart: [{ matcher: "", hooks: [{ type: "command", command: "todopi prime --hook", timeout: 30 }] }],
+    SessionEnd: [{ hooks: [{ type: "command", command: "todopi handoff --check --hook" }] }] } }));
+  ensureClaudeHooks(p);
+  const s = json(p);
+  assert.deepEqual(s.hooks.SessionStart, [{ matcher: "", hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook", timeout: 30 }] }],
+    "就地改命令，别的键（matcher、timeout）原样");
+  assert.deepEqual(commands(s, "SessionEnd"), ["todopi --agent claude-code handoff --check --hook"]);
+  assert.equal(ensureClaudeHooks(p).status, "unchanged");
+});
+
+test("旧命令但被用户改过的组（加了 if 之类）：不改它，另补新组并提示可能跑两遍（F22）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "todopi prime --hook", if: "Bash(x)" }] }] } }));
+  const r = ensureClaudeHooks(p);
+  assert.equal(json(p).hooks.SessionStart.length, 2);
+  assert.match(r.notes.join("\n"), /runs twice/);
+});
+
+test("同一组里既有被改过的旧命令、又有标准的旧命令：只迁移标准的那一项，被改过的原样并提示（Codex 评审）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [
+    { type: "command", command: "todopi prime --hook", if: "Bash(foo)" },
+    { type: "command", command: "todopi prime --hook" },
+  ] }] } }));
+  const r = ensureClaudeHooks(p);
+  assert.deepEqual(json(p).hooks.SessionStart, [{ hooks: [
+    { type: "command", command: "todopi prime --hook", if: "Bash(foo)" },
+    { type: "command", command: "todopi --agent claude-code prime --hook" },
+  ] }]);
+  assert.match(r.notes.join("\n"), /still runs the old/);
+});
+
+test("新版钩子已经在、同一事件里还留着被改过的旧命令：提示可能跑两遍（Codex 评审）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  writeFileSync(p, JSON.stringify({ hooks: {
+    SessionStart: [{ hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook" }, { type: "command", command: "todopi prime --hook", async: true }] }],
+    SessionEnd: [{ hooks: [{ type: "command", command: "todopi --agent claude-code handoff --check --hook" }] }] } }));
+  const r = ensureClaudeHooks(p);
+  assert.equal(r.status, "unchanged");
+  assert.match(r.notes.join("\n"), /SessionStart group still runs the old `todopi prime --hook` alongside/);
 });

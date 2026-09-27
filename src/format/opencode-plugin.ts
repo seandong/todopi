@@ -36,7 +36,7 @@ export const TodopiPlugin = async ({ $, directory }) => {
   const primed = new Map();
   const prime = async (sessionID) => {
     const payload = Buffer.from(JSON.stringify({ sessionID }));
-    const r = await $\`todopi prime --hook < \${payload}\`.cwd(directory).quiet().nothrow();
+    const r = await $\`todopi --agent opencode prime --hook < \${payload}\`.cwd(directory).quiet().nothrow();
     // Failed (e.g. todopi not on PATH yet): don't cache, so the next model call retries.
     if (r.exitCode === 0) primed.set(sessionID, r.stdout.toString().trim());
     else primed.delete(sessionID);
