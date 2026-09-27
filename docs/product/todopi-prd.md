@@ -196,7 +196,7 @@ todopi 是面向 AI coding agent 的持久任务账本。它是一个 CLI（`tod
 
 - **FR-Q1** `doctor [--fix]` 检查规格中的所有不变量、冲突标记，对未知键给出警告（不让 doctor 失败，§5.2 是 SHOULD warn）；租约只按**过期**判定——租约目录由所有 worktree 共享，一个在本 checkout 里对不上任务的租约很可能是另一个 worktree 分支上的活认领，「孤儿」在单个 checkout 里判断不了（F13 评审后改，D034）；`--fix` 规范化键顺序、时间戳与 checkbox 语法，按 `created` 顺序回填缺失的 `rank`（FR-T5），并清除过期租约。它**永不修改 Log**，哪怕某一行无法解析也只报告不改写；也**不刷新 `updated`**——那是跨机器的心跳，修复工具刷新它会让所有过期认领看起来又活了（规格 §6.3 的例外，用户 2026-09-26 定）。一个可以被修复工具改写的追加式历史不是证据，而 Log 正是这个产品拿出来当证据的东西。仍有问题则退出码 1。
 - **FR-Q2** 退出码：0 成功 · 1 用法/校验错误 · 2 门禁失败（verify/验收标准/子任务）· 3 冲突（租约被占、并发写）· 4 格式版本不支持。
-- **FR-Q3** `--json` 的输出结构有文档并随 CLI 版本化；破坏性变更升 CLI 主版本。
+- **FR-Q3** `--json` 的输出结构有文档并随 CLI 版本化；破坏性变更升 CLI 主版本。文档是 `docs/json.md`，与源码类型的一致性由 ARCH-028 检查（D048）。
 - **FR-Q4** 动词宽容：`done|finish|complete`、`close|cancel`、`ls|list`、`add|new|create`、`note|log`、`dep|block` 作为别名接受；别名不计入子命令数。
 - **FR-Q5** `init` 创建含 `config.yml`、`tasks/`、`.gitignore` 的 `.todopi/`，并把协议文本追加到 `AGENTS.md`（不存在则创建）。重复运行是幂等的：已存在的协议段落被原地替换而不是再追加一份。
 - **FR-Q5a** 只跑 `init` 不足以让 Claude Code 读到协议：官方文档明确写出「Claude Code reads `CLAUDE.md`, not `AGENTS.md`」。因此 `setup claude` MUST 确保存在一个 `CLAUDE.md`，其中含有对 `AGENTS.md` 的导入（`@AGENTS.md`），已有 `CLAUDE.md` 则只在缺少该导入时追加一行，不改动其余内容。这一条同时是协议能活过压缩的前提——project-root 的 `CLAUDE.md` 在压缩后由 Claude Code 从磁盘重读，这正是 FR-P1 把协议移出 `prime` 的依据。
