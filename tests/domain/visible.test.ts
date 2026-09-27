@@ -9,4 +9,12 @@ test("控制字符与双向文字字符写成可见转义；普通文字（含�
   assert.equal(visible("a\nb\tc\u0007\u007f\u009b"), "a\\nb\\tc\\x07\\x7f\\x9b");
   assert.equal(visible("rm -rf x \u202e/ gnp.txt"), "rm -rf x \\u202e/ gnp.txt");
   assert.equal(visible("\u2066x\u2069\u200f"), "\\u2066x\\u2069\\u200f");
+  // 零宽与其他默认不可见的字符（Codex 复审：U+200B 让 /tmp/approved 看起来是另一个路径）
+  assert.equal(visible("rm -rf /tmp/approved\u200b"), "rm -rf /tmp/approved\\u200b");
+  assert.equal(visible("a\u2060b\ufeffc\u00adD\u180e"), "a\\u2060b\\ufeffc\\xadD\\u180e");
+  assert.equal(visible("x\ufe0fy\u{e0041}z"), "x\\ufe0fy\\u{e0041}z");
+  // 只是格式字符、不属于「默认不可见」的：行间注释标记能把一段文字藏进「注释」里，阿拉伯数字符号会改变后面的显示
+  assert.equal(visible("a\ufff9b\ufffac\ufffbd\u0600"), "a\\ufff9b\\ufffac\\ufffbd\\u0600");
+  // 普通空格原样；其他空白（不换行空格、表意空格）与行 / 段分隔符转义
+  assert.equal(visible("a b\u00a0c\u3000d\u2028e\u2029"), "a b\\xa0c\\u3000d\\u2028e\\u2029");
 });
