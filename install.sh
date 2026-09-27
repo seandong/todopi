@@ -87,7 +87,10 @@ acl_lets_others_write() { # dir
     return $?
   fi
   command -v getfacl >/dev/null 2>&1 || return 0 # an ACL we cannot read: assume the worst
-  getfacl -cp "$1" 2>/dev/null | awk -F: -v me="$(id -un)" '
+  # Capture first and check getfacl's own status: piping straight into awk would turn a failed read into "no risky ACL"
+  acl=$(getfacl -cp "$1" 2>/dev/null) || return 0
+  [ -n "$acl" ] || return 0
+  printf '%s\n' "$acl" | awk -F: -v me="$(id -un)" '
     $1 == "mask" { mask = $3 }
     ($1 == "user" && $2 != "" && $2 != me) || ($1 == "group" && $2 != "") { if ($3 ~ /w/) named = 1 }
     END { exit !(named && (mask == "" || mask ~ /w/)) }'

@@ -252,6 +252,15 @@ if [ "$(uname -s)" = "Darwin" ]; then
   [ "$rc" -eq 0 ] && ok "只有 deny 条目的 ACL（macOS 家目录默认那条）：允许" || fail "rc=${rc}：$out"
 fi
 
+# ACL 读不出来（getfacl 报错）：当作不安全，拒绝（Codex 补审第五轮）。用一个会失败的 getfacl 桩、并让 ls 报告 + 来走到这一支
+if [ "$(uname -s)" != "Darwin" ]; then
+  FB="$TMP/failacl"; mkdir -p "$FB"
+  printf '#!/bin/sh\nexit 1\n' > "$FB/getfacl"; chmod +x "$FB/getfacl"
+  printf '#!/bin/sh\n/bin/ls "$@" | sed "1s/^\\([^ ]*\\)/\\1+/"\n' > "$FB/ls"; chmod +x "$FB/ls"
+  out="$(PATH="$FB:$PATH" binstall "$TMP/c15" TODOPI_FORCE_BINARY=1)"; rc=$?
+  [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "access control list" && ok "ACL 读不出来：拒绝安装（不当成安全）" || fail "rc=${rc}：$out"
+fi
+
 # PATH 提示按 shell 给出该写的文件
 out="$(binstall "$TMP/c4" TODOPI_FORCE_BINARY=1 SHELL=/bin/zsh)"
 printf '%s' "$out" | grep -q ">> ~/.zshrc" && ok "zsh 用户的 PATH 提示写 ~/.zshrc" || fail "$out"
