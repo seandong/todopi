@@ -155,9 +155,11 @@ install_binary() {
   # mounted noexec; running it before the rename means a binary that cannot start here (for example on musl-based Linux such
   # as Alpine, which the glibc builds do not support) is never reported as installed; the rename means an interrupted install
   # never leaves half a binary in place.
-  # The temporary name comes from mktemp (created exclusively, unpredictable) rather than the PID: a predictable name in a
-  # directory someone else can write could be planted as a symlink, and cp / chmod would follow it to a file elsewhere. It is
-  # checked again after writing, before it is run or renamed.
+  # Writing into a directory another user can modify cannot be made race-free with shell tools: they can swap a file we
+  # just created for a symlink between two commands, and cp / chmod would follow it to a file elsewhere. So refuse such a
+  # directory outright (owned by us, not writable by group or others), and then create the temporary file with mktemp.
+  [ -n "$(find "$INSTALL_DIR" -prune -user "$(id -u)" ! -perm -020 ! -perm -002 2>/dev/null)" ] \
+    || die "${INSTALL_DIR} must be owned by you and not writable by other users; refusing to install into it (set TODOPI_INSTALL_DIR to one that is)"
   new=$(mktemp "$INSTALL_DIR/.todopi.new.XXXXXX") || die "could not create a temporary file in ${INSTALL_DIR}"
   cp "$work/x/todopi" "$new" && [ -f "$new" ] && [ ! -L "$new" ] && chmod 755 "$new" \
     || { rm -f "$new"; die "could not write a regular file to ${INSTALL_DIR}"; }

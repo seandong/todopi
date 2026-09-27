@@ -104,7 +104,7 @@ out="$(binstall "$TMP/b1" TODOPI_FORCE_BINARY=1)"; rc=$?
 
 # 没有 Node 的 PATH：只放安装器要用的工具
 NB="$TMP/nonode"; mkdir -p "$NB"
-for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr; do
+for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr find id; do
   p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$NB/$t"
 done
 out="$(PATH="$NB" binstall "$TMP/b2")"; rc=$?
@@ -164,7 +164,7 @@ printf '%s  %s\n' "$(sha "$REL/v$FV/$ASSET")" "$ASSET" > "$REL/v$FV/SHA256SUMS"
 
 # npm 这条路走不通时退回二进制（F21 评审）：有 Node 没有 npm；npm 装不上（包不存在）；之前装过二进制、npm 撞上已有文件
 NN="$TMP/nodenonpm"; mkdir -p "$NN"
-for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr node; do
+for t in sh curl tar gzip awk cut mktemp uname mkdir chmod mv rm cp dirname basename sha256sum shasum cat env head tr find id node; do
   p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$NN/$t"
 done
 out="$(PATH="$NN" binstall "$TMP/c1")"; rc=$?
@@ -216,6 +216,16 @@ out="$(binstall "$TMP/c8" TODOPI_FORCE_BINARY=1)"; rc=$?
 [ "$rc" -eq 0 ] && [ -z "$(ls -A "$TMP/c8/.local/bin" | grep '^\.todopi\.new')" ] && ok "安装后不留临时文件" || fail "rc=${rc}：$(ls -A "$TMP/c8/.local/bin")"
 grep -q 'mktemp "$INSTALL_DIR/.todopi.new.XXXXXX"' install.sh && ! grep -q '\.todopi\.new\.\$\$' install.sh \
   && ok "安装目录里的临时文件用 mktemp 独占创建，不用可预测的 PID 名" || fail "install.sh 仍用 PID 名的临时文件"
+
+# 安装目录别人可写（组可写 / 所有人可写）：拒绝——在那种目录里写文件做不到无竞态（Codex 补审复核）
+mkdir -p "$TMP/c9/shared"; chmod 775 "$TMP/c9/shared"
+out="$(binstall "$TMP/c9" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c9/shared")"; rc=$?
+[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "not writable by other users" && [ ! -e "$TMP/c9/shared/todopi" ] \
+  && ok "组可写的安装目录：拒绝安装" || fail "rc=${rc}：$out"
+chmod 757 "$TMP/c9/shared"
+out="$(binstall "$TMP/c9" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c9/shared")"; rc=$?
+[ "$rc" -ne 0 ] && [ ! -e "$TMP/c9/shared/todopi" ] && ok "所有人可写的安装目录：拒绝安装" || fail "rc=${rc}：$out"
+chmod 755 "$TMP/c9/shared"
 
 # PATH 提示按 shell 给出该写的文件
 out="$(binstall "$TMP/c4" TODOPI_FORCE_BINARY=1 SHELL=/bin/zsh)"
