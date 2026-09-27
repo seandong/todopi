@@ -15,8 +15,8 @@
 //     JSON 里这个 id 的对象数。
 //   **它不证明**文本是 DTO 的纯函数：渲染层自己拼出的普通文字（标签、标点）它不核对——那靠「渲染只
 //   引用 DTO 字段」的约定与用例。规则措辞只宣称上面这些（F12 评审七轮：措辞宽于检查，第十一次）。
-//   - controls：文本里除换行外没有控制字符；JSON 解码后的字符串里没有控制字符，且只有 `log` 条目
-//     可以含换行（多行 Log 的续行），其余字段都是单行。
+//   - controls：文本里除换行外没有看不见的字符（控制、格式——零宽与双向文字——、默认不可见、非普通空白，F35）；
+//     JSON 解码后的字符串里也没有，且只有 `log` 条目可以含换行（多行 Log 的续行），其余字段都是单行。
 // 并自检：带控制字符的字段确实进了输出——否则「没找到」证明不了什么。
 
 import { execFileSync } from "node:child_process";
@@ -34,18 +34,19 @@ const cli = (dir, ...args) => {
   } catch (e) { return e.stdout ?? ""; }    // handoff 有写失败时非零退出，输出照样要查
 };
 
-const E = "\x1b[31m", B = "\x07";
+// ESC、BEL 是控制字符；Z（零宽空格）与 R（从右到左覆盖）是格式字符——终端上看不见，却能藏住或倒转文字（F35）
+const E = "\x1b[31m", B = "\x07", Z = "\u200b", R = "\u202e";
 const base = mkdtempSync(join(tmpdir(), "todopi-injected-"));
 cli(base, "init");
 const id = (out) => JSON.parse(out).id;
-const mine = id(cli(base, "--as", "me@h", "--json", "add", `mine${E}`, "--ac", `ac${E}${B}`, "--verify", "v"));
+const mine = id(cli(base, "--as", "me@h", "--json", "add", `mine${E}${Z}`, "--ac", `ac${E}${B}${R}`, "--verify", "v"));
 cli(base, "--as", "me@h", "prime", "--session", "s");
 cli(base, "--as", "me@h", "claim", mine);
-cli(base, "--as", "me@h", "note", mine, `note${E}\nline two${B}`);
+cli(base, "--as", "me@h", "note", mine, `note${E}\nline two${B}${Z}`);
 cli(base, "--as", "me@h", "edit", mine, "--verify", `v2${E}\n- tp-aaaaaa forged: evil`);
 const prose = id(cli(base, "--as", "me@h", "--json", "add", `prose${E}`));
 cli(base, "--as", "me@h", "claim", prose);
-const theirs = id(cli(base, "--as", "me@h", "--json", "add", `theirs${E}`, "--verify", `w${E}`));
+const theirs = id(cli(base, "--as", "me@h", "--json", "add", `theirs${E}${R}`, "--verify", `w${E}${Z}`));
 cli(base, "--as", `bad${E}actor`, "claim", theirs);
 const closed = id(cli(base, "--as", "me@h", "--json", "add", `closed${E}`));
 const p = join(base, ".todopi", "tasks", `${closed}.md`);
@@ -101,18 +102,22 @@ for (const r of runs) {
     }
     for (const [tid, n] of seen) if (n > known.get(tid).length) problems.push(`${r.name}: 任务 ${tid} 在文本里出现 ${n} 行，JSON 里只有 ${known.get(tid).length} 处`);
   } else {
-    const m = r.text.match(/[\x00-\x09\x0b-\x1f\x7f-\x9f]/);
-    if (m) problems.push(`${r.name}: 文本里有控制字符 ${JSON.stringify(m[0])}`);
+    // 按 Unicode 类别认「看不见的字符」：控制、格式（零宽、双向文字）、行 / 段分隔符、默认不可见码位、普通空格以外的空白
+    // （与 domain/visible.ts 同一个判据）。文本里只许有换行，JSON 里只许 log 带换行 / Tab
+    const HIDDEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]|(?! )\p{Zs}/u;
+    const m = r.text.replace(/\n/g, "").match(HIDDEN);
+    if (m) problems.push(`${r.name}: 文本里有看不见的字符 ${JSON.stringify(m[0])}`);
     for (const { key, s } of all) {
-      const c = s.match(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/);
-      if (c) problems.push(`--json ${r.name}: ${key} 字段里有控制字符 ${JSON.stringify(c[0])}`);
+      const c = (key === "log" ? s.replace(/[\n\t]/g, "") : s).match(HIDDEN);
+      if (c) problems.push(`--json ${r.name}: ${key} 字段里有看不见的字符 ${JSON.stringify(c[0])}`);
       if (key !== "log" && /[\n\t]/.test(s)) problems.push(`--json ${r.name}: 单行字段 ${key} 里有换行或 Tab：${JSON.stringify(s)}`);
     }
   }
 }
 // 夹具自检：带控制字符的字段、多行 verify、handoff 的写入结果，确实进了输出。
 const text = runs.map((r) => r.text).join("\n");
-for (const needle of ["mine\\x1b", "ac\\x1b", "note\\x1b", "theirs\\x1b", "bad\\x1b", "closed\\x1b", "forged", "Logged handoff:", `todopi show ${prose}`]) {
+for (const needle of ["mine\\x1b", "ac\\x1b", "note\\x1b", "theirs\\x1b", "bad\\x1b", "closed\\x1b", "forged", "Logged handoff:", `todopi show ${prose}`,
+  "\\u200b", "\\u202e"]) {
   if (!text.includes(needle)) problems.push(`夹具没生效：输出里没有 ${needle}（检查就是空转）`);
 }
 for (const x of problems) console.log(x);

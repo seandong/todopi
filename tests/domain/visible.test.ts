@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { visible } from "../../src/domain/visible.ts";
+import { visible, visibleMultiline } from "../../src/domain/visible.ts";
 
 test("控制字符与双向文字字符写成可见转义；普通文字（含中文）原样", () => {
   assert.equal(visible("make test && echo 好"), "make test && echo 好");
@@ -17,4 +17,10 @@ test("控制字符与双向文字字符写成可见转义；普通文字（含�
   assert.equal(visible("a\ufff9b\ufffac\ufffbd\u0600"), "a\\ufff9b\\ufffac\\ufffbd\\u0600");
   // 普通空格原样；其他空白（不换行空格、表意空格）与行 / 段分隔符转义
   assert.equal(visible("a b\u00a0c\u3000d\u2028e\u2029"), "a b\\xa0c\\u3000d\\u2028e\\u2029");
+});
+
+test("多行版：换行与 Tab 原样，其余与单行版相同（prime 的 Log 条目用它，F35）", () => {
+  assert.equal(visibleMultiline("head\n  cont\tx"), "head\n  cont\tx");
+  assert.equal(visibleMultiline("a\u200b\nb\u202e\r\u001b[2K"), "a\\u200b\nb\\u202e\\r\\x1b[2K");
+  assert.equal(visible("a\nb"), "a\\nb", "单行版照样转义换行");
 });

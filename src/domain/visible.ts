@@ -22,3 +22,11 @@ export function visible(text: string): string {
     return code <= 0xffff ? `\\u${code.toString(16).padStart(4, "0")}` : `\\u{${code.toString(16)}}`;
   });
 }
+
+/**
+ * 多行文字（prime 里的 Log 条目，续行靠换行）：换行与 Tab 原样保留，其余与 `visible` 相同。prime 与 handoff 以前在 commands/view.ts
+ * 里另有一份只转 C0/C1 的实现，零宽与双向文字字符照样进了模型的上下文与终端（F26 评审的同类问题，F35 合并成这一份）。
+ */
+export function visibleMultiline(text: string): string {
+  return text.split(/(\n|\t)/).map((part) => (part === "\n" || part === "\t" ? part : visible(part))).join("");
+}

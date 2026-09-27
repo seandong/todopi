@@ -6,7 +6,10 @@
 
 import { hostname } from "node:os";
 import { currentActor } from "./actor.ts";
-import { isDisplayable, staleInputFor, visible, visibleLine } from "./view.ts";
+import { isDisplayable, staleInputFor } from "./view.ts";
+// 进模型上下文与终端的任务内容：控制、格式（零宽、双向文字）、默认不可见字符与非普通空白写成可见转义（domain/visible.ts）。
+// **在投影时做，不在渲染时做**：DTO 里就是展示值，--json 与文本是同一份内容（F11 评审二轮）。原值要看 `todopi show --json`。
+import { visible as visibleLine, visibleMultiline } from "../domain/visible.ts";
 import { discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { nowStamp } from "../format/write.ts";
@@ -60,11 +63,11 @@ function project(t: TaskFile, level: 0 | 1 | 2): PrimeTask {
   return {
     id: t.idFromFilename,
     title: shown(t, "title"),
-    acceptance: kept.map((c) => ({ n: c.n, text: visible(c.text), checked: c.checked })),
+    acceptance: kept.map((c) => ({ n: c.n, text: visibleLine(c.text), checked: c.checked })),
     checkedOmitted: all.length - kept.length,
     acceptanceTotal: all.length,
     seeAlso: all.length === 0 ? `todopi show ${t.idFromFilename}` : null,
-    log: entries.map((e) => visible([e.head, ...e.continuation.map((l) => `  ${l}`)].join("\n"))),
+    log: entries.map((e) => visibleMultiline([e.head, ...e.continuation.map((l) => `  ${l}`)].join("\n"))),
     logOmitted: Math.min(every.length, 2) - entries.length,
   };
 }
