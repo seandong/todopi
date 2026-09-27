@@ -1,12 +1,13 @@
 ---
 id: "tp-t843po"
 title: "README 首发版：六家 agent 的安装说明、协议、vs Beads、读音；纠正与实现不符的声明"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "ir"
 verify: "make check && make test"
 labels: ["m4"]
 created: "2026-09-27T03:14:03Z"
-updated: "2026-09-27T03:14:03Z"
+updated: "2026-09-27T08:08:41Z"
 ---
 
 ## Description
@@ -24,3 +25,4 @@ updated: "2026-09-27T03:14:03Z"
 ## Log
 
 - 2026-09-27T03:14:03Z seandong created
+- 2026-09-27T08:08:41Z claude-code@Seans-MacBook-Pro.local claimed
