@@ -118,8 +118,9 @@ if (checkable.length > 0) {
   const lineOf = new Map();
   const out = [
     ...imports,
-    // 交集与映射类型展平之后再比，「A & B」与写成一个对象的同一形状才算相等；数组逐元素展平，联合逐支展平
-    "type Flat<T> = T extends readonly (infer U)[] ? Flat<U>[] : T extends object ? { [K in keyof T]: Flat<T[K]> } : T;",
+    // 交集与映射类型展平之后再比，「A & B」与写成一个对象的同一形状才算相等；联合逐支展平。对类型参数的同态映射保留数组与元组
+    // 本身（长度、位置、readonly），所以不另写数组分支——那个分支曾把 [string, string] 折成 string[]，元组与数组互相冒充（Codex 评审）
+    "type Flat<T> = T extends object ? { [K in keyof T]: Flat<T[K]> } : T;",
     "type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;",
     "type Expect<T extends true> = T;",
   ];

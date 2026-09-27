@@ -86,3 +86,23 @@ test("tsc 跑不起来：说出来，不安静地通过（那是假绿）", () =
   const out = run(DOC, DTO_OK, { ...process.env, CHECK_JSON_DOC_TSC: "/nonexistent/tsc" });
   assert.match(out.join("\n"), /^tsc: .*ENOENT/m);
 });
+
+test("元组与数组不能互相冒充；readonly 也算不同", () => {
+  const dto = (t: string) => `export type AReport = { pair: ${t} };\n`;
+  const doc = (t: string) => `### \`AReport\`\n\n| Field | Type | Meaning |\n|---|---|---|\n| \`pair\` | \`${t}\` | |\n`;
+  assert.deepEqual(run(doc("[string, string]"), dto("[string, string]")), []);
+  assert.deepEqual(run(doc("string[]"), dto("string[]")), []);
+  for (const [d, s] of [["string[]", "[string, string]"], ["[string, string]", "string[]"], ["[string]", "[string, string]"],
+    ["[number, string]", "[string, number]"], ["readonly string[]", "string[]"]]) {
+    assert.match(run(doc(d!), dto(s!)).join("\n"), /AReport does not match/, `${d} vs ${s}`);
+  }
+});
+
+test("交集与写成一个对象的同一形状相等（数组元素里的交集也是）；差一个字段仍然不等", () => {
+  const dto = "export type Ref = { id: string };\nexport type AReport = { items: (Ref & { n: number })[] } & { ok: boolean };\n";
+  const doc = (items: string) => "### `Ref`\n\n| Field | Type | Meaning |\n|---|---|---|\n| `id` | `string` | |\n\n"
+    + `### \`AReport\`\n\n| Field | Type | Meaning |\n|---|---|---|\n| \`items\` | \`${items}\` | |\n| \`ok\` | \`boolean\` | |\n`;
+  assert.deepEqual(run(doc("{ id: string; n: number }[]"), dto), []);
+  assert.deepEqual(run(doc("(Ref & { n: number })[]"), dto), []);
+  assert.match(run(doc("{ id: string }[]"), dto).join("\n"), /AReport does not match/);
+});
