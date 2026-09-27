@@ -86,9 +86,17 @@ for (const dir of SOURCES) {
   const abs = join(root, dir);
   if (!existsSync(abs)) continue;
   for (const f of readdirSync(abs).filter((x) => x.endsWith(".ts")).sort()) {
-    for (const m of readFileSync(join(abs, f), "utf8").matchAll(/^export type ([A-Za-z][A-Za-z0-9]*)\b/gm)) {
-      if (!exported.has(m[1])) exported.set(m[1], `${dir}/${f}`);
-    }
+    const text = readFileSync(join(abs, f), "utf8");
+    // 声明（type / interface，可带 declare）与导出列表（`export { A, type B as C }`、`export type { D }`，含 `from "…"` 的重导出）都算——
+    // 只认 `export type Name` 时，一个 `export interface` 的 DTO 就绕过了「每个导出都要有小节」（Codex 评审）
+    const names = [
+      ...[...text.matchAll(/^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z][A-Za-z0-9]*)\b/gm)].map((m) => m[1]),
+      ...[...text.matchAll(/^export\s+(?:type\s+)?\{([^}]*)\}/gm)].flatMap((m) => m[1].split(",")
+        .map((x) => x.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim()).filter((x) => /^[A-Za-z][A-Za-z0-9]*$/.test(x))),
+    ];
+    for (const n of names) if (!exported.has(n)) exported.set(n, `${dir}/${f}`);
+    // `export * from` 导出了什么这里看不见：dto 里不许用，逐个写出来
+    if (dir === "src/output/dto" && /^export\s+\*/m.test(text)) say(`${dir}/${f}: \`export *\` hides which types are part of --json; export them by name`);
   }
 }
 

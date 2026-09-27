@@ -106,3 +106,23 @@ test("交集与写成一个对象的同一形状相等（数组元素里的交�
   assert.deepEqual(run(doc("(Ref & { n: number })[]"), dto), []);
   assert.match(run(doc("{ id: string }[]"), dto).join("\n"), /AReport does not match/);
 });
+
+test("interface、declare、导出列表与重导出也算导出：没写进文档照样报；写了就照样核对", () => {
+  const empty = "# t\n";
+  for (const dto of [
+    "export interface NewReport { id: string }\n",
+    "export declare type NewReport = { id: string };\n",
+    "type NewReport = { id: string };\nexport { NewReport };\n",
+    "type Inner = { id: string };\nexport type { Inner as NewReport };\n",
+    "type NewReport = { id: string };\nexport { type NewReport };\n",
+  ]) {
+    assert.match(run(empty, dto).join("\n"), /NewReport \(src\/output\/dto\/a\.ts\) is part of the --json output but has no section/, dto);
+  }
+  const doc = (t: string) => `### \`NewReport\`\n\n| Field | Type | Meaning |\n|---|---|---|\n| \`id\` | \`${t}\` | |\n`;
+  assert.deepEqual(run(doc("string"), "export interface NewReport { id: string }\n"), []);
+  assert.match(run(doc("number"), "export interface NewReport { id: string }\n").join("\n"), /NewReport does not match/);
+});
+
+test("dto 里的 export *：报出来（看不见导出了什么）", () => {
+  assert.match(run(DOC, `${DTO_OK}export * from "./b.ts";\n`).join("\n"), /`export \*` hides which types/);
+});
