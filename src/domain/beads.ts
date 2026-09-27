@@ -134,16 +134,15 @@ function descriptionOf(i: BeadsIssue, overflowTitle: string | undefined, safe: S
   return safe(text) ? text : indented(text);
 }
 
-/** Beads Classic（v0.47.1 的 types.go）认得的状态；tombstone 在前面就跳过了。 */
-const CLASSIC_STATUSES = new Set(["open", "in_progress", "blocked", "deferred", "closed", "pinned", "hooked"]);
 /**
- * 真实导出里见过的非 Classic 状态（自定义状态），意思明确是「结束了」的：建成 closed。第二份真实导出（imbue-ai/offload）里有
- * cancelled 与 done，按「只有 closed 才关」会把取消掉的工作放回 ready 队列（F32）。
+ * Beads Classic（v0.47.1 的 types.go）认得的状态；tombstone 在前面就跳过了。只有 closed 关。
+ *
+ * 别的状态是项目自定义的（F32：imbue-ai/offload 的导出里有 cancelled 与 done）。**不按名字猜它结束了没有**：Beads 的自定义状态各有类别
+ * （active / wip / done / frozen），类别在项目配置里、不在导出里——一个叫 done 的状态完全可以是「待验收」的 active（F32 评审）。
+ * 关错了悄无声息地从 ready 队列里消失，重导入又因为已导入而跳过、纠正不了；开着则看得见、一条 close 就改过来。所以照 open 建，
+ * 按状态汇总大声警告，点名 Beads id 与改法。
  */
-const TERMINAL_ALIASES: Record<string, "done" | "wontfix"> = {
-  done: "done", completed: "done", complete: "done", resolved: "done",
-  cancelled: "wontfix", canceled: "wontfix",
-};
+const CLASSIC_STATUSES = new Set(["open", "in_progress", "blocked", "deferred", "closed", "pinned", "hooked"]);
 
 export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<string>, safe: SafeText): BeadsPlan {
   const skipped = { tombstone: 0, ephemeral: 0, existing: 0 };
@@ -168,8 +167,8 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
   const orderOf = new Map(byPriority.map((i, n) => [i.id, n]));
 
   const planned = new Map<string, BeadsPlanned>();
-  /** 不认得、也不是明确「结束」的状态：照 open 建，按状态汇总警告一次（不静默） */
-  const unknownStatus = new Map<string, number>();
+  /** 自定义状态：照 open 建，按状态汇总警告一次，记下哪些 Beads id */
+  const unknownStatus = new Map<string, string[]>();
   for (const i of byPriority) {
     let parent: string | undefined;
     const blockedBy: string[] = [];
@@ -202,26 +201,26 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
       if (l === null) warnings.push(`${i.id}: label ${JSON.stringify(raw)} cannot be written as a todopi label; dropped`);
       else if (!labels.includes(l)) labels.push(l);
     }
-    const status = i.status ?? "open";
-    const alias = CLASSIC_STATUSES.has(status) ? undefined : TERMINAL_ALIASES[status.toLowerCase()];
-    if (!CLASSIC_STATUSES.has(status) && alias === undefined) unknownStatus.set(status, (unknownStatus.get(status) ?? 0) + 1);
-    const closed = status === "closed" || alias !== undefined;
+    const status = typeof i.status === "string" ? i.status : "open";
+    if (!CLASSIC_STATUSES.has(status)) unknownStatus.set(status, [...(unknownStatus.get(status) ?? []), i.id]);
+    const closed = status === "closed";
     const was = [`Beads ${i.id}`, `status ${status}`, `priority P${i.priority ?? 2}`];
     if (i.assignee) was.push(`assignee ${i.assignee}`);
     if (closed && i.close_reason) was.push(`close reason: ${i.close_reason.replace(/\s+/g, " ").trim()}`);
     planned.set(i.id, {
       beadsId: i.id, title, description: descriptionOf(i, overflow, safe),
       status: closed ? "closed" : "open",
-      // 别名状态的 resolution 由状态本身决定；close_reason 若是重复 / 放弃类措辞，仍按它判得更准
-      resolution: !closed ? undefined : alias === undefined ? resolutionFor(i.close_reason)
-        : i.close_reason ? (resolutionFor(i.close_reason) === "done" ? alias : resolutionFor(i.close_reason)) : alias,
+      resolution: closed ? resolutionFor(i.close_reason) : undefined,
       labels, parent, blockedBy, from, created: utcSeconds(i.created_at),
       order: orderOf.get(i.id)!, note: was.join("; "),
     });
   }
 
-  for (const [status, n] of unknownStatus) {
-    warnings.push(`${n} issue(s) have Beads status ${JSON.stringify(status)}, which todopi does not know; imported as open (the status is kept in the Log)`);
+  for (const [status, ids] of unknownStatus) {
+    const list = `${ids.slice(0, 5).join(", ")}${ids.length > 5 ? `, and ${ids.length - 5} more` : ""}`;
+    warnings.push(`${ids.length} issue(s) have the custom Beads status ${JSON.stringify(status)} (${list}); the export does not say whether it `
+      + "means finished, so they were imported as open. Close the ones that are: `todopi done <id>` for finished work, "
+      + "`todopi close <id> --resolution wontfix` for abandoned work (each task keeps its Beads id in external.beads.id and in its Log).");
   }
 
   // 建的顺序分三步（F20 评审二轮：三种边混在一个 DFS 里，撞上回边时丢的可能是真正的 blocked_by 而不是软的 from）：

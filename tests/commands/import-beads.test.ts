@@ -83,25 +83,29 @@ test("计划：tombstone 与 ephemeral 跳过；parent / blocked_by 的目标先
   assert.equal(p.dropped.otherEdgeTypes, 1, "related 没有对应物");
 });
 
-test("状态：cancelled / done 这类明确结束的自定义状态建成 closed；不认得的照 open 建并按状态汇总警告；Classic 状态不警告（F32）", () => {
-  const I = (id: string, status: string, close_reason?: string) => ({ id, title: id, status, priority: 2, issue_type: "task", created_at: T0, updated_at: T0, close_reason });
+test("状态：只有 closed 关；自定义状态（哪怕叫 done / cancelled）照 open 建，按状态汇总警告并点名 Beads id；Classic 状态不警告（F32）", () => {
+  // 自定义状态的类别（active / done……）在 Beads 的项目配置里、不在导出里：叫 done 的也可能是「待验收」，不能凭名字关（F32 评审）
+  const I = (id: string, status: string | undefined, close_reason?: string) => ({ id, title: id, status, priority: 2, issue_type: "task", created_at: T0, updated_at: T0, close_reason });
   const p = planBeadsImport([
-    I("c1", "cancelled"), I("c2", "Canceled"), I("d1", "done"), I("d2", "completed"),
-    I("d3", "done", "Duplicate of c1"), I("r1", "review"), I("r2", "review"), I("q1", "qa"),
-    I("o1", "in_progress"), I("o2", "deferred"), I("x1", "closed", "Won't fix"),
+    I("c1", "cancelled"), I("d1", "done"), I("d2", "done"), I("r1", "review"),
+    I("o1", "in_progress"), I("o2", "deferred"), I("o3", undefined), I("x1", "closed", "Won't fix"),
+    ...Array.from({ length: 7 }, (_, k) => I(`q${k}`, "qa")),
   ] as BeadsIssue[], new Set(), () => true);
   const t = (id: string) => p.tasks.find((x) => x.beadsId === id)!;
-  assert.deepEqual([t("c1").status, t("c1").resolution], ["closed", "wontfix"]);
-  assert.deepEqual([t("c2").status, t("c2").resolution], ["closed", "wontfix"]);
-  assert.deepEqual([t("d1").status, t("d1").resolution], ["closed", "done"]);
-  assert.deepEqual([t("d2").status, t("d2").resolution], ["closed", "done"]);
-  assert.equal(t("d3").resolution, "duplicate", "close_reason 说得更准时照它");
-  assert.deepEqual([t("r1").status, t("q1").status, t("o1").status, t("o2").status], ["open", "open", "open", "open"]);
+  for (const id of ["c1", "d1", "d2", "r1", "o1", "o2", "o3", "q0"]) assert.equal(t(id).status, "open", id);
   assert.deepEqual([t("x1").status, t("x1").resolution], ["closed", "wontfix"]);
-  assert.match(t("c1").note, /status cancelled/);
-  const w = p.warnings.filter((x) => /does not know/.test(x));
-  assert.deepEqual(w.map((x) => /status "(\w+)"/.exec(x)?.[1]).sort(), ["qa", "review"]);
-  assert.match(w.find((x) => x.includes("review"))!, /^2 issue\(s\)/);
+  assert.match(t("d1").note, /status done/, "原状态进 Log");
+  const w = p.warnings.filter((x) => /custom Beads status/.test(x));
+  assert.deepEqual(w.map((x) => /status "(\w+)"/.exec(x)?.[1]).sort(), ["cancelled", "done", "qa", "review"], "每种状态一条，Classic 状态不在内");
+  assert.match(w.find((x) => x.includes('"done"'))!, /^2 issue\(s\) .*\(d1, d2\)/);
+  assert.match(w.find((x) => x.includes('"qa"'))!, /^7 issue\(s\) .*\(q0, q1, q2, q3, q4, and 2 more\)/);
+  assert.match(w[0]!, /todopi done <id>/);
+});
+
+test("status 不是字符串的行：格式错误点名行号，什么都不导入（不抛 TypeError）", () => {
+  assert.throws(() => parseIssues('{"id":"a","title":"A","status":"open"}\n{"id":"bad","title":"B","status":17}\n', "x.jsonl"),
+    (e: unknown) => e instanceof CliError && e.code === EXIT.usage && /line 2 /.test(e.message));
+  assert.equal(parseIssues('{"id":"a","title":"A","status":null}\n{"id":"b","title":"B"}\n', "x.jsonl").length, 2, "缺或 null 当 open");
 });
 
 test("计划：成环的依赖丢掉一条边并警告；多个父级取第一个；指向没导入的条目的边丢掉", () => {

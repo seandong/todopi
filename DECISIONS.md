@@ -2191,15 +2191,16 @@ Node 用 spec reporter，整层被判 blocked。
   | mantoni/beads-ui@e3c3345db41c | 208 | 208（1 / 207） | 1 条评论 |
   | DavidWells/markdown-magic@a41aa9e00187 | 16 | 16（0 / 16） | — |
   | Dicklesworthstone/rano@996082d9334b | 104 | 104（0 / 104） | 5 条评论 |
-  | imbue-ai/offload@7a747d6450cb | 235 | 234（9 / 225） | 1 tombstone、14 条评论 |
+  | imbue-ai/offload@7a747d6450cb | 235 | 234（14 / 220；自定义状态 cancelled 4、done 1 照 open 建并警告） | 1 tombstone、14 条评论 |
   | luna-system/ada@4a2972a2faf0 | 150 | 150（78 / 72） | — |
   | davetashner/stringer@d80820b94ada | 498 | 498（45 / 453） | — |
 
   每一份都 doctor 通过、重复导入 0 新建。数据只在本地用，不进仓库（许可各不相同）。
-- **非 Classic 的状态**（同上，imbue-ai/offload 实测）：那份导出里有 `cancelled` 与 `done`——Classic 的类型里没有，是自定义状态。按「只有 closed
-  → closed」它们会建成 open，取消掉的工作回到 ready 队列。改为：意思明确是结束的自定义状态（done / completed / complete / resolved →
-  done；cancelled / canceled → wontfix；close_reason 是重复或放弃类措辞时照它）建成 closed；其余不认得的照 open 建，**按状态汇总警告一次**，
-  原状态照样进 Log。Classic 的状态（open、in_progress、blocked、deferred、closed、pinned、hooked）规则不变。
+- **非 Classic 的状态**（同上，imbue-ai/offload 实测）：那份导出里有 `cancelled` 与 `done`——Classic 的类型里没有，是项目自定义的状态。
+  第一版按名字把「明显结束」的建成 closed；Codex 评审指出 Beads 的自定义状态各有类别（active / wip / done / frozen），类别在项目配置里、
+  **不在导出里**，一个叫 done 的状态完全可以是「待验收」的 active。关错了悄无声息地离开 ready 队列、重导入又因已导入而跳过；开着则看得见、
+  一条命令就改。所以规则仍是**只有 closed 关**，自定义状态照 open 建，按状态**汇总警告**：个数、前 5 个 Beads id、怎么关（`todopi done` /
+  `close --resolution wontfix`），原状态照样进 Log。`status` 不是字符串的行按格式错误拒绝（曾抛 TypeError）。
 
 ## D042 — 分发：tsc 逐文件编译的 npm 包、main.ts 入口、install.sh 与两条 CI
 

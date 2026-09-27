@@ -44,13 +44,15 @@ export function parseIssues(text: string, name: string): BeadsIssue[] {
     if (typeof v !== "object" || v === null || Array.isArray(v)) { bad.push(i + 1); return; }
     const o = v as Record<string, unknown>;
     if (typeof o["id"] !== "string" || o["id"] === "" || typeof o["title"] !== "string") { bad.push(i + 1); return; }
+    // status 可以缺（当 open），有就得是字符串（F32 评审：数字的 status 曾让计划阶段抛 TypeError）
+    if (o["status"] !== undefined && o["status"] !== null && typeof o["status"] !== "string") { bad.push(i + 1); return; }
     if (seen.has(o["id"])) dup.push(o["id"]);
     seen.add(o["id"]);
     issues.push(o as unknown as BeadsIssue);
   });
   if (bad.length > 0) {
     throw new CliError(EXIT.usage, `${name}: line${bad.length === 1 ? "" : "s"} ${bad.slice(0, 10).join(", ")}${bad.length > 10 ? ", ..." : ""} `
-      + "is not a Beads issue (a JSON object with a string id and title); nothing was imported.");
+      + "is not a Beads issue (a JSON object with a string id and title, and a string status if it has one); nothing was imported.");
   }
   if (dup.length > 0) {
     throw new CliError(EXIT.usage, `${name}: issue id ${dup.slice(0, 5).join(", ")} appears more than once; nothing was imported.`);

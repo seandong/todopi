@@ -4,6 +4,6 @@
 
 1. 用 `gh search code` 找公开仓库提交的 `.beads/issues.jsonl`，挑六份（有进行中、有 tombstone、有评论、有自定义状态），按最近一次改动它的提交钉住，
    下到本地（不进仓库）：导入、doctor、再导入。
-2. 发现：imbue-ai/offload 的 `cancelled` / `done` 被建成 open。`domain/beads.ts`：明确结束的自定义状态建成 closed（resolution 由状态定，close_reason
-   更准时照它）；不认得的照 open 建并按状态汇总警告；用例覆盖别名、大小写、close_reason 优先、Classic 状态不警告、汇总计数。
+2. 发现：imbue-ai/offload 的 `cancelled` / `done` 被静默建成 open。先按名字关（评审否决：自定义状态的类别不在导出里），最终仍照 open 建，
+   但按状态汇总大声警告（个数、Beads id、怎么关）；`status` 非字符串按格式错误拒绝。
 3. 结果表与状态规则记进 D041。
