@@ -83,6 +83,27 @@ test("计划：tombstone 与 ephemeral 跳过；parent / blocked_by 的目标先
   assert.equal(p.dropped.otherEdgeTypes, 1, "related 没有对应物");
 });
 
+test("状态：cancelled / done 这类明确结束的自定义状态建成 closed；不认得的照 open 建并按状态汇总警告；Classic 状态不警告（F32）", () => {
+  const I = (id: string, status: string, close_reason?: string) => ({ id, title: id, status, priority: 2, issue_type: "task", created_at: T0, updated_at: T0, close_reason });
+  const p = planBeadsImport([
+    I("c1", "cancelled"), I("c2", "Canceled"), I("d1", "done"), I("d2", "completed"),
+    I("d3", "done", "Duplicate of c1"), I("r1", "review"), I("r2", "review"), I("q1", "qa"),
+    I("o1", "in_progress"), I("o2", "deferred"), I("x1", "closed", "Won't fix"),
+  ] as BeadsIssue[], new Set(), () => true);
+  const t = (id: string) => p.tasks.find((x) => x.beadsId === id)!;
+  assert.deepEqual([t("c1").status, t("c1").resolution], ["closed", "wontfix"]);
+  assert.deepEqual([t("c2").status, t("c2").resolution], ["closed", "wontfix"]);
+  assert.deepEqual([t("d1").status, t("d1").resolution], ["closed", "done"]);
+  assert.deepEqual([t("d2").status, t("d2").resolution], ["closed", "done"]);
+  assert.equal(t("d3").resolution, "duplicate", "close_reason 说得更准时照它");
+  assert.deepEqual([t("r1").status, t("q1").status, t("o1").status, t("o2").status], ["open", "open", "open", "open"]);
+  assert.deepEqual([t("x1").status, t("x1").resolution], ["closed", "wontfix"]);
+  assert.match(t("c1").note, /status cancelled/);
+  const w = p.warnings.filter((x) => /does not know/.test(x));
+  assert.deepEqual(w.map((x) => /status "(\w+)"/.exec(x)?.[1]).sort(), ["qa", "review"]);
+  assert.match(w.find((x) => x.includes("review"))!, /^2 issue\(s\)/);
+});
+
 test("计划：成环的依赖丢掉一条边并警告；多个父级取第一个；指向没导入的条目的边丢掉", () => {
   const issues = [
     { id: "x", title: "X", priority: 1, dependencies: [dep("x", "y", "blocks")] },

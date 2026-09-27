@@ -1,12 +1,13 @@
 ---
 id: "tp-ow8pb0"
 title: "import beads 用第二份真实的 Beads Classic 导出测过（首发清单）"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "iu"
 verify: "make check && make test && bash tools/e2e/f20-import-beads.sh"
 labels: ["m4"]
 created: "2026-09-27T03:14:03Z"
-updated: "2026-09-27T03:14:03Z"
+updated: "2026-09-27T11:29:03Z"
 ---
 
 ## Description
@@ -21,3 +22,4 @@ updated: "2026-09-27T03:14:03Z"
 ## Log
 
 - 2026-09-27T03:14:03Z seandong created
+- 2026-09-27T11:29:03Z claude-code@Seans-MacBook-Pro.local claimed

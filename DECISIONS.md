@@ -2184,6 +2184,23 @@ Node 用 spec reporter，整层被判 blocked。
 - 子代理复审三轮（Go，两条 P3 顺手修）：判断 from 能否保留时只算已决定保留的 from（先全拿下再逐条放回），否则一条注定要丢的会
   连带丢掉本可保留的；两处 DFS 改为显式栈，一万五千个任务的 blocks 链不再爆栈。
 
+- **更多真实导出**（2026-09-28，F32，首发清单「至少两份真实导出」）：在 GitHub 上找了六个别的公开仓库提交的 `.beads/issues.jsonl`，按提交钉住：
+
+  | 仓库@提交 | 行数 | 导入（开 / 关） | 跳过 / 丢弃 |
+  |---|---|---|---|
+  | mantoni/beads-ui@e3c3345db41c | 208 | 208（1 / 207） | 1 条评论 |
+  | DavidWells/markdown-magic@a41aa9e00187 | 16 | 16（0 / 16） | — |
+  | Dicklesworthstone/rano@996082d9334b | 104 | 104（0 / 104） | 5 条评论 |
+  | imbue-ai/offload@7a747d6450cb | 235 | 234（9 / 225） | 1 tombstone、14 条评论 |
+  | luna-system/ada@4a2972a2faf0 | 150 | 150（78 / 72） | — |
+  | davetashner/stringer@d80820b94ada | 498 | 498（45 / 453） | — |
+
+  每一份都 doctor 通过、重复导入 0 新建。数据只在本地用，不进仓库（许可各不相同）。
+- **非 Classic 的状态**（同上，imbue-ai/offload 实测）：那份导出里有 `cancelled` 与 `done`——Classic 的类型里没有，是自定义状态。按「只有 closed
+  → closed」它们会建成 open，取消掉的工作回到 ready 队列。改为：意思明确是结束的自定义状态（done / completed / complete / resolved →
+  done；cancelled / canceled → wontfix；close_reason 是重复或放弃类措辞时照它）建成 closed；其余不认得的照 open 建，**按状态汇总警告一次**，
+  原状态照样进 Log。Classic 的状态（open、in_progress、blocked、deferred、closed、pinned、hooked）规则不变。
+
 ## D042 — 分发：tsc 逐文件编译的 npm 包、main.ts 入口、install.sh 与两条 CI
 
 - 日期：2026-09-26（F21）。D006 决策 10 与 D008 决策 3 的落地。
