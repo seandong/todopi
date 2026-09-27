@@ -418,16 +418,30 @@ run_processes() {
   fi | grep -vx "$$"
 }
 
+# 这个 pid **此刻**还带着本次运行的记号吗？扫描到发信号之间进程可能已经退出、pid 被别的进程复用——发信号前逐个重验，
+# 不对就不发（评审二轮）。重验与 kill 之间仍有极短的窗口，bash 里没有 pidfd 那样绑定进程身份的信号手段，与 pkill 相同。
+still_ours() {
+  local marker="TODOPI_HARNESS_RUN=${TODOPI_HARNESS_RUN}"
+  if [ -d /proc/self ]; then
+    grep -qzF "$marker" "/proc/$1/environ" 2>/dev/null
+  else
+    ps -ww -E -o command= -p "$1" 2>/dev/null | grep -qF "$marker"
+  fi
+}
+
 # 被打断时 node --test 的测试文件进程还活着：它们在自己的进程组里，Ctrl-C 到不了，运行器死后成了孤儿，会一直写到那个文件跑完，
 # 删掉的目录还会被它们递归地建回来（F31 评审二轮实测）。先把它们停掉。
 stop_run_processes() {
   [ -n "${TODOPI_HARNESS_RUN:-}" ] || return 0
-  local pids i=0
+  local pids p hit i=0
   while [ "$i" -lt 20 ]; do
     pids="$(run_processes | tr '\n' ' ')"
-    [ -z "$(printf '%s' "$pids" | tr -d ' ')" ] && return 0
-    # shellcheck disable=SC2086
-    kill -TERM $pids 2>/dev/null
+    # 扫描用的 grep / ps 也继承了记号，会出现在列表里但马上就退出了；重验后一个都不剩就算停干净了
+    hit=0
+    for p in $pids; do
+      if still_ours "$p"; then kill -TERM "$p" 2>/dev/null; hit=1; fi
+    done
+    [ "$hit" -eq 0 ] && return 0
     sleep 0.1
     i=$((i + 1))
   done
