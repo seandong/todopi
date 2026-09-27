@@ -15,3 +15,6 @@ dist/
 
 # npm pack 的产物
 *.tgz
+
+# 规格站点的构建产物（tools/site/build.mjs）
+.site/

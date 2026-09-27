@@ -4,7 +4,7 @@
 H := tools/harness.sh
 
 .PHONY: help setup dev doctor status check test e2e check-arch \
-        clean-check ci audit
+        clean-check ci audit site
 
 help:
 	@$(H)
@@ -38,6 +38,10 @@ check-arch:
 
 ci:
 	@$(H) ci
+
+## 规格站点：从 spec/ 生成静态页到 .site/spec/（部署见 docs/site.md）
+site:
+	@node tools/site/build.mjs
 
 ## Scope（WIP=1，状态机 open -> in_progress -> closed/done；见 .todopi/）
 ## 清洁态
