@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/seandong/todopi/main/install.sh | sh
 #
-# With Node.js >= 20 on PATH it installs the npm package (about 160 KB of JavaScript) into ~/.local.
+# With Node.js >= 20 on PATH it installs the npm package (about 460 KB of JavaScript, 2.3 MB with dependencies) into ~/.local.
 # Without it, it downloads the self-contained binary for your platform from the GitHub release,
 # checks its SHA-256 against the release's SHA256SUMS, and refuses to install on a mismatch.
 # Either way the `todopi` command ends up in ~/.local/bin.
