@@ -2417,3 +2417,14 @@ Node 用 spec reporter，整层被判 blocked。
 - 直接跑 `node --test` 或单个 e2e 脚本不经过 harness，仍会留东西；那是手动调试，量小。
 - `tools/e2e/f31-private-tmp.sh` 在全新的 `TMPDIR` 下跑 test 层（不跑 e2e 层，免得递归），跑完与中途打断两种都要求什么都不剩；打断像终端那样
   发给整个进程组，并要求它真的提前停了（退出 130、没跑到 overall）——只发给后台 bash 的 SIGINT 会被忽略，第一版因此假绿。约 100 秒。
+
+## D053 — 规格站点：从 spec/ 生成的纯静态页，无脚本、无外部资源
+
+- 日期：2026-09-28（F33，首发清单 §13，todopi.com/spec）。
+- `tools/site/build.mjs` 把规格全文、§5.2 字段表、实现者笔记、语料库索引与每个语料一页生成到 `.site/spec/`；语料原文件原样复制，可直接下载。
+  Markdown 用 CLI 本来就依赖的 commonmark，不加依赖；commonmark.js 只实现 CommonMark 本身、没有表格，规格里的管道表格由构建脚本自己转成
+  HTML 表格（单元格里的行内 Markdown 仍交给 commonmark）。
+- 页面没有脚本，不加载任何外部资源（字体、样式表、统计都没有）——与 CLI 的「零网络、零遥测」同一个态度；链接全是相对的，`file://` 直接预览，
+  部署到任意路径前缀都能用。标题锚点按 GitHub 的规则生成，与在 GitHub 上看源文件时一致。
+- 源是 `spec/` 里的 Markdown（规范性的），站点只是它的一个渲染，从不手改。部署是维护者的动作（`docs/site.md`）。
+- 语料的说明（`note` / `reason`）现在是中文，而规格与语料是面向用户的、应当 English-first：拆成跟进任务，站点照原文显示。

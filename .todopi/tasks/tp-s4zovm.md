@@ -1,12 +1,13 @@
 ---
 id: "tp-s4zovm"
 title: "格式规格站点的内容：规格、12 字段表、语料库，可以直接部署的静态页"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "iv"
 verify: "make check && make test"
 labels: ["m4"]
 created: "2026-09-27T03:14:03Z"
-updated: "2026-09-27T03:14:03Z"
+updated: "2026-09-27T12:13:55Z"
 ---
 
 ## Description
@@ -21,3 +22,4 @@ updated: "2026-09-27T03:14:03Z"
 ## Log
 
 - 2026-09-27T03:14:03Z seandong created
+- 2026-09-27T12:13:55Z claude-code@Seans-MacBook-Pro.local claimed
