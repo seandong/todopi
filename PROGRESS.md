@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `4bec23f` —— F36 prime 回到 200 ms 以内 经 todopi done 关闭（verify=pass；dirty 只是账本自身的 note / check 改动）。
+- Last commit: `c2e4ab5` —— F37 语料说明译成英文 经 todopi done 关闭（verify=pass；dirty 只是账本自身的 note / check 改动）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 39 个任务，36 个 `closed/done`、3 个 `open`：tp-ujjc6y（brew：代码已合并，只差在 CLT 较新的机器上 brew install 实测一次）与派生的 tp-i8vcpd（F33）（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
+- 账本: `.todopi/` 39 个任务，37 个 `closed/done`、2 个 `open`，都等维护者：tp-ujjc6y（brew：代码已合并，只差在 CLT 较新的机器上 brew install 实测一次）、tp-zagvp5（Cursor 实机验证）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,8 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+62. ~~F37 规格语料的说明译成英文~~ 已完成（2026-09-28）：25 条 note / reason；评审抓到两处跟着原文带过来的问题（unquoted 语料说 doctor --fix 全部加引号——
+    自 F30 起不对；「允许」被译成「要求」）。测试钉住说明字段不再有中文。Codex 两轮 → Go。
 61. ~~F36 prime 回到 200 ms 以内~~ 已完成（2026-09-28）：快照紧跟校验取、复用上一段正文的解析，git 公共目录一次运行只问一遍（缓存键带 .git 身份），
     prime 记录不 fsync。同机交替 A/B：prime 225 → 186、prime --full 221 → 188 ms，ls / doctor 不变。高负载下单次基准的中位数仍会飘到 220 左右，
     空闲机器上的绝对值待 CI / 空闲时确认。D056。Codex 两轮 → Go。
