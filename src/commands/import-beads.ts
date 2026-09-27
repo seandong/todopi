@@ -87,9 +87,10 @@ export function runImportBeads(opts: { directory: string; path?: string; actor?:
 
   const created: ImportBeadsReport["created"] = [];
   let plan!: ReturnType<typeof planBeadsImport>;
+  // Beads id → todopi id：锁里填好，锁外组装警告时还要用
+  const idOf = new Map<string, string>();
   withLockConflictMapped(() => withLedgerLock(ledger, () => {
     const known = readTasks(ledger);
-    const idOf = new Map<string, string>();
     for (const t of known) {
       const b = beadsIdOf(t);
       if (b !== undefined && !idOf.has(b)) idOf.set(b, t.idFromFilename);
@@ -155,7 +156,7 @@ export function runImportBeads(opts: { directory: string; path?: string; actor?:
       cycle_edges: plan.dropped.cycleEdges, from_edges: plan.dropped.fromEdges, extra_parents: plan.dropped.extraParents,
       comments: plan.dropped.comments,
     },
-    warnings: plan.warnings,
+    warnings: [...plan.warnings, ...customStatusWarnings(plan.customStatuses, idOf)],
   };
 }
 
@@ -163,6 +164,20 @@ export function runImportBeads(opts: { directory: string; path?: string; actor?:
  * 预检一批要建的任务（不写盘）：文件级的不变量与描述读回。返回「Beads id: 原因」的列表，空表示都写得下去。
  * 单独导出是为了能直接喂坏的候选来测（F20 评审二轮：映射修好之后，公开输入已到不了这里）。
  */
+/**
+ * 自定义状态的警告：这时 todopi id 已经有了，给的是能直接粘进 `todopi done` / `close` 的 id，并注明对应的 Beads id（F32 评审二轮：
+ * 只给 Beads id 时，照着警告跑命令只会得到 No task）。
+ */
+export function customStatusWarnings(groups: { status: string; beadsIds: string[] }[], idOf: Map<string, string>): string[] {
+  return groups.map(({ status, beadsIds }) => {
+    const pairs = beadsIds.map((b) => `${idOf.get(b) ?? "?"} (Beads ${b})`);
+    const list = `${pairs.slice(0, 5).join(", ")}${pairs.length > 5 ? `, and ${pairs.length - 5} more` : ""}`;
+    return `${beadsIds.length} issue(s) have the custom Beads status ${JSON.stringify(status)}: ${list}. The export does not say whether `
+      + "that status means finished, so they were imported as open. Close the ones that are: `todopi done <id>` for finished work, "
+      + "`todopi close <id> --resolution wontfix` for abandoned work.";
+  });
+}
+
 export function preflight(items: { beadsId: string; description?: string; task: NewTask }[]): string[] {
   const problems: string[] = [];
   for (const { beadsId, description, task } of items) {

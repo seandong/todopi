@@ -2199,8 +2199,9 @@ Node 用 spec reporter，整层被判 blocked。
 - **非 Classic 的状态**（同上，imbue-ai/offload 实测）：那份导出里有 `cancelled` 与 `done`——Classic 的类型里没有，是项目自定义的状态。
   第一版按名字把「明显结束」的建成 closed；Codex 评审指出 Beads 的自定义状态各有类别（active / wip / done / frozen），类别在项目配置里、
   **不在导出里**，一个叫 done 的状态完全可以是「待验收」的 active。关错了悄无声息地离开 ready 队列、重导入又因已导入而跳过；开着则看得见、
-  一条命令就改。所以规则仍是**只有 closed 关**，自定义状态照 open 建，按状态**汇总警告**：个数、前 5 个 Beads id、怎么关（`todopi done` /
-  `close --resolution wontfix`），原状态照样进 Log。`status` 不是字符串的行按格式错误拒绝（曾抛 TypeError）。
+  一条命令就改。所以规则仍是**只有 closed 关**，自定义状态照 open 建，按状态**汇总警告**：个数、前 5 个的 todopi id（各带对应的 Beads id——警告里的命令要的是
+  todopi id，只给 Beads id 照着跑只会得到 No task，评审二轮）、怎么关（`todopi done` / `close --resolution wontfix`），原状态照样进 Log。
+  警告在建完之后由 commands/ 组装（plan 阶段还没有 todopi id）。`status` 不是字符串的行按格式错误拒绝（曾抛 TypeError）。
 
 ## D042 — 分发：tsc 逐文件编译的 npm 包、main.ts 入口、install.sh 与两条 CI
 

@@ -63,6 +63,11 @@ export type BeadsPlan = {
   skipped: { tombstone: number; ephemeral: number; existing: number };
   dropped: { danglingEdges: number; otherEdgeTypes: number; cycleEdges: number; fromEdges: number; extraParents: number; comments: number };
   warnings: string[];
+  /**
+   * 自定义状态（非 Classic），照 open 建：按状态分组的 Beads id。警告由 commands/ 在建完之后组装——那时才知道 todopi id，
+   * 而警告里给的命令（`todopi done <id>`）要的是 todopi id（F32 评审二轮）。
+   */
+  customStatuses: { status: string; beadsIds: string[] }[];
 };
 
 const MAX_TITLE = 200;
@@ -167,7 +172,7 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
   const orderOf = new Map(byPriority.map((i, n) => [i.id, n]));
 
   const planned = new Map<string, BeadsPlanned>();
-  /** 自定义状态：照 open 建，按状态汇总警告一次，记下哪些 Beads id */
+  /** 自定义状态：照 open 建，记下哪些 Beads id（警告由 commands/ 在建完后给，带 todopi id） */
   const unknownStatus = new Map<string, string[]>();
   for (const i of byPriority) {
     let parent: string | undefined;
@@ -214,13 +219,6 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
       labels, parent, blockedBy, from, created: utcSeconds(i.created_at),
       order: orderOf.get(i.id)!, note: was.join("; "),
     });
-  }
-
-  for (const [status, ids] of unknownStatus) {
-    const list = `${ids.slice(0, 5).join(", ")}${ids.length > 5 ? `, and ${ids.length - 5} more` : ""}`;
-    warnings.push(`${ids.length} issue(s) have the custom Beads status ${JSON.stringify(status)} (${list}); the export does not say whether it `
-      + "means finished, so they were imported as open. Close the ones that are: `todopi done <id>` for finished work, "
-      + "`todopi close <id> --resolution wontfix` for abandoned work (each task keeps its Beads id in external.beads.id and in its Log).");
   }
 
   // 建的顺序分三步（F20 评审二轮：三种边混在一个 DFS 里，撞上回边时丢的可能是真正的 blocked_by 而不是软的 from）：
@@ -307,5 +305,6 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
       stack.push({ id: target, targets: next(planned.get(target)!), at: 0 });
     }
   }
-  return { tasks: out, skipped, dropped, warnings };
+  const customStatuses = [...unknownStatus].map(([status, beadsIds]) => ({ status, beadsIds }));
+  return { tasks: out, skipped, dropped, warnings, customStatuses };
 }

@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
-import { runImportBeads, parseIssues, preflight } from "../../src/commands/import-beads.ts";
+import { runImportBeads, parseIssues, preflight, customStatusWarnings } from "../../src/commands/import-beads.ts";
 import { runLs } from "../../src/commands/ls.ts";
 import { runShow } from "../../src/commands/show.ts";
 import { runDoctor } from "../../src/commands/doctor.ts";
@@ -95,11 +95,23 @@ test("状态：只有 closed 关；自定义状态（哪怕叫 done / cancelled�
   for (const id of ["c1", "d1", "d2", "r1", "o1", "o2", "o3", "q0"]) assert.equal(t(id).status, "open", id);
   assert.deepEqual([t("x1").status, t("x1").resolution], ["closed", "wontfix"]);
   assert.match(t("d1").note, /status done/, "原状态进 Log");
-  const w = p.warnings.filter((x) => /custom Beads status/.test(x));
-  assert.deepEqual(w.map((x) => /status "(\w+)"/.exec(x)?.[1]).sort(), ["cancelled", "done", "qa", "review"], "每种状态一条，Classic 状态不在内");
-  assert.match(w.find((x) => x.includes('"done"'))!, /^2 issue\(s\) .*\(d1, d2\)/);
-  assert.match(w.find((x) => x.includes('"qa"'))!, /^7 issue\(s\) .*\(q0, q1, q2, q3, q4, and 2 more\)/);
+  assert.deepEqual(p.customStatuses.map((c) => [c.status, c.beadsIds]).sort(),
+    [["cancelled", ["c1"]], ["done", ["d1", "d2"]], ["qa", ["q0", "q1", "q2", "q3", "q4", "q5", "q6"]], ["review", ["r1"]]],
+    "每种状态一组，Classic 状态不在内");
+  const w = customStatusWarnings(p.customStatuses, new Map([["d1", "tp-aaaaaa"], ["d2", "tp-bbbbbb"], ...Array.from({ length: 7 }, (_, k) => [`q${k}`, `tp-q0000${k}`] as [string, string])]));
+  assert.match(w.find((x) => x.includes('"done"'))!, /^2 issue\(s\) .*: tp-aaaaaa \(Beads d1\), tp-bbbbbb \(Beads d2\)\./);
+  assert.match(w.find((x) => x.includes('"qa"'))!, /tp-q00004 \(Beads q4\), and 2 more\./);
   assert.match(w[0]!, /todopi done <id>/);
+});
+
+test("自定义状态的警告给的是 todopi id：照着跑 todopi done 能关上（F32 评审二轮）", () => {
+  const d = repo();
+  beads(d, [{ id: "bead-await", title: "Awaiting review", status: "review", priority: 2, issue_type: "task", created_at: T0, updated_at: T0 }]);
+  const r = runImportBeads({ directory: d, actor: ME });
+  const w = r.warnings.find((x) => /custom Beads status "review"/.test(x))!;
+  const id = /: (tp-[0-9a-z]+) \(Beads bead-await\)/.exec(w)?.[1];
+  assert.equal(id, r.created[0]!.id);
+  assert.equal(runShow({ directory: d, id: id!, actor: ME }).status, "open");
 });
 
 test("status 不是字符串的行：格式错误点名行号，什么都不导入（不抛 TypeError）", () => {
