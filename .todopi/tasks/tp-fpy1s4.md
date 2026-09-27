@@ -6,7 +6,7 @@ rank: "iy"
 verify: "make check && make test && bash tools/bench/ledger-2000.sh"
 labels: ["m4"]
 created: "2026-09-27T08:46:29Z"
-updated: "2026-09-27T08:46:30Z"
+updated: "2026-09-27T09:24:18Z"
 ---
 
 ## Description
@@ -22,3 +22,4 @@ F29 基准（tools/bench/ledger-2000.sh，M4 Pro）：ls ≈ 170 ms、show ≈ 1
 
 - 2026-09-27T08:46:29Z claude-code@Seans-MacBook-Pro.local created from=tp-zdp7uh
 - 2026-09-27T08:46:30Z claude-code@Seans-MacBook-Pro.local edited fields=verify
+- 2026-09-27T09:24:18Z claude-code@Seans-MacBook-Pro.local note: CI 参考（GitHub ubuntu runner，AMD EPYC 7763 2 核，node 22.23，run 36308800062）：--version 48、ls 440、ls --ready 444、ls --all 475、show 205、doctor 425、prime 543、prime --full 542 ms。比 M4 Pro 慢约 2.5×——在这种机器上连 ls 都远超 200 ms，优化不能只盯 prime：全量读 + 解析 2,000 个文件本身就是大头（doctor 425）。
