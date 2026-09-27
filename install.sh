@@ -87,6 +87,7 @@ platform() {
 }
 
 INSTALL_DIR=${TODOPI_INSTALL_DIR:-"$HOME/.local/bin"}
+NPM_FAILED=0
 BASE=${TODOPI_DOWNLOAD_BASE:-"$DEFAULT_BASE/download"}
 
 if [ -n "${TODOPI_VERSION:-}" ]; then
@@ -105,10 +106,11 @@ install_npm() { # returns non-zero (and says why) instead of dying: the caller f
   say "Node.js $(node -p 'process.versions.node') found; installing the npm package ${spec} into ${prefix}"
   if ! log=$(npm install --global --prefix "$prefix" "$spec" 2>&1); then
     printf '%s\n' "$log" | tail -5 >&2
+    NPM_FAILED=1
     say "WARNING: npm could not install ${spec} (see above); installing the standalone binary instead"
     return 1
   fi
-  [ -x "$INSTALL_DIR/todopi" ] || { say "npm finished but ${INSTALL_DIR}/todopi is not there; falling back to the binary"; return 1; }
+  [ -x "$INSTALL_DIR/todopi" ] || { NPM_FAILED=1; say "npm finished but ${INSTALL_DIR}/todopi is not there; falling back to the binary"; return 1; }
 }
 
 install_binary() {
@@ -117,7 +119,10 @@ install_binary() {
   base="${BASE}/v${VERSION}"
   need tar
   work=$(mktemp -d 2>/dev/null || mktemp -d -t todopi)
-  trap 'rm -rf "$work"' EXIT INT TERM
+  new=""
+  # 清理在 EXIT 里做；信号（包括关终端的 HUP）转成 exit 1，走同一个清理——不在 ~/.local/bin 留半个临时文件
+  trap 'rm -rf "$work"; [ -n "$new" ] && rm -f "$new"' EXIT
+  trap 'exit 1' HUP INT TERM
   say "downloading ${asset}"
   fetch "${base}/${asset}" "$work/$asset" || die "could not download ${base}/${asset}"
 
@@ -154,7 +159,8 @@ install_binary() {
   cp "$work/x/todopi" "$new" && chmod 755 "$new" || { rm -f "$new"; die "could not write to ${INSTALL_DIR}"; }
   if ! "$new" --version >/dev/null 2>&1; then
     rm -f "$new"
-    if node_ok; then die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)), and the npm package could not be installed either (see above)"
+    if [ "$NPM_FAILED" = "1" ]; then die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)), and the npm package could not be installed either (see above)"
+    elif node_ok; then die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)); with Node.js >= 20 available, run: npm i -g todopi"
     else die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)); install Node.js >= 20 and run this installer again"
     fi
   fi
