@@ -24,7 +24,7 @@ Once the first version is released:
 curl -fsSL https://raw.githubusercontent.com/seandong/todopi/main/install.sh | sh
 ```
 
-With Node.js 20 or newer on your PATH, this installs the npm package; without it, it downloads the binary for your platform and verifies its SHA-256 before installing. Either way the command lands in `~/.local/bin`. Set `TODOPI_VERSION` to install a specific version. With Node you can also run `npm install --global todopi`.
+With Node.js 20 or newer and `npm` on your PATH, this installs the npm package; otherwise — no Node, no npm, or the npm install fails — it downloads the binary for your platform and verifies its SHA-256 before installing. Either way the command lands in `~/.local/bin` (set `TODOPI_INSTALL_DIR` for another directory; one not named `bin` always gets the binary). Set `TODOPI_VERSION` to install a specific version, or `TODOPI_FORCE_BINARY=1` to skip npm. With Node you can also run `npm install --global todopi`.
 
 **`todopi` must be on the PATH your coding agent sees.** Every hook below runs `todopi` by name. If `~/.local/bin` is not on your PATH, add it (for example `export PATH="$HOME/.local/bin:$PATH"` in your shell profile) and restart the agent.
 
@@ -35,7 +35,7 @@ todopi init            # creates .todopi/ and adds the protocol to AGENTS.md
 todopi setup claude    # or codex, opencode, pi, cursor, gemini — one per agent you use
 ```
 
-`setup` writes project-level files by default, so a teammate who clones the repository gets the same hooks. Add `--user` to write them in your home directory instead, for every repository. Running `setup` again is safe: in a shared settings file it only updates its own entries; the files it owns outright (the OpenCode plugin, the pi extension, the Cursor rule) it regenerates. Commit what it writes.
+`setup` writes project-level files by default, so a teammate who clones the repository gets the same hooks. Add `--user` to put the hooks (or the OpenCode plugin, or the pi extension) in your home directory instead, for every repository. Two pieces stay per project even with `--user`, because they belong to the repository: Claude Code's `CLAUDE.md` import and Cursor's rule file. Run from inside a repository, `setup claude --user` and `setup cursor --user` still write those there; Cursor's user-level rules are set in its settings, not in a file. Running `setup` again is safe: in a shared settings file it only updates its own entries; the files it owns outright (the OpenCode plugin, the pi extension, the Cursor rule) it regenerates. Commit what it writes.
 
 ## Setting up each agent
 
@@ -121,7 +121,7 @@ for d in ~/code/*/; do todopi -C "$d" ls --ready 2>/dev/null | sed "s|^|$(basena
 
 ## todopi and Beads
 
-[Beads](https://github.com/steveyegge/beads) (`bd`) showed that coding agents need a task graph in the repository, and todopi keeps its best ideas: a ready queue, claiming, `prime`, dependencies between tasks. The difference is in what the ledger is. Beads keeps tasks in an embedded Dolt SQL database, and its `issues.jsonl` is an export, not the source of truth. In todopi the files are the ledger: one Markdown file per task, twelve fields, a public [format specification](spec/todopi-format-v1.md) — you read a task in a diff, review it in a pull request, and merge it with git like any other file. todopi is also deliberately small — 20 subcommands — and `done` runs each task's own verification: closing past a failing check is possible, but it is recorded in the task and shown as unverified. Coming from Beads Classic: `todopi import beads` reads `.beads/issues.jsonl` and keeps each Beads id in `external.beads.id`.
+[Beads](https://github.com/steveyegge/beads) (`bd`) showed that coding agents need a task graph in the repository, and todopi keeps its best ideas: a ready queue, claiming, `prime`, dependencies between tasks. The difference is in what the ledger is. Beads keeps tasks in a Dolt SQL database — embedded by default, or a `dolt sql-server` for several writers — and its `issues.jsonl` is an export, not the source of truth. In todopi the files are the ledger: one Markdown file per task, twelve fields, a public [format specification](spec/todopi-format-v1.md) — you read a task in a diff, review it in a pull request, and merge it with git like any other file. todopi is also deliberately small — 20 subcommands — and `done` runs each task's own verification: closing past a failing check is possible, but it is recorded in the task and shown as unverified. Coming from Beads Classic: `todopi import beads` reads `.beads/issues.jsonl` and keeps each Beads id in `external.beads.id`.
 
 ## Documents
 

@@ -55,3 +55,24 @@ test("协议段的标记与 README 一致；Beads 原 id 的位置与导入器�
   assert.match(importer, /external: \{ beads: \{ id: /);
   assert.match(README, /`external\.beads\.id`/);
 });
+
+test("--user：仍写进仓库的文件，README 讲 --user 的那段都点了名", () => {
+  const d = mkdtempSync(join(tmpdir(), "todopi-readme-user-"));
+  const home = mkdtempSync(join(tmpdir(), "todopi-readme-userhome-"));
+  const env = { ...process.env, HOME: home };
+  execFileSync("git", ["init", "-q"], { cwd: d });
+  execFileSync(process.execPath, [CLI, "-C", d, "init"], { env });
+  const para = README.split("\n\n").find((p) => p.includes("--user")) ?? "";
+  const names: Record<string, string> = { "CLAUDE.md": "CLAUDE.md", ".cursor/rules/todopi.mdc": "rule file" };
+  let inRepo = 0;
+  for (const agent of ["claude", "codex", "opencode", "pi", "cursor", "gemini"]) {
+    const r = spawnSync(process.execPath, [CLI, "-C", d, "--json", "setup", agent, "--user"], { encoding: "utf8", env });
+    for (const f of (JSON.parse(r.stdout) as { files: { path: string }[] }).files) {
+      const rel = relative(d, f.path).split("\\").join("/");
+      if (rel.startsWith("..")) continue;
+      inRepo++;
+      assert.ok(rel in names && para.includes(names[rel]!), `setup ${agent} --user writes ${rel} in the repository; README's --user paragraph must say so`);
+    }
+  }
+  assert.ok(inRepo > 0);
+});
