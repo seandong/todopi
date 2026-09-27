@@ -8,7 +8,7 @@ rank: "iz"
 verify: "make check && make test && bash tools/e2e/f31-private-tmp.sh"
 labels: ["m4"]
 created: "2026-09-27T10:12:22Z"
-updated: "2026-09-27T11:09:14Z"
+updated: "2026-09-27T12:05:36Z"
 ---
 
 ## Description
@@ -29,3 +29,4 @@ updated: "2026-09-27T11:09:14Z"
 - 2026-09-27T11:07:22Z claude-code@Seans-MacBook-Pro.local check ac=1: make test 与 make e2e 在私有的临时目录里跑，结束（含失败与中断）后整个删掉；跑完系统临时目录不多出 todopi-* 条目
 - 2026-09-27T11:07:22Z claude-code@Seans-MacBook-Pro.local check ac=2: make ci 连跑两层时共用一个，不漏
 - 2026-09-27T11:09:14Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=d54132e dirty=true
+- 2026-09-27T12:05:36Z claude-code@Seans-MacBook-Pro.local note: 合并 F32 后 main 上 e2e 偶发失败（f31 打断用例：负载高时 5 秒内目录没删净）。修：孤儿进程十轮 TERM 不走就 KILL；e2e 等目录消失最长 30 秒（后台重试本来就是设计的一部分）。连跑三次通过。
