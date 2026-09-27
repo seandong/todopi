@@ -14,16 +14,23 @@ import { isAbsolute, resolve } from "node:path";
  * 而 spec §8 要求同一仓库的所有 worktree 共用一套租约。
  */
 export function gitCommonDir(root: string): string | null {
+  // 一次运行里租约目录与会话目录各问一遍，每遍是一个 git 子进程（约 10 ms，F36）。只缓存找到了的结果：
+  // 「不在 git 里」可能在同一进程里变（先查、再 git init，测试就这么做），找到了的仓库公共目录不会变
+  const hit = COMMON_DIR.get(root);
+  if (hit !== undefined) return hit;
   try {
     const out = execFileSync("git", ["rev-parse", "--git-common-dir"], {
       cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     if (out === "") return null;
-    return isAbsolute(out) ? out : resolve(root, out);
+    const dir = isAbsolute(out) ? out : resolve(root, out);
+    COMMON_DIR.set(root, dir);
+    return dir;
   } catch {
     return null;
   }
 }
+const COMMON_DIR = new Map<string, string>();
 
 /**
  * `git config user.name` 的**原始值**；没配置或不在仓库里返回 null。

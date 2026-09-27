@@ -15,14 +15,29 @@ export type BodyLine = { index: number; text: string; fenced: boolean };
  *
  * 标题精确匹配：spec §5.3 说四个 H2 标题是「exactly and case-sensitively」认的。
  */
+/**
+ * 正文按行切开并建好 CommonMark 结构；记住**上一段**正文的结果。同一段正文常被接连问好几遍（校验里的 Log 取两遍，prime 校验完
+ * 紧接着取 verify 快照），每遍重建结构是 prime 在 2,000 个任务上超时的大头之一（F36）。只记一段：按全部正文缓存会把 2,000 份结构
+ * 都留在内存里，ls 这种每段只问一遍的反而变慢（实测 +16 ms）。纯函数的记忆化，对调用方透明；lines / st 只读。
+ */
+let lastBody: string | undefined;
+let lastParsed: { lines: string[]; st: ReturnType<typeof structure> } | undefined;
+function parsedBody(body: string): { lines: string[]; st: ReturnType<typeof structure> } {
+  if (lastParsed !== undefined && lastBody === body) return lastParsed;
+  const lines = body.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
+  lastParsed = { lines, st: structure(lines) };
+  lastBody = body;
+  return lastParsed;
+}
+
 export function sectionLines(body: string, heading: string, every = false): BodyLine[] {
   // 行尾的 \r 要去掉。spec §5.1 要求 LF，所以 CRLF 文件本就不合规；
   // 但**静默放行比报错危险得多**——实测一份 CRLF 正文会让标题匹配失败、
   // 验收标准被解析成空集，于是 `done` 悄悄越过门禁而 doctor 还报一切正常
   // （Codex 评审复现）。这里按容错读取处理，写回时自然回到 LF。
-  const lines = body.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
-  // 标题与小节边界由 CommonMark 判定（markdown/sections.ts，写入端用的是同一份）。
-  const st = structure(lines);
+  // 标题与小节边界由 CommonMark 判定（markdown/sections.ts，写入端用的是同一份）。同一段正文在一次运行里会被问好几遍
+  // （校验的 Log、验收标准、prime 的 verify 快照……），每遍都重建 CommonMark 结构是 prime 在 2,000 个任务上超时的大头之一（F36）
+  const { lines, st } = parsedBody(body);
   const out: BodyLine[] = [];
   // `every`：同名小节出现不止一次时全部读（spec §5.3：验收标准就这么读——重复的标题藏不住标准）。
   for (let start = headingIndex(lines, st, heading); start >= 0;) {

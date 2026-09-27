@@ -51,7 +51,8 @@ export function recordPrime(ledger: Ledger, key: PrimeKey, now: string, verify: 
   if (isNewerVersion(ledger)) return;
   const path = pathFor(ledger, key);
   mkdirSync(join(path, ".."), { recursive: true });
-  writeFileAtomic(path, `${JSON.stringify({ key: keyText(key), primed_at: now, verify })}\n`);
+  // 运行时状态、坏了就当没有（readPrimeRecord）：不必 fsync
+  writeFileAtomic(path, `${JSON.stringify({ key: keyText(key), primed_at: now, verify })}\n`, undefined, { fsync: false });
 }
 
 /** 上次 prime 的记录；从没有过、或文件坏了，都返回 null（运行时状态，坏了就当没有）。 */

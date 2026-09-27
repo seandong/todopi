@@ -2456,3 +2456,14 @@ Node 用 spec reporter，整层被判 blocked。
   能藏住或倒转文字；F26 为 verify 确认提示写的 `domain/visible.ts` 是按 Unicode 类别转的。合并成一份：`visible`（单行，换行与 Tab 也转义）与
   `visibleMultiline`（Log 条目，保留换行与 Tab），`view.ts` 那两个函数删掉。ARCH-027 的检查器改用同一个类别判据，夹具里加零宽与从右到左覆盖字符，
   并自检它们确实进了输出；把转义改回只转 C0/C1 时检查器报出 prime 的标题、标准、Log 里的漏网字符。
+
+## D056 — prime 回到 200 ms 以内：同一段正文只解析一次
+
+- 日期：2026-09-28（F36，tp-fpy1s4，接 F29 的基准）。
+- 剖析（编译后的 CLI，2,000 个任务）：prime 比 ls 多出的时间来自三处——① prime 记录 verify 快照时对**每个任务**再取一遍 Log，把全部正文的
+  CommonMark 结构重建一遍（≈ 20 ms）；② git 公共目录问了两遍（租约目录一遍、会话目录一遍，≈ 10 ms）；③ prime 记录 fsync（≈ 7 ms）。
+- 改法：`sectionLines` 记住**上一段**正文的解析结构（纯函数的记忆化）；prime 在校验每个任务之后紧接着取它的快照，正好命中。**不按全部正文缓存**：
+  试过，2,000 份结构留在内存里，每段只问一遍的 `ls` 反而慢了约 16 ms（同机交替对比）。`gitCommonDir` 按仓库根缓存找到了的结果（「不在 git 里」
+  不缓存，git init 之后要找得到）。`writeFileAtomic` 加 `fsync: false` 选项，只给 prime 记录这种坏了就当没有的运行时状态用。
+- 结果（同机交替对比 25 次取中位数，负载高）：prime 225 → 186 ms、prime --full 221 → 188 ms，ls、doctor 不变。缓存用例的期望值写死——第一版用被测函数
+  自己算期望，缓存坏了照样通过（变异测试抓到）。
