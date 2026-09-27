@@ -1,5 +1,5 @@
 {
-  "note": "Written by hand, without quotes. Readers MUST accept it (the quoting rule in §5.1 binds writers only). Note that YAML parses created/updated here as timestamps rather than strings; readers must normalize them to RFC 3339 strings. doctor --fix rewrites this file into the quoted form.",
+  "note": "Written by hand, without quotes. Readers MUST accept it (the quoting rule in §5.1 binds writers only). Note that YAML parses created/updated here as timestamps rather than strings; readers must normalize them to RFC 3339 strings. doctor --fix rewrites the other fields into the quoted form but keeps the updated entry byte for byte, unquoted as it is (§6.3).",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "A hand-written task",

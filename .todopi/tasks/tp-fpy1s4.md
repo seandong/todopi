@@ -8,7 +8,7 @@ rank: "iy"
 verify: "make check && make test && bash tools/bench/ledger-2000.sh"
 labels: ["m4"]
 created: "2026-09-27T08:46:29Z"
-updated: "2026-09-27T13:44:58Z"
+updated: "2026-09-27T13:59:49Z"
 ---
 
 ## Description
@@ -31,3 +31,4 @@ F29 基准（tools/bench/ledger-2000.sh，M4 Pro）：ls ≈ 170 ms、show ≈ 1
 - 2026-09-27T13:43:24Z claude-code@Seans-MacBook-Pro.local check ac=2: 输出逐字节不变（现有 prime 的测试与 e2e 全绿）
 - 2026-09-27T13:44:40Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=4bec23f dirty=true
 - 2026-09-27T13:44:58Z claude-code@Seans-MacBook-Pro.local note: Caveat on criterion 1: the last bench run before closing (load average ~209) gave prime median 223 ms (min 189, one run at 482) and prime --full 189 ms; an earlier run on the same machine gave 180 / 193. Absolute medians swing with load here; the interleaved A/B against main (same conditions) is the reliable comparison and shows ~37 ms saved on both. A run on an idle machine (or the CI job summary) should confirm the absolute number.
+- 2026-09-27T13:59:49Z claude-code@Seans-MacBook-Pro.local note: CI bench after merge (run 36323821712, EPYC 9V45 2 cores, load ~3): ls 306, prime 320, prime --full 335 ms. Before F36 (run 36308800062, EPYC 7763): ls 440, prime 543. Different runner CPUs, so compare ratios: prime was 23% slower than ls, now 5%.
