@@ -235,13 +235,21 @@ chmod 1777 "$TMP/c10/open"
 out="$(binstall "$TMP/c10" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c10/open/bin")"; rc=$?
 [ "$rc" -eq 0 ] && ok "上级目录带 sticky 位（/tmp 那样）：允许" || fail "rc=${rc}：$out"
 chmod 755 "$TMP/c10/open"
-mkdir -p "$TMP/c11/real"; ln -s "$TMP/c11/real" "$TMP/c11/link"
-out="$(binstall "$TMP/c11" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c11/link")"; rc=$?
-[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "is a symbolic link" && [ ! -e "$TMP/c11/real/todopi" ] && ok "安装目录是符号链接：拒绝安装" || fail "rc=${rc}：$out"
+# 路径里的符号链接（安装目录本身、上级目录、末尾带斜杠）：解析成物理路径一次、只用它——装进链接指向的真实目录（Codex 补审再复核）
+mkdir -p "$TMP/c11/real/bin"; ln -s "$TMP/c11/real" "$TMP/c11/link"
+out="$(binstall "$TMP/c11" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c11/link/bin/")"; rc=$?
+[ "$rc" -eq 0 ] && [ -x "$TMP/c11/real/bin/todopi" ] && [ -L "$TMP/c11/link" ] && ok "路径里有符号链接、末尾带斜杠：解析成物理路径后装进真实目录" || fail "rc=${rc}：$out"
+grep -q 'INSTALL_DIR=$(safe_path "$INSTALL_DIR")' install.sh && ok "检查之后只用解析出的物理路径（链接事后改指也改不到写入位置）" || fail "install.sh 没有改用物理路径"
 if [ "$(uname -s)" = "Darwin" ]; then
   mkdir -p "$TMP/c12/bin" && chmod +a "everyone allow add_file,delete_child" "$TMP/c12/bin"
   out="$(binstall "$TMP/c12" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c12/bin")"; rc=$?
-  [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "access control list" && [ ! -e "$TMP/c12/bin/todopi" ] && ok "安装目录带 ACL：拒绝安装" || fail "rc=${rc}：$out"
+  [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "access control list" && [ ! -e "$TMP/c12/bin/todopi" ] && ok "安装目录带允许他人写的 ACL：拒绝安装" || fail "rc=${rc}：$out"
+  mkdir -p "$TMP/c13/up/bin" && chmod +a "everyone allow add_file,delete_child" "$TMP/c13/up"
+  out="$(binstall "$TMP/c13" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c13/up/bin")"; rc=$?
+  [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "c13/up has an access control list" && [ ! -e "$TMP/c13/up/bin/todopi" ] && ok "上级目录带允许他人写的 ACL：拒绝安装" || fail "rc=${rc}：$out"
+  mkdir -p "$TMP/c14/home/bin" && chmod +a "group:everyone deny delete" "$TMP/c14/home"
+  out="$(binstall "$TMP/c14" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c14/home/bin")"; rc=$?
+  [ "$rc" -eq 0 ] && ok "只有 deny 条目的 ACL（macOS 家目录默认那条）：允许" || fail "rc=${rc}：$out"
 fi
 
 # PATH 提示按 shell 给出该写的文件

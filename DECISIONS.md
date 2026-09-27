@@ -2240,4 +2240,7 @@ Node 用 spec reporter，整层被判 blocked。
   整个安装目录换掉。改为经典的安全路径检查（`safe_path`）：安装目录不能是符号链接、不能带 ACL（`ls -ld` 末尾的 +），从它到 `/` 的每一级都要归
   自己或 root 所有、不能组 / 他人可写（带 sticky 位的除外）。并写明：安装器由拥有安装目录的用户运行。默认的 `~/.local/bin` 与 CI 里的
   `/root/.local/bin` 都满足。
+  第三次复核：上级路径里的符号链接会被跟随、末尾斜杠能绕过链接检查、上级目录的 ACL 没查。改为先 `cd … && pwd -P` 解析成物理路径、此后只用它
+  （链接事后改指改不到写入位置，也不必拒绝 macOS 的 /var 这类系统链接）；每一级都查 ACL，但只拒绝把写类权限给别人的 allow 条目——macOS 家目录
+  默认的 `group:everyone deny delete` 若也拒绝，默认的 ~/.local/bin 就装不进去。Linux 用 getfacl 看具名用户 / 组的 w 与 mask，读不到 ACL 时保守拒绝。
 
