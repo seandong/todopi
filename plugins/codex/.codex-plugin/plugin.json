@@ -1,0 +1,10 @@
+{
+  "name": "todopi",
+  "version": "0.0.1",
+  "description": "Durable task ledger for AI coding agents: injects the current todopi tasks at session start and after compaction.",
+  "author": {
+    "name": "seandong"
+  },
+  "homepage": "https://github.com/seandong/todopi",
+  "license": "MIT"
+}

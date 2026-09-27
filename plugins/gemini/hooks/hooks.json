@@ -1,0 +1,45 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "todopi --agent gemini prime --hook --hook-json gemini:SessionStart"
+          }
+        ]
+      }
+    ],
+    "PreCompress": [
+      {
+        "matcher": "manual",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "todopi --agent gemini prime --hook --mark-compacted"
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "todopi --agent gemini prime --hook --if-compacted --hook-json gemini:BeforeAgent"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "todopi --agent gemini handoff --check --hook"
+          }
+        ]
+      }
+    ]
+  }
+}

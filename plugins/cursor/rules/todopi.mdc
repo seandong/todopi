@@ -1,0 +1,8 @@
+---
+description: todopi task ledger pointer (from the todopi Cursor plugin)
+alwaysApply: true
+---
+If this repository has a `.todopi/` directory, it tracks work in a todopi ledger; the protocol is in AGENTS.md.
+
+- To see what you are working on, run `todopi prime` (the full picture: `todopi prime --full`).
+- When you notice your context was summarized or compacted, run `todopi prime` before continuing — no hook will do it for you.

@@ -100,14 +100,19 @@ export function markCompacted(ledger: Ledger, key: PrimeKey): void {
   writeFileAtomic(path, `${keyText(key)}\n`);
 }
 
-/** 取走标记：有就删掉并返回 true。 */
+/**
+ * 取走标记：有就删掉并返回 true。在账本的写锁里查、删——并发的几个钩子（setup 的与 Gemini 扩展的同时装着）只有一个取到。
+ * 不能拿 unlink 本身当认领：macOS（APFS）上几个进程同时 unlink 同一个文件，可以都返回成功（tp-lv7y3h 实测）。
+ */
 export function takeCompacted(ledger: Ledger, key: PrimeKey): boolean {
   // 取走也是写（删文件）：版本更高时不动它，当作没有（Codex 评审）
   if (isNewerVersion(ledger)) return false;
   const path = compactedPath(ledger, key);
-  if (!existsSync(path)) return false;
-  rmSync(path, { force: true });
-  return true;
+  return withLock(leasePaths(ledger).lockPath, () => {
+    if (!existsSync(path)) return false;
+    rmSync(path, { force: true });
+    return true;
+  });
 }
 
 /**

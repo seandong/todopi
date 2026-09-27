@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "todopi --agent cursor prime --hook --hook-json cursor"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "todopi --agent cursor handoff --check --hook"
+      }
+    ]
+  }
+}

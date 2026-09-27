@@ -1,12 +1,13 @@
 ---
 id: "tp-lv7y3h"
 title: "首发后一周的跟进准备好：六家市场 / 注册表的包与 awesome 列表的条目"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j01"
 verify: "make check && make test"
 labels: ["m5"]
 created: "2026-09-27T14:20:54Z"
-updated: "2026-09-27T14:36:18Z"
+updated: "2026-09-27T15:51:43Z"
 ---
 
 ## Description
@@ -25,3 +26,4 @@ updated: "2026-09-27T14:36:18Z"
 - 2026-09-27T14:21:05Z claude-code@Seans-MacBook-Pro.local edited fields=verify
 - 2026-09-27T14:22:40Z claude-code@Seans-MacBook-Pro.local claimed
 - 2026-09-27T14:36:18Z claude-code@Seans-MacBook-Pro.local released
+- 2026-09-27T15:51:43Z claude-code@Seans-MacBook-Pro.local claimed
