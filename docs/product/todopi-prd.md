@@ -282,12 +282,12 @@ todopi import <file.md> | import beads [path]
 
 ## 13. 首发清单（直接 Show HN，不做软发布）
 
-- [ ] 格式规格发布在 todopi.com/spec，含 12 字段表
+- [ ] 格式规格发布在 todopi.com/spec，含 12 字段表 —— 内容与构建已就绪（F33，`make site`，`docs/site.md`）；部署与域名是维护者的动作
 - [ ] 30 秒录屏：压缩发生，agent 从 `prime` 继续
-- [ ] README：六家安装方式、协议、「vs Beads」段落、读音与名字来源
-- [ ] npm `todopi`、brew tap、curl 安装脚本上线；`@todopi` scope 已占
+- [x] README：六家安装方式、协议、「vs Beads」段落、读音与名字来源（F28，D049）
+- [ ] npm `todopi`、brew tap、curl 安装脚本上线；`@todopi` scope 已占 —— 发布工作流、install.sh、brew formula 已就绪（F21、F34）；打标签、NPM_TOKEN、tap 仓库、占名是维护者的动作
 - [ ] 六家 `todopi setup <agent>` 在全新克隆上各自验证通过（市场条目不在此清单，见 FR-A4）
-- [ ] `import beads` 用至少两份真实 Beads Classic 导出测过
+- [x] `import beads` 用至少两份真实 Beads Classic 导出测过（Beads 仓库自己的 v0.47.1 导出，加 F32 的六份，D041）
 - [ ] 首发后一周的跟进动作准备好：awesome 列表 PR、六个市场/注册表条目
 - [ ] 域名：todopi.com 已续费，todopi.dev 已注册
 
