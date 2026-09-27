@@ -93,12 +93,19 @@ type View = {
   others: TaskFile[];
 };
 
-function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLedger>; actor: string; all: TaskFile[] } {
+function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLedger>; actor: string; all: TaskFile[]; snapshots: Record<string, string> } {
   const ledger = discoverLedger(opts.directory);
   const read = readTasks(ledger);
   // 图建在磁盘上的全部任务之上（ls 的同一条理由：排除一个任务是有派生后果的）；显示只用读得通的。
   const index = indexTasks(read);
-  const tasks = read.filter((t) => isDisplayable(validateFile(t)));
+  // verify 快照（handoff 用）紧跟着每个任务的校验取：两者读同一段正文，接连取时正文的解析结构能复用（F36）
+  const snapshots: Record<string, string> = {};
+  const tasks = read.filter((t) => {
+    const ok = isDisplayable(validateFile(t));
+    // 快照原来在 record 的 try 里算：它出错只影响 handoff 的对比，不能让 prime 的输出跟着没了——出错记成「不知道」
+    try { snapshots[t.idFromFilename] = verifySnapshot(t); } catch { snapshots[t.idFromFilename] = "?#?"; }
+    return ok;
+  });
   const stale = staleInputFor(ledger);
   const actor = currentActor(ledger.root, opts.actor);
   const who = { actor, host: hostname() };
@@ -107,7 +114,7 @@ function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLe
   const held = inProgress.filter((t) => isMine(t.frontmatter["assignee"], who))
     .sort((a, b) => (str(a, "updated") < str(b, "updated") ? 1 : str(a, "updated") > str(b, "updated") ? -1 : 0));
   const others = inProgress.filter((t) => !isMine(t.frontmatter["assignee"], who));
-  return { ledger, actor, all: read, tasks, index, stale, held, others };
+  return { ledger, actor, all: read, tasks, index, stale, held, others, snapshots };
 }
 
 /**
@@ -116,12 +123,8 @@ function view(opts: PrimeOptions): View & { ledger: ReturnType<typeof discoverLe
  */
 function record(v: ReturnType<typeof view>, opts: PrimeOptions): string[] {
   try {
-    // 快照取磁盘上**全部**读得出的任务（含 doctor 不认的），handoff 才能发现任何一个的 verify 变了。
-    const verify: Record<string, string> = {};
-    for (const t of v.all) {
-      verify[t.idFromFilename] = verifySnapshot(t);
-    }
-    recordPrime(v.ledger, opts.session !== undefined ? { session: opts.session } : { actor: v.actor }, nowStamp(), verify);
+    // 快照取磁盘上**全部**读得出的任务（含 doctor 不认的），handoff 才能发现任何一个的 verify 变了（view 里逐个取好了）。
+    recordPrime(v.ledger, opts.session !== undefined ? { session: opts.session } : { actor: v.actor }, nowStamp(), v.snapshots);
     return [];
   } catch (err) {
     return [`Could not record this prime for handoff: ${err instanceof Error ? err.message : String(err)}`];
