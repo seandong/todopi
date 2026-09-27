@@ -1,13 +1,14 @@
 ---
 id: "tp-q1ikby"
 title: "make test / make e2e 不在系统临时目录里留垃圾"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "iz"
 verify: "make check && make test && bash tools/e2e/f31-private-tmp.sh"
 labels: ["m4"]
 created: "2026-09-27T10:12:22Z"
-updated: "2026-09-27T10:12:46Z"
+updated: "2026-09-27T11:09:14Z"
 ---
 
 ## Description
@@ -16,11 +17,15 @@ updated: "2026-09-27T10:12:46Z"
 
 ## Acceptance Criteria
 
-- [ ] make test 与 make e2e 在私有的临时目录里跑，结束（含失败与中断）后整个删掉；跑完系统临时目录不多出 todopi-* 条目
-- [ ] make ci 连跑两层时共用一个，不漏
+- [x] make test 与 make e2e 在私有的临时目录里跑，结束（含失败与中断）后整个删掉；跑完系统临时目录不多出 todopi-* 条目
+- [x] make ci 连跑两层时共用一个，不漏
 
 ## Log
 
 - 2026-09-27T10:12:22Z claude-code@Seans-MacBook-Pro.local created
 - 2026-09-27T10:12:46Z claude-code@Seans-MacBook-Pro.local edited fields=verify
 - 2026-09-27T10:12:46Z claude-code@Seans-MacBook-Pro.local claimed
+- 2026-09-27T11:07:22Z claude-code@Seans-MacBook-Pro.local note: Evidence: tools/harness.sh runs test and e2e in a private TMPDIR (reused across ci, reuse keyed on an unexported shell variable) and removes it on exit; on INT/TERM it stops orphaned test-file processes found by a per-run environment marker (each pid re-verified before TERM), renames the dir away and deletes it, retrying in the background. A full test+e2e run leaves 0 new todopi-* entries (was ~900 per run; 236k/5.7 GB had accumulated). tools/e2e/f31-private-tmp.sh: normal run and a process-group Ctrl-C both leave TMPDIR empty (asserts exit 130, stopped early). Linux /proc branch only statically checked (Docker/OrbStack stopped) — CI e2e is its first run. Codex 3 rounds -> Go. D052.
+- 2026-09-27T11:07:22Z claude-code@Seans-MacBook-Pro.local check ac=1: make test 与 make e2e 在私有的临时目录里跑，结束（含失败与中断）后整个删掉；跑完系统临时目录不多出 todopi-* 条目
+- 2026-09-27T11:07:22Z claude-code@Seans-MacBook-Pro.local check ac=2: make ci 连跑两层时共用一个，不漏
+- 2026-09-27T11:09:14Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=d54132e dirty=true
