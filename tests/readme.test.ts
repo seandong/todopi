@@ -76,3 +76,13 @@ test("--user：仍写进仓库的文件，README 讲 --user 的那段都点了�
   }
   assert.ok(inRepo > 0);
 });
+
+test("预编译二进制的平台与 install.sh 的 platform() 一致", () => {
+  const sh = readFileSync(join(process.cwd(), "install.sh"), "utf8");
+  const fn = sh.slice(sh.indexOf("platform() {"), sh.indexOf("\n}", sh.indexOf("platform() {")));
+  const os = [...fn.matchAll(/^\s+(\w+)\) os=(\w+)/gm)].map((m) => m[2]);
+  const arch = [...fn.matchAll(/\) arch=(\w+)/g)].map((m) => m[1]);
+  assert.deepEqual(os, ["darwin", "linux"]);
+  assert.deepEqual(arch, ["x64", "arm64"]);
+  assert.match(README, /Binaries exist for macOS and Linux on x64 and arm64/);
+});
