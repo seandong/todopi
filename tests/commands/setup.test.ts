@@ -479,3 +479,18 @@ test("旧命令但被用户改过的组（加了 if 之类）：不改它，另�
   assert.equal(json(p).hooks.SessionStart.length, 2);
   assert.match(r.notes.join("\n"), /runs twice/);
 });
+
+test("同一组里既有被改过的旧命令、又有标准的旧命令：只迁移标准的那一项，被改过的原样并提示（Codex 评审）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  writeFileSync(p, JSON.stringify({ hooks: { SessionStart: [{ hooks: [
+    { type: "command", command: "todopi prime --hook", if: "Bash(foo)" },
+    { type: "command", command: "todopi prime --hook" },
+  ] }] } }));
+  const r = ensureClaudeHooks(p);
+  assert.deepEqual(json(p).hooks.SessionStart, [{ hooks: [
+    { type: "command", command: "todopi prime --hook", if: "Bash(foo)" },
+    { type: "command", command: "todopi --agent claude-code prime --hook" },
+  ] }]);
+  assert.match(r.notes.join("\n"), /still runs the old/);
+});

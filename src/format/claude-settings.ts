@@ -82,13 +82,18 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
  *     `statusMessage`（字符串）。带 `if`（非工具事件上永不运行）、`async`（输出不进上下文）或任何陌生键的不算。
  * **不校验用户别的钩子**：那是 Claude Code 的事，我们只往数组末尾加一组，不会让它们变得更糟（D035）。
  */
+/** 组里的一个处理器是不是我们写出的标准形状（D035）。 */
+function isStandardHandler(h: unknown, command: string): h is Record<string, unknown> {
+  return isObject(h) && h["type"] === "command" && h["command"] === command
+    && Object.keys(h).every((k) => ["type", "command", "timeout", "statusMessage"].includes(k))
+    && (h["timeout"] === undefined || (typeof h["timeout"] === "number" && h["timeout"] > 0))
+    && (h["statusMessage"] === undefined || typeof h["statusMessage"] === "string");
+}
+
 function isOurGroup(g: unknown, command: string, matcher?: string): boolean {
   if (!isObject(g)) return false;
   if (matcher !== undefined ? g["matcher"] !== matcher : !(g["matcher"] === undefined || g["matcher"] === "" || g["matcher"] === "*")) return false;
-  return Array.isArray(g["hooks"]) && g["hooks"].some((h) => isObject(h) && h["type"] === "command" && h["command"] === command
-    && Object.keys(h).every((k) => ["type", "command", "timeout", "statusMessage"].includes(k))
-    && (h["timeout"] === undefined || (typeof h["timeout"] === "number" && h["timeout"] > 0))
-    && (h["statusMessage"] === undefined || typeof h["statusMessage"] === "string"));
+  return Array.isArray(g["hooks"]) && g["hooks"].some((h) => isStandardHandler(h, command));
 }
 
 /** 用户自己限定过的同名组：不算装好，也不改它；提示一下它可能与我们的组重复注入。 */
@@ -142,8 +147,17 @@ export function ensureHookConfig(path: string, list: HookList,
     // 旧版 setup 的标准组：把那一项的命令就地改成新的（别的键、别的项原样）
     const old = legacy === undefined ? undefined : groups.find((g) => isOurGroup(g, legacy, matcher));
     if (old !== undefined && isObject(old) && Array.isArray(old["hooks"])) {
-      const h = old["hooks"].find((x) => isObject(x) && x["command"] === legacy);
-      if (isObject(h)) { h["command"] = command; changed = true; continue; }
+      // 只改那个标准形状的处理器：同组里被用户改过的同命令项（加了 if 之类）原样留着（Codex 评审）
+      const h = old["hooks"].find((x) => isStandardHandler(x, legacy!));
+      if (h !== undefined) {
+        h["command"] = command;
+        changed = true;
+        if (old["hooks"].some((x) => isObject(x) && x["command"] === legacy)) {
+          notes.push(`${path}: a ${event} group still runs the old \`${legacy}\` with settings of your own; left as you configured it. `
+            + "The standard one was updated; if both run, prime runs twice — remove one.");
+        }
+        continue;
+      }
     }
     const group = { hooks: [{ type: "command", command }] };
     hooks[event] = [...groups, matcher === undefined ? group : { matcher, ...group }];

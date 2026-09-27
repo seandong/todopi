@@ -18,10 +18,10 @@ program
     + "sets the actor to <name>@<host>. Hooks installed by `todopi setup` pass it; agents are also recognized from their environment")
   .exitOverride();
 
-// --agent 交给身份解析：放进 TODOPI_AGENT，currentActor 在那里认它（也让用户能用环境变量给）。F22
-program.hook("preAction", () => {
-  const agent = program.opts()["agent"] as string | undefined;
-  if (agent !== undefined) process.env["TODOPI_AGENT"] = agent;
+// --agent 交给身份解析（只在本进程里，不放进环境——见 setAgentOption）。F22
+program.hook("preAction", async () => {
+  const { setAgentOption } = await import("./commands/actor.ts");
+  setAgentOption(program.opts()["agent"] as string | undefined);
 });
 
 program

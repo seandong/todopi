@@ -49,8 +49,8 @@ export function normalizeActor(raw: string): string | null {
  *
  * 只认运行时自己设的变量，不认用户配置类的（`CODEX_HOME` 在任何装了 codex 的 shell 里都有，那不是「正在运行的是 codex」的证据）。
  *
- * **顺序就是优先级**：agent 会嵌套（本仓库就是 Claude Code 调 Codex），内层的环境会继承外层的变量。Claude Code 最常作为外层调度
- * 别的 agent，所以排在最后——别的信号都不在时它才作数。
+ * agent 会嵌套（本仓库就是 Claude Code 调 Codex），内层的环境会继承外层的变量，光看环境分不出哪层在跑——所以不止一个信号在时不推断
+ * （见 agentFromEnv）。
  */
 export const AGENT_SIGNALS: readonly { agent: string; env: string; value?: string }[] = [
   { agent: "codex", env: "CODEX_THREAD_ID" },
@@ -64,14 +64,19 @@ export const AGENT_SIGNALS: readonly { agent: string; env: string; value?: strin
 /** `--agent` / `TODOPI_AGENT` 接受的名字。 */
 export const AGENT_NAMES: readonly string[] = AGENT_SIGNALS.map((s) => s.agent);
 
-/** 按上面的顺序认出正在运行的 agent；都没有返回 undefined。 */
+/**
+ * 认出正在运行的 agent：**恰好一个**信号在时才算；一个都没有、或不止一个（嵌套：内层继承了外层的变量），返回 undefined。
+ *
+ * 嵌套时光看环境分不出哪一层在跑——Codex 里起的 Gemini，环境里 CODEX_THREAD_ID 与 GEMINI_CLI 都在（Codex 评审）。猜错的代价
+ * 是任务记到别的 agent 名下、写入端的严格匹配拒绝它（D014 的原则：少一级回退好过猜错）。嵌套里跑的 agent 用 `--agent`、
+ * `TODOPI_AGENT` 或 `TODOPI_ACTOR` 说清楚；setup 写出的钩子本来就带 `--agent`。
+ */
 export function agentFromEnv(env: Record<string, string | undefined>): string | undefined {
-  for (const s of AGENT_SIGNALS) {
+  const found = AGENT_SIGNALS.filter((s) => {
     const v = env[s.env];
-    if (v === undefined || v === "") continue;
-    if (s.value === undefined || v === s.value) return s.agent;
-  }
-  return undefined;
+    return v !== undefined && v !== "" && (s.value === undefined || v === s.value);
+  });
+  return found.length === 1 ? found[0]!.agent : undefined;
 }
 
 export type ActorFacts = {

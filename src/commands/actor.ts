@@ -25,11 +25,21 @@ export function currentActor(root: string, explicit?: string): string {
 }
 
 /**
- * 正在运行的 agent：`--agent`（cli.ts 把它放进 TODOPI_AGENT）或 TODOPI_AGENT 显式给的优先，其次按环境信号认（FR-C4 第三级）。
+ * 正在运行的 agent：`--agent` 或 TODOPI_AGENT 显式给的优先，其次按环境信号认（FR-C4 第三级）。
  * 显式给的名字不认识就当场报错——拼错一个名字，任务归属就悄悄错开了。
  */
+let agentOption: string | undefined;
+
+/**
+ * `--agent` 的值。只在本进程里生效，**不**放进环境：放进环境的话 verify 起的子进程（以及里面再调的 todopi）都会继承它，
+ * 哪怕那里跑的是另一个 agent（Codex 评审）。用户自己设的 TODOPI_AGENT 照常继承——那是用户说的。
+ */
+export function setAgentOption(name: string | undefined): void {
+  agentOption = name;
+}
+
 export function currentAgent(): string | undefined {
-  const hint = process.env["TODOPI_AGENT"];
+  const hint = agentOption ?? process.env["TODOPI_AGENT"];
   if (hint !== undefined && hint !== "") {
     if (!AGENT_NAMES.includes(hint)) {
       throw new CliError(EXIT.usage, `Unknown agent ${JSON.stringify(hint)} (from --agent or TODOPI_AGENT); expected one of: ${AGENT_NAMES.join(", ")}.`);

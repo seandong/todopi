@@ -141,11 +141,13 @@ test("各家 agent 工具子进程里的信号：认得出，取值不对的不�
   }
 });
 
-test("嵌套时内层优先：Claude Code 排最后（它最常作为外层调度别的 agent）", () => {
-  assert.equal(agentFromEnv({ CLAUDECODE: "1", CODEX_THREAD_ID: "t" }), "codex");
-  assert.equal(agentFromEnv({ CLAUDECODE: "1", OPENCODE: "1" }), "opencode");
-  assert.equal(agentFromEnv({ CLAUDECODE: "1", CURSOR_AGENT: "1", GEMINI_CLI: "1" }), "gemini");
-  assert.deepEqual(AGENT_NAMES, ["codex", "gemini", "opencode", "pi", "cursor", "claude-code"]);
+test("不止一个信号（嵌套：内层继承了外层的变量）：分不出哪层在跑，不推断（Codex 评审）", () => {
+  assert.equal(agentFromEnv({ CLAUDECODE: "1", CODEX_THREAD_ID: "t" }), undefined);
+  assert.equal(agentFromEnv({ CODEX_THREAD_ID: "outer", GEMINI_CLI: "1" }), undefined);
+  assert.equal(agentFromEnv({ CLAUDECODE: "1", CURSOR_AGENT: "1", GEMINI_CLI: "1" }), undefined);
+  // 取值不对的不算信号，所以不构成歧义
+  assert.equal(agentFromEnv({ CLAUDECODE: "0", CODEX_THREAD_ID: "t" }), "codex");
+  assert.deepEqual([...AGENT_NAMES].sort(), ["claude-code", "codex", "cursor", "gemini", "opencode", "pi"]);
 });
 
 test("解析链：--as > TODOPI_ACTOR > agent（<agent>@<host>）> git config user.name", () => {

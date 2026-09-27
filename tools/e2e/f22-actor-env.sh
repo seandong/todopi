@@ -35,7 +35,13 @@ for pair in "claude-code CLAUDECODE=1" "codex CODEX_THREAD_ID=t1" "gemini GEMINI
   [ "$got" = "${name}@${HOST}" ] && ok "${var} → ${name}@<host>" || fail "${var} 得到 ${got}"
 done
 got="$(who CLAUDECODE=1 CODEX_THREAD_ID=t1)"
-[ "$got" = "codex@${HOST}" ] && ok "Claude Code 里跑的 Codex：内层的 codex 优先" || fail "嵌套得到 ${got}"
+[ "$got" = "test-human" ] && ok "不止一个信号（嵌套）：分不出哪层在跑，不推断，回退到 git 用户名" || fail "嵌套得到 ${got}"
+got="$(who CODEX_THREAD_ID=outer GEMINI_CLI=1 TODOPI_AGENT=gemini)"
+[ "$got" = "gemini@${HOST}" ] && ok "嵌套里的 agent 用 TODOPI_AGENT 说清楚" || fail "嵌套 + TODOPI_AGENT 得到 ${got}"
+# --agent 只在本进程里：verify 起的子进程看不到它（否则里面再调的 todopi 会被记到这个 agent 名下）
+(cd "$W" && todopi add "leak probe" --verify 'test -z "${TODOPI_AGENT:-}"' >/dev/null && ID=$(todopi ls | tail -1 | cut -d' ' -f1) \
+  && todopi --agent codex claim "$ID" >/dev/null && todopi --agent codex done "$ID" --yes >/dev/null 2>&1) \
+  && ok "--agent 不泄漏进 verify 的子进程" || fail "verify 看到了 TODOPI_AGENT"
 got="$(who TODOPI_AGENT=pi CLAUDECODE=1)"
 [ "$got" = "pi@${HOST}" ] && ok "TODOPI_AGENT 盖过环境信号" || fail "TODOPI_AGENT 得到 ${got}"
 got="$(who TODOPI_ACTOR=boss CLAUDECODE=1)"

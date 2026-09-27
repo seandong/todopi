@@ -316,8 +316,8 @@ todopi import <file.md> | import beads [path]
 - **Windows 的原子 rename 是已知风险点。** 原子写是临时文件 + rename，而 Windows 上 rename 覆盖一个被其他进程打开的文件会失败。Windows 是尽力而为（CI 跑但不阻塞发布），但这一条应当是 Windows CI **明确要测**的用例，而不是等用户报告。本条未经实测，仅为推理。
 - ~~**FR-C4 的「agent 环境推断」这一级未实现，缺事实依据。**~~ **2026-09-28 已实现（F22，D043）。** 六家的标记都按一手资料核实：
   只认各家运行时给自己**工具子进程**设的变量——Claude Code `CLAUDECODE=1`、Codex `CODEX_THREAD_ID`、Gemini CLI `GEMINI_CLI=1`、
-  OpenCode `OPENCODE=1`、pi `PI_SESSION_ID`、Cursor `CURSOR_AGENT=1`——不认 `CODEX_HOME` 这类用户配置。嵌套时内层优先，Claude Code
-  排最后。钩子子进程里不一定有这些变量，所以 setup 写出的钩子命令都显式带 `--agent <name>`。原文：「§17 核实六家 agent 时没有记录
+  OpenCode `OPENCODE=1`、pi `PI_SESSION_ID`、Cursor `CURSOR_AGENT=1`——不认 `CODEX_HOME` 这类用户配置。不止一个信号在（嵌套）时分不出哪层在跑，
+  不推断。钩子子进程里不一定有这些变量，所以 setup 写出的钩子命令都显式带 `--agent <name>`。原文：「§17 核实六家 agent 时没有记录
   环境变量标记，而实测表明按变量名猜不可靠：`CODEX_HOME` 在一个 Claude Code 会话里同样存在……（见 DECISIONS D014）」
 - **`verify` 的完整日志没有大小上限，磁盘是已知风险点。** FR-D4a 要求完整输出一律写入 `.cache/verify/`，实现改成流式落盘之后这一条才真正成立（早先超过 1 MiB 的部分在写盘前就丢了）。代价是：一条疯狂刷屏的 `verify` 在默认 600 秒超时内可以写出几十 GB。没有悄悄加文件上限，因为那等于改契约——「完整输出」就不再完整。缓解在于 `.cache/` 按规格 §2 可随时删除，且 `verify` 本来就有超时。若 dogfooding 期间真的撑爆过磁盘，再把「日志上限」作为一次明确的契约变更提出来，而不是现在偷偷加。本条未经实测，仅为推理。
 - **`verify` 命令里含 NUL 字节时 runner 起不来。** 实测：Node 的 `spawn` 拒绝含 NUL 的参数，`runCommand` 于是报「runner 退出 1」而不是一条说得清的错。YAML 标量里几乎不会出现 NUL，所以没有现在修；要修的话应在 `exec/run.ts` 入口处明确拒绝并说明。
