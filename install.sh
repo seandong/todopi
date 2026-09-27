@@ -72,6 +72,27 @@ sha256_of() {
   fi
 }
 
+# The install dir and every directory above it must be out of other users' reach: not a symlink (it could be retargeted), no
+# ACL on the install dir (ACL write rights do not show in the mode bits; `ls -ld` marks them with a trailing +), and each
+# level owned by us or root and not writable by group or others, unless sticky (others cannot rename or delete our entries
+# in a sticky directory such as /tmp). Otherwise someone else could replace the directory or a file in it mid-install.
+safe_path() {
+  dir=$1
+  [ -L "$dir" ] && die "${dir} is a symbolic link; refusing to install into it (point TODOPI_INSTALL_DIR at the real directory)"
+  case "$(ls -ld "$dir" | awk '{ print $1 }')" in
+    *+) die "${dir} has an access control list, which may let other users write to it; refusing to install into it" ;;
+  esac
+  uid=$(id -u)
+  d=$dir
+  while :; do
+    [ -n "$(find "$d" -prune \( -user "$uid" -o -user 0 \) \( \( ! -perm -020 ! -perm -002 \) -o -perm -1000 \) 2>/dev/null)" ] \
+      || die "${d} is owned by another user or writable by other users; refusing to install into ${dir} (set TODOPI_INSTALL_DIR to a directory only you control)"
+    [ "$d" = "/" ] && break
+    d=$(dirname "$d")
+  done
+  [ -n "$(find "$dir" -prune -user "$uid" 2>/dev/null)" ] || die "${dir} must be owned by you; refusing to install into it"
+}
+
 platform() {
   case "$(uname -s)" in
     Darwin) os=darwin ;;
@@ -156,10 +177,9 @@ install_binary() {
   # as Alpine, which the glibc builds do not support) is never reported as installed; the rename means an interrupted install
   # never leaves half a binary in place.
   # Writing into a directory another user can modify cannot be made race-free with shell tools: they can swap a file we
-  # just created for a symlink between two commands, and cp / chmod would follow it to a file elsewhere. So refuse such a
-  # directory outright (owned by us, not writable by group or others), and then create the temporary file with mktemp.
-  [ -n "$(find "$INSTALL_DIR" -prune -user "$(id -u)" ! -perm -020 ! -perm -002 2>/dev/null)" ] \
-    || die "${INSTALL_DIR} must be owned by you and not writable by other users; refusing to install into it (set TODOPI_INSTALL_DIR to one that is)"
+  # just created for a symlink between two commands, and cp / chmod would follow it to a file elsewhere. The installer is
+  # meant to be run by the user who owns the install dir; safe_path refuses anything else, then mktemp is enough.
+  safe_path "$INSTALL_DIR"
   new=$(mktemp "$INSTALL_DIR/.todopi.new.XXXXXX") || die "could not create a temporary file in ${INSTALL_DIR}"
   cp "$work/x/todopi" "$new" && [ -f "$new" ] && [ ! -L "$new" ] && chmod 755 "$new" \
     || { rm -f "$new"; die "could not write a regular file to ${INSTALL_DIR}"; }

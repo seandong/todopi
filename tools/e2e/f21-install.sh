@@ -220,12 +220,29 @@ grep -q 'mktemp "$INSTALL_DIR/.todopi.new.XXXXXX"' install.sh && ! grep -q '\.to
 # 安装目录别人可写（组可写 / 所有人可写）：拒绝——在那种目录里写文件做不到无竞态（Codex 补审复核）
 mkdir -p "$TMP/c9/shared"; chmod 775 "$TMP/c9/shared"
 out="$(binstall "$TMP/c9" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c9/shared")"; rc=$?
-[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "not writable by other users" && [ ! -e "$TMP/c9/shared/todopi" ] \
+[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "writable by other users" && [ ! -e "$TMP/c9/shared/todopi" ] \
   && ok "组可写的安装目录：拒绝安装" || fail "rc=${rc}：$out"
 chmod 757 "$TMP/c9/shared"
 out="$(binstall "$TMP/c9" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c9/shared")"; rc=$?
 [ "$rc" -ne 0 ] && [ ! -e "$TMP/c9/shared/todopi" ] && ok "所有人可写的安装目录：拒绝安装" || fail "rc=${rc}：$out"
 chmod 755 "$TMP/c9/shared"
+# 上级目录别人可写（可以把整个安装目录换掉）、安装目录是符号链接、安装目录带 ACL：都拒绝（Codex 补审复核）
+mkdir -p "$TMP/c10/open/bin"; chmod 777 "$TMP/c10/open"
+out="$(binstall "$TMP/c10" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c10/open/bin")"; rc=$?
+[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "c10/open is owned by another user or writable" && [ ! -e "$TMP/c10/open/bin/todopi" ] \
+  && ok "上级目录别人可写：拒绝安装" || fail "rc=${rc}：$out"
+chmod 1777 "$TMP/c10/open"
+out="$(binstall "$TMP/c10" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c10/open/bin")"; rc=$?
+[ "$rc" -eq 0 ] && ok "上级目录带 sticky 位（/tmp 那样）：允许" || fail "rc=${rc}：$out"
+chmod 755 "$TMP/c10/open"
+mkdir -p "$TMP/c11/real"; ln -s "$TMP/c11/real" "$TMP/c11/link"
+out="$(binstall "$TMP/c11" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c11/link")"; rc=$?
+[ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "is a symbolic link" && [ ! -e "$TMP/c11/real/todopi" ] && ok "安装目录是符号链接：拒绝安装" || fail "rc=${rc}：$out"
+if [ "$(uname -s)" = "Darwin" ]; then
+  mkdir -p "$TMP/c12/bin" && chmod +a "everyone allow add_file,delete_child" "$TMP/c12/bin"
+  out="$(binstall "$TMP/c12" TODOPI_FORCE_BINARY=1 TODOPI_INSTALL_DIR="$TMP/c12/bin")"; rc=$?
+  [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "access control list" && [ ! -e "$TMP/c12/bin/todopi" ] && ok "安装目录带 ACL：拒绝安装" || fail "rc=${rc}：$out"
+fi
 
 # PATH 提示按 shell 给出该写的文件
 out="$(binstall "$TMP/c4" TODOPI_FORCE_BINARY=1 SHELL=/bin/zsh)"
