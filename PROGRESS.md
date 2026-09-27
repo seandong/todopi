@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 39 个任务，33 个 `closed/done`、6 个 `open`：v0.1 缺口审计剩下的 3 个与派生的 tp-yce3ah（F27）、tp-fpy1s4（F29）（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
+- 账本: `.todopi/` 38 个任务，33 个 `closed/done`、5 个 `open`：v0.1 缺口审计剩下的 2 个（tp-s4zovm 规格站点、tp-ujjc6y brew）与派生的 tp-yce3ah（F27）、tp-fpy1s4（F29）（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/

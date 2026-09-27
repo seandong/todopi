@@ -433,13 +433,15 @@ still_ours() {
 # 删掉的目录还会被它们递归地建回来（F31 评审二轮实测）。先把它们停掉。
 stop_run_processes() {
   [ -n "${TODOPI_HARNESS_RUN:-}" ] || return 0
-  local pids p hit i=0
+  local pids p hit sig i=0
   while [ "$i" -lt 20 ]; do
     pids="$(run_processes | tr '\n' ' ')"
     # 扫描用的 grep / ps 也继承了记号，会出现在列表里但马上就退出了；重验后一个都不剩就算停干净了
     hit=0
+    # 先 TERM；十轮（约一秒）还没走的升级成 KILL——负载高时有的测试进程不理 TERM，留着它就会把目录建回来（e2e 偶发失败）
+    sig=TERM; [ "$i" -ge 10 ] && sig=KILL
     for p in $pids; do
-      if still_ours "$p"; then kill -TERM "$p" 2>/dev/null; hit=1; fi
+      if still_ours "$p"; then kill "-$sig" "$p" 2>/dev/null; hit=1; fi
     done
     [ "$hit" -eq 0 ] && return 0
     sleep 0.1

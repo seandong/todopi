@@ -36,7 +36,8 @@ t0=$(node -e 'console.log(Date.now())')
 kill -INT -- "-$pid" 2>/dev/null
 wait "$pid"; rc=$?
 elapsed=$(( $(node -e 'console.log(Date.now())') - t0 ))
-i=0; while [ "$i" -lt 50 ] && [ -n "$(ls -A "$OUTER/b")" ]; do node -e 'setTimeout(()=>{},100)'; i=$((i + 1)); done
+# 被打断时 harness 先停孤儿、改名后删，删不净就在后台重试：要的是「最终什么都不剩」，给它 30 秒（负载高时 5 秒不够，曾偶发失败）
+i=0; while [ "$i" -lt 300 ] && [ -n "$(ls -A "$OUTER/b")" ]; do node -e 'setTimeout(()=>{},100)'; i=$((i + 1)); done
 if [ "$rc" -eq 130 ] && ! grep -q "overall" "$OUTER/b.log" && [ "$elapsed" -lt 20000 ] && [ -z "$(ls -A "$OUTER/b")" ]; then
   ok "Ctrl-C 真的打断了（退出 130，${elapsed} ms 内停下），私有目录也删掉了"
 else
