@@ -29,12 +29,12 @@ test("gemini：写 .gemini/settings.json 的四个钩子，并让 context.fileNa
   const p = join(d, ".gemini", "settings.json");
   assert.deepEqual(r.files.map((f) => [f.path, f.status]), [[p, "created"]]);
   const s = json(p);
-  assert.deepEqual(groupCommands(s, "SessionStart"), ["todopi prime --hook --hook-json gemini:SessionStart"]);
-  assert.deepEqual(groupCommands(s, "PreCompress"), ["todopi prime --hook --mark-compacted"]);
+  assert.deepEqual(groupCommands(s, "SessionStart"), ["todopi --agent gemini prime --hook --hook-json gemini:SessionStart"]);
+  assert.deepEqual(groupCommands(s, "PreCompress"), ["todopi --agent gemini prime --hook --mark-compacted"]);
   assert.equal(s.hooks.PreCompress[0].matcher, "manual", "自动的 PreCompress 每轮都触发（不一定真压缩），只认 /compress");
   assert.equal(s.hooks.SessionStart[0].matcher, undefined);
-  assert.deepEqual(groupCommands(s, "BeforeAgent"), ["todopi prime --hook --if-compacted --hook-json gemini:BeforeAgent"]);
-  assert.deepEqual(groupCommands(s, "SessionEnd"), ["todopi handoff --check --hook"]);
+  assert.deepEqual(groupCommands(s, "BeforeAgent"), ["todopi --agent gemini prime --hook --if-compacted --hook-json gemini:BeforeAgent"]);
+  assert.deepEqual(groupCommands(s, "SessionEnd"), ["todopi --agent gemini handoff --check --hook"]);
   assert.deepEqual(s.context, { fileName: ["AGENTS.md", "GEMINI.md"] });
   assert.deepEqual(runSetup({ directory: d, agent: "gemini" }).files.map((f) => f.status), ["unchanged"], "幂等");
 });
@@ -83,7 +83,7 @@ test("gemini：钩子都装好、只差 AGENTS.md 时也算要更新；--user �
 test("gemini：PreCompress 只认 matcher 恰为 manual 的组——不设 matcher 或是 auto 的同名组不算，另补一组并提示", () => {
   const d = tmp();
   const p = join(d, "settings.json");
-  const cmd = "todopi prime --hook --mark-compacted";
+  const cmd = "todopi --agent gemini prime --hook --mark-compacted";
   for (const g of [{}, { matcher: "auto" }, { matcher: "*" }]) {
     writeFileSync(p, JSON.stringify({ context: { fileName: "AGENTS.md" }, hooks: { PreCompress: [{ ...g, hooks: [{ type: "command", command: cmd }] }] } }));
     const r = ensureGeminiSettings(p);
@@ -105,8 +105,8 @@ test("cursor：写 .cursor/hooks.json（version 1，sessionStart 注入 + sessio
   const hooks = join(d, ".cursor", "hooks.json"), rule = join(d, ".cursor", "rules", "todopi.mdc");
   assert.deepEqual(r.files.map((f) => [f.path, f.status]), [[hooks, "created"], [rule, "created"]]);
   assert.deepEqual(json(hooks), { version: 1, hooks: {
-    sessionStart: [{ command: "todopi prime --hook --hook-json cursor" }],
-    sessionEnd: [{ command: "todopi handoff --check --hook" }] } });
+    sessionStart: [{ command: "todopi --agent cursor prime --hook --hook-json cursor" }],
+    sessionEnd: [{ command: "todopi --agent cursor handoff --check --hook" }] } });
   const text = readFileSync(rule, "utf8");
   assert.equal(text, CURSOR_RULE);
   assert.deepEqual(text.split("\n").slice(0, 4), ["---", CURSOR_RULE_MARKER, "alwaysApply: true", "---"]);
@@ -118,8 +118,8 @@ test("cursor hooks.json：别的钩子与键原样保留，只往末尾补；带
   const d = tmp();
   const p = join(d, "hooks.json");
   writeFileSync(p, JSON.stringify({ version: 1, extra: { a: 1 }, hooks: {
-    sessionStart: [{ command: "./mine.sh" }, { command: "todopi prime --hook --hook-json cursor", timeout: 10 }],
-    sessionEnd: [{ command: "todopi handoff --check --hook", matcher: "x" }],
+    sessionStart: [{ command: "./mine.sh" }, { command: "todopi --agent cursor prime --hook --hook-json cursor", timeout: 10 }],
+    sessionEnd: [{ command: "todopi --agent cursor handoff --check --hook", matcher: "x" }],
     stop: [{ command: "./stop.sh" }] } }));
   chmodSync(p, 0o600);
   assert.equal(ensureCursorHooks(p).status, "updated");
@@ -127,7 +127,7 @@ test("cursor hooks.json：别的钩子与键原样保留，只往末尾补；带
   assert.deepEqual(s.extra, { a: 1 });
   assert.deepEqual(s.hooks.stop, [{ command: "./stop.sh" }]);
   assert.equal(s.hooks.sessionStart.length, 2, "带正数 timeout 的算装好");
-  assert.deepEqual(s.hooks.sessionEnd.at(-1), { command: "todopi handoff --check --hook" });
+  assert.deepEqual(s.hooks.sessionEnd.at(-1), { command: "todopi --agent cursor handoff --check --hook" });
   assert.equal(s.hooks.sessionEnd.length, 2);
   assert.equal(statSync(p).mode & 0o777, 0o600, "权限位不变");
 });
@@ -215,4 +215,17 @@ test("Cursor 的 workspace_roots：取第一个找得到账本的根（多根工
     JSON.stringify({ workspace_roots: a }), JSON.stringify({ workspace_roots: [3] }), JSON.stringify({ cwd: a })]) {
     assert.equal(directoryFromHookPayload(bad), undefined, bad);
   }
+});
+
+test("旧版的 Gemini 与 Cursor 钩子：就地改成带 --agent 的命令（F22）", () => {
+  const d = tmp();
+  const g = join(d, "settings.json");
+  writeFileSync(g, JSON.stringify({ context: { fileName: "AGENTS.md" }, hooks: {
+    PreCompress: [{ matcher: "manual", hooks: [{ type: "command", command: "todopi prime --hook --mark-compacted" }] }] } }));
+  ensureGeminiSettings(g);
+  assert.deepEqual(json(g).hooks.PreCompress, [{ matcher: "manual", hooks: [{ type: "command", command: "todopi --agent gemini prime --hook --mark-compacted" }] }]);
+  const c = join(d, "hooks.json");
+  writeFileSync(c, JSON.stringify({ version: 1, hooks: { sessionStart: [{ command: "./mine.sh" }, { command: "todopi prime --hook --hook-json cursor", timeout: 5 }] } }));
+  ensureCursorHooks(c);
+  assert.deepEqual(json(c).hooks.sessionStart, [{ command: "./mine.sh" }, { command: "todopi --agent cursor prime --hook --hook-json cursor", timeout: 5 }]);
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { isMine, normalizeActor, resolveActor } from "../../src/domain/actor.ts";
+import { agentFromEnv, AGENT_NAMES, isMine, normalizeActor, resolveActor } from "../../src/domain/actor.ts";
 import { ACTOR_RE } from "../../src/domain/types.ts";
 
 const host = "mbp";
@@ -124,4 +124,35 @@ test("全都没有时回退到 unknown@<host>", () => {
 test("空字符串的 env 与 gitName 当作没有", () => {
   assert.equal(resolveActor({ env: "", gitName: "c", host: HOST }), "c");
   assert.equal(resolveActor({ env: "", gitName: "", host: HOST }), "unknown@mbp");
+});
+
+// ---- FR-C4 第三级：agent 环境推断（F22，D043）----
+
+test("各家 agent 工具子进程里的信号：认得出，取值不对的不算", () => {
+  assert.equal(agentFromEnv({ CLAUDECODE: "1" }), "claude-code");
+  assert.equal(agentFromEnv({ CODEX_THREAD_ID: "01a0" }), "codex");
+  assert.equal(agentFromEnv({ GEMINI_CLI: "1" }), "gemini");
+  assert.equal(agentFromEnv({ OPENCODE: "1" }), "opencode");
+  assert.equal(agentFromEnv({ PI_SESSION_ID: "abc" }), "pi");
+  assert.equal(agentFromEnv({ CURSOR_AGENT: "1" }), "cursor");
+  assert.equal(agentFromEnv({}), undefined);
+  for (const env of [{ CLAUDECODE: "0" }, { GEMINI_CLI: "true" }, { CODEX_THREAD_ID: "" }, { CODEX_HOME: "/x" }, { OPENCODE_CONFIG: "/x" }]) {
+    assert.equal(agentFromEnv(env), undefined, JSON.stringify(env));
+  }
+});
+
+test("嵌套时内层优先：Claude Code 排最后（它最常作为外层调度别的 agent）", () => {
+  assert.equal(agentFromEnv({ CLAUDECODE: "1", CODEX_THREAD_ID: "t" }), "codex");
+  assert.equal(agentFromEnv({ CLAUDECODE: "1", OPENCODE: "1" }), "opencode");
+  assert.equal(agentFromEnv({ CLAUDECODE: "1", CURSOR_AGENT: "1", GEMINI_CLI: "1" }), "gemini");
+  assert.deepEqual(AGENT_NAMES, ["codex", "gemini", "opencode", "pi", "cursor", "claude-code"]);
+});
+
+test("解析链：--as > TODOPI_ACTOR > agent（<agent>@<host>）> git config user.name", () => {
+  assert.equal(resolveActor({ explicit: "a", env: "b", agent: "codex", gitName: "c", host: HOST }), "a");
+  assert.equal(resolveActor({ env: "b", agent: "codex", gitName: "c", host: HOST }), "b");
+  assert.equal(resolveActor({ agent: "codex", gitName: "c", host: HOST }), `codex@${HOST}`);
+  assert.equal(resolveActor({ agent: "", gitName: "c", host: HOST }), "c");
+  // 主机名含冒号（非法 actor 字符）：规范化，不抛错
+  assert.equal(resolveActor({ agent: "pi", gitName: "c", host: "Box:1" }), "pi@box1");
 });

@@ -1,12 +1,13 @@
 ---
 id: "tp-h2mxiu"
 title: "agent 环境推断身份（FR-C4）：同一台机器上的 Claude Code、Codex 等各自有 actor"
-status: "open"
+status: "in_progress"
+assignee: "seandong"
 rank: "in"
 verify: "make check && make test && bash tools/e2e/f22-actor-env.sh"
 labels: ["m4"]
 created: "2026-09-27T03:14:02Z"
-updated: "2026-09-27T03:14:02Z"
+updated: "2026-09-27T03:19:18Z"
 ---
 
 ## Description
@@ -24,3 +25,4 @@ updated: "2026-09-27T03:14:02Z"
 ## Log
 
 - 2026-09-27T03:14:02Z seandong created
+- 2026-09-27T03:19:18Z seandong claimed

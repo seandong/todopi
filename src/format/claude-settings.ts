@@ -17,20 +17,34 @@ import { dirname } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { EXIT, CliError } from "../exit.ts";
 
-/** 第三项是组的 matcher：不给就是「匹配全部」的标准组；给了就只认 matcher 恰好等于它的组（Gemini 的 PreCompress）。 */
-export type HookList = readonly (readonly [event: string, command: string, matcher?: string])[];
+/**
+ * 第三项是组的 matcher：不给就是「匹配全部」的标准组；给了就只认 matcher 恰好等于它的组（Gemini 的 PreCompress）。
+ * 第四项是旧版 setup 写的命令（F22 之前没有 `--agent`）：找到旧版的标准组就把命令就地改成新的，而不是再加一组——
+ * 否则重跑 setup 之后新旧两组都在，prime 每次跑两遍。
+ */
+export type HookList = readonly (readonly [event: string, command: string, matcher?: string, legacy?: string])[];
 
-export const CLAUDE_HOOKS: HookList = [
+/**
+ * 每个钩子命令都带 `--agent <name>`（F22）：agent 给自己工具子进程设的环境变量（CLAUDECODE、CODEX_THREAD_ID……）不一定
+ * 也出现在钩子子进程里，而钩子里的 prime / handoff 要与 agent 自己跑的 claim / done 得到同一个 actor（FR-C4）。
+ */
+function withAgent(agent: string, list: readonly (readonly [event: string, command: string, matcher?: string])[]): HookList {
+  return list.map(([event, command, matcher]) => [event, command.replace(/^todopi /, `todopi --agent ${agent} `), matcher, command] as const);
+}
+
+const SESSION_HOOKS = [
   ["SessionStart", "todopi prime --hook"],
   ["SessionEnd", "todopi handoff --check --hook"],
-];
+] as const;
+
+export const CLAUDE_HOOKS: HookList = withAgent("claude-code", SESSION_HOOKS);
 
 /**
  * Codex 的 hooks.json 与 Claude Code 同构（官方文档；2026-09-26 在 Codex 0.157.1 上实测）：SessionStart 不设
  * matcher，压缩后以 `compact` 来源在下一轮前再触发、stdout 进上下文；PostCompact 也会触发——两个都装会注入两遍，
  * 所以只装 SessionStart（PRD §17）。
  */
-export const CODEX_HOOKS: HookList = CLAUDE_HOOKS;
+export const CODEX_HOOKS: HookList = withAgent("codex", SESSION_HOOKS);
 
 /**
  * Gemini CLI（0.26.0 源码为准，D038）：settings.json 的钩子结构与 Claude 同构，但注入要以 JSON 返回
@@ -40,12 +54,12 @@ export const CODEX_HOOKS: HookList = CLAUDE_HOOKS;
  * （/compress，强制压缩）一定真压缩了。所以这一组限定 matcher `manual`（对 PreCompress，matcher 与 trigger 精确
  * 比较）。自动压缩没有可靠的信号：靠系统指令里的 AGENTS.md 协议行「察觉到被压缩就跑 todopi prime」。
  */
-export const GEMINI_HOOKS: HookList = [
+export const GEMINI_HOOKS: HookList = withAgent("gemini", [
   ["SessionStart", "todopi prime --hook --hook-json gemini:SessionStart"],
   ["PreCompress", "todopi prime --hook --mark-compacted", "manual"],
   ["BeforeAgent", "todopi prime --hook --if-compacted --hook-json gemini:BeforeAgent"],
   ["SessionEnd", "todopi handoff --check --hook"],
-];
+]);
 
 export type SettingsResult = { status: "created" | "updated" | "unchanged"; notes: string[] };
 
@@ -121,14 +135,20 @@ export function ensureHookConfig(path: string, list: HookList,
 
   const notes: string[] = [];
   let changed = false;
-  for (const [event, command, matcher] of list) {
+  for (const [event, command, matcher, legacy] of list) {
     if (event in hooks && !Array.isArray(hooks[event])) refuse(path, `hooks.${event} is not a list`);
     const groups: unknown[] = Array.isArray(hooks[event]) ? hooks[event] : [];
     if (groups.some((g) => isOurGroup(g, command, matcher))) continue;
+    // 旧版 setup 的标准组：把那一项的命令就地改成新的（别的键、别的项原样）
+    const old = legacy === undefined ? undefined : groups.find((g) => isOurGroup(g, legacy, matcher));
+    if (old !== undefined && isObject(old) && Array.isArray(old["hooks"])) {
+      const h = old["hooks"].find((x) => isObject(x) && x["command"] === legacy);
+      if (isObject(h)) { h["command"] = command; changed = true; continue; }
+    }
     const group = { hooks: [{ type: "command", command }] };
     hooks[event] = [...groups, matcher === undefined ? group : { matcher, ...group }];
     changed = true;
-    if (groups.some((g) => isNarrowedCopy(g, command, matcher))) {
+    if (groups.some((g) => isNarrowedCopy(g, command, matcher) || (legacy !== undefined && isNarrowedCopy(g, legacy, matcher)))) {
       notes.push(`${path}: an existing ${event} group also runs \`${command}\` but with a matcher or extra settings; `
         + "left as you configured it and added the standard group. If both match, it runs twice — remove one.");
     }
@@ -172,10 +192,10 @@ export function ensureGeminiSettings(path: string): SettingsResult {
  * sessionStart 的 `additional_context` 进初始上下文。preCompact 只能观察（不能改摘要）、beforeSubmitPrompt 不能注入——
  * 压缩后的指针靠始终生效的规则文件（D038）。判据与 D035 同：只认标准形状 `{command}`（只允许 timeout），别的原样保留。
  */
-export const CURSOR_HOOKS: HookList = [
+export const CURSOR_HOOKS: HookList = withAgent("cursor", [
   ["sessionStart", "todopi prime --hook --hook-json cursor"],
   ["sessionEnd", "todopi handoff --check --hook"],
-];
+]);
 
 export function ensureCursorHooks(path: string): SettingsResult {
   const link = lstatOrNull(path);
@@ -196,13 +216,16 @@ export function ensureCursorHooks(path: string): SettingsResult {
   if ("hooks" in settings && !isObject(settings["hooks"])) refuse(path, "has a \"hooks\" entry that is not an object");
   const hooks: Record<string, unknown> = isObject(settings["hooks"]) ? settings["hooks"] : {};
   let changed = false;
-  for (const [event, command] of CURSOR_HOOKS) {
+  const standard = (h: unknown, cmd: string | undefined): boolean => isObject(h) && h["command"] === cmd
+    && Object.keys(h).every((k) => ["command", "timeout"].includes(k))
+    && (h["timeout"] === undefined || (typeof h["timeout"] === "number" && h["timeout"] > 0));
+  for (const [event, command, , legacy] of CURSOR_HOOKS) {
     if (event in hooks && !Array.isArray(hooks[event])) refuse(path, `hooks.${event} is not a list`);
     const entries: unknown[] = Array.isArray(hooks[event]) ? hooks[event] : [];
-    const ours = entries.some((h) => isObject(h) && h["command"] === command
-      && Object.keys(h).every((k) => ["command", "timeout"].includes(k))
-      && (h["timeout"] === undefined || (typeof h["timeout"] === "number" && h["timeout"] > 0)));
-    if (ours) continue;
+    if (entries.some((h) => standard(h, command))) continue;
+    // 旧版 setup 写的那一项：就地改成新命令（F22）
+    const old = entries.find((h) => standard(h, legacy));
+    if (isObject(old)) { old["command"] = command; changed = true; continue; }
     hooks[event] = [...entries, { command }];
     changed = true;
   }

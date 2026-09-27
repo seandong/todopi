@@ -4,6 +4,8 @@
 # （载荷走 stdin）真能跑通——JSON 形状对、压缩标记只在 PreCompress 之后的下一轮生效一次。真 Gemini CLI 的实测记在 PRD §17。
 
 set -u
+# 与跑它的 agent 无关（F22）：agent 的环境信号会让默认身份变成 <agent>@<host>，脚本里的身份断言按 git 用户名写
+unset CLAUDECODE CODEX_THREAD_ID GEMINI_CLI OPENCODE PI_SESSION_ID CURSOR_AGENT TODOPI_AGENT TODOPI_ACTOR
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 2
 

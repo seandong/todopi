@@ -2246,3 +2246,33 @@ Node 用 spec reporter，整层被判 blocked。
   合入后远端 Install 的无 Node 任务失败：GitHub 容器任务的 HOME 是挂进来的 /github/home，属主是 runner（uid 1001）而容器以 root 运行，安全路径检查
   按设计拒绝「以 root 装进别人的目录」。改工作流（用 root 自己的 HOME=/root、失败时也打印安装器输出），不改安装器。
 
+## D043 — FR-C4 的 agent 环境推断：只认运行时给工具子进程设的变量，钩子显式带 --agent
+
+- 日期：2026-09-28（F22）。补上 D014 当时因「缺事实依据」而留空的第三级。
+- **证据（一手，逐家）**：
+  | agent | 变量 | 证据 |
+  |---|---|---|
+  | Claude Code | `CLAUDECODE=1` | 本会话的 Bash 工具环境实测；官方文档 |
+  | Codex 0.157.1 | `CODEX_THREAD_ID`（另有 `CODEX_SESSION_ID`、`CODEX_VERSION`） | 让 Codex 用自己的 shell 工具 `env` 实测 |
+  | Gemini CLI 0.26.0 | `GEMINI_CLI=1` | `@google/gemini-cli-core` 的 `shellExecutionService.js:136` |
+  | OpenCode 1.18.32 | `OPENCODE=1`（另有 `OPENCODE_PID`、`AGENT=1`） | 本地假 OpenAI 服务器回一个 bash 工具调用，在真实运行时里 `env` 实测 |
+  | pi | `PI_SESSION_ID` | `pi-coding-agent/dist/core/tools/bash.js:123` |
+  | Cursor 2026.05.20 | `CURSOR_AGENT=1` | cursor-agent 终端执行器源码（`{env:{CURSOR_AGENT:"1"}}`） |
+  **不认用户配置类变量**：`CODEX_HOME` 在任何装了 codex 的 shell 里都有（D014 当时的反例），实测 Codex 工具环境里还混着从外层 Claude 继承的
+  `CLAUDE_CODE_*` 与 `AI_AGENT=claude-code_…`。
+- **嵌套时内层优先，Claude Code 排最后**：环境变量一路继承，Claude Code 调 Codex 时 Codex 的工具环境里 `CLAUDECODE` 与 `CODEX_THREAD_ID` 都在。
+  Claude Code 最常作为外层调度别的 agent（本仓库就是），所以别的信号都不在时它才作数。其余五家之间的嵌套罕见，顺序是 codex、gemini、
+  opencode、pi、cursor。
+- **钩子显式带 `--agent`**：这些变量是设给 agent 的**工具**子进程的，钩子子进程里不一定有（Cursor、Gemini 的源码里明确只在 shell 执行时设）。
+  钩子里的 prime / handoff 与 agent 自己跑的 claim / done 必须是同一个 actor，所以 setup 写出的钩子命令、OpenCode 插件、pi 扩展都显式带
+  `--agent <name>`（全局参数，亦可 `TODOPI_AGENT`；名字不认识就退出 1——拼错一个名字，归属就悄悄错开）。主机名由 todopi 运行时取，
+  钩子的命令字符串里算不出来。
+- **迁移**：旧版 setup 写的标准组（没有 `--agent`）重跑 setup 时就地改成新命令，不另加一组——否则新旧两组都在，prime 每次跑两遍；
+  旧命令被用户改过（加了 if 之类）的组不动，另补新组并提示可能跑两遍（与 D035 同一个判据）。
+- **测试要与跑它的 agent 无关**：本仓库的测试与 e2e 常由 agent 跑，环境里有 `CLAUDECODE=1`，默认身份会变成 `claude-code@<host>`。
+  身份相关的单元测试文件与全部 e2e 脚本开头清掉这些信号（实测不清时 8 个「回退到 git 用户名」的用例在 Claude Code 里变红）。
+- e2e 用写入端的严格匹配证明「钩子与工具同一个 actor」：prime 的「我的」是宽松匹配（`@host` 后缀就算），证明不了；用钩子命令的前缀去
+  release agent 在环境里 claim 的任务，身份一致才放行。去掉钩子里的 `--agent` 时这条变红。
+- 对本仓库自己的影响：在 Claude Code 里跑的 todopi 从此是 `claude-code@<host>`，不再是 `seandong`；F22 之前以 seandong 认领的任务用
+  `--as seandong` 收尾。
+

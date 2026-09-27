@@ -9,6 +9,8 @@
 //   #   压缩前的请求：系统提示里有 prime 的 `## tp-…`，没有 MARKER（插件按会话缓存了会话开始时的 prime）
 //   #   压缩后的第一个请求：系统提示里有 MARKER（session.compacted 让插件重跑了 prime）
 //
+// FAKE_TOOL_COMMAND=<命令>：第一轮回一个 bash 工具调用执行它（F22 用它看 OpenCode 执行工具时的环境变量）。
+//
 // 每个请求体追加一行 JSON 到日志（带收到的时刻 `at`，顺序可以直接对上 todopi note 的时间）。回复是固定的一句——它不回显系统提示，
 // 证据看请求体。按请求里的 stream 决定回 SSE 还是整段 JSON。只监听 127.0.0.1。usage 里的 prompt_tokens 固定是 50000：给模型配了
 // limit.context 时可能触发自动压缩，实验时别配。
@@ -39,6 +41,28 @@ createServer((req, res) => {
     }
     const id = `chatcmpl-${Date.now()}`;
     const created = Math.floor(Date.now() / 1000);
+    // 设了 FAKE_TOOL_COMMAND 时，对话里还没有工具结果就回一个 bash 工具调用（看 agent 执行工具时的环境用），有了结果再回文字
+    const toolCommand = process.env.FAKE_TOOL_COMMAND;
+    const hasToolResult = (parsed.messages ?? []).some((m) => m.role === "tool");
+    if (toolCommand && !hasToolResult && Array.isArray(parsed.tools) && parsed.tools.some((t) => t.function?.name === "bash")) {
+      const call = { index: 0, id: `call_${Date.now()}`, type: "function",
+        function: { name: "bash", arguments: JSON.stringify({ command: toolCommand, description: "probe" }) } };
+      if (parsed.stream === true) {
+        res.setHeader("content-type", "text/event-stream");
+        const chunk = (delta, finish, extra = {}) =>
+          `data: ${JSON.stringify({ id, object: "chat.completion.chunk", created, model: parsed.model ?? "echo",
+            choices: [{ index: 0, delta, finish_reason: finish }], ...extra })}\n\n`;
+        res.write(chunk({ role: "assistant", tool_calls: [call] }, null));
+        res.write(chunk({}, "tool_calls", { usage }));
+        res.end("data: [DONE]\n\n");
+        return;
+      }
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ id, object: "chat.completion", created, model: parsed.model ?? "echo",
+        choices: [{ index: 0, message: { role: "assistant", content: null, tool_calls: [{ id: call.id, type: "function", function: call.function }] },
+          finish_reason: "tool_calls" }], usage }));
+      return;
+    }
     if (parsed.stream === true) {
       res.setHeader("content-type", "text/event-stream");
       const chunk = (delta, finish, extra = {}) =>

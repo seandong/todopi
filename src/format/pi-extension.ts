@@ -31,7 +31,7 @@ export default function (pi) {
   const primed = new Map();
   const prime = async (ctx) => {
     const id = ctx.sessionManager.getSessionId();
-    const r = await pi.exec("todopi", ["prime", "--hook", "--session", id], { cwd: ctx.cwd, timeout: 30000 });
+    const r = await pi.exec("todopi", ["--agent", "pi", "prime", "--hook", "--session", id], { cwd: ctx.cwd, timeout: 30000 });
     // Failed (e.g. todopi not on PATH yet): don't cache, so the next turn retries.
     if (r.code === 0) primed.set(id, r.stdout.trim());
     else primed.delete(id);
