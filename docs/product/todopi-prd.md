@@ -348,6 +348,7 @@ todopi import <file.md> | import beads [path]
   「`check`（F09，尚未实现）」因此还没法用 CLI 改——它是迁移时生成的，F09 之后已经过时。
   **2026-09-28（F24）已补上**：`edit` 的 `--plan`、`--ac-add` / `--ac-set <n>=<text>` / `--ac-rm <n>`，`add` / `edit` 的 `--edit`
   （只在终端里开编辑器，没有终端是用法错误，所以 agent 在管道里仍不会被卡住）；已勾选的标准不能改（D045）。
+  上面那句 Acceptance Criteria 段里的散文仍改不了：它不是标准，spec §5.3.2 要求原样保留（D045）。
 - **rank 的规格空间比生成器宽。** spec §5.2 允许任何 `[0-9a-z]{1,32}`，而 fractional-indexing 只认它
   自己形状的键。2026-09-24 起 `add` / `move` 都能处理规格合法的任意 rank（先用库，不行就在规格空间上取中点），
   只在真的无解时拒绝。但手写的非库形状 rank 会让之后的插入走效率较差的中点算法；F13 `doctor --fix` 回填或

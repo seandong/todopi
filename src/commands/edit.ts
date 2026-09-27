@@ -51,6 +51,13 @@ function bufferOf(task: { frontmatter: Record<string, unknown>; body: string }):
   });
 }
 
+/** `a` 的每一项都按原顺序出现在 `b` 里（中间可以夹别的）。 */
+function isSubsequence(a: string[], b: string[]): boolean {
+  let k = 0;
+  for (const x of b) if (k < a.length && x === a[k]) k += 1;
+  return k === a.length;
+}
+
 const strList = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
@@ -205,6 +212,17 @@ export function runEdit(opts: EditOptions): EditReport {
           throw new CliError(EXIT.usage,
             "The edit would change how the rest of the task body is read: new text contains a line that starts a section "
             + "(`## …`) or a block that is never closed. Indent that line by four spaces or put it in a closed code fence, then retry.");
+        }
+        // 验收标准小节里的嵌套项与普通文字不是标准，spec §5.3.2 要求写入者原样保留：--edit 整段换掉时也不能删改、改序（Codex 评审）
+        const notes = (x: string) => {
+          const at = new Set(parseAcceptance(x).map((c) => c.line));
+          return sectionLines(x, "## Acceptance Criteria", true).filter((l) => l.text.trim() !== "" && !at.has(l.index)).map((l) => l.text);
+        };
+        // 原有的必须一条不少、按原顺序都在；新加说明文字可以（它不改动任何已有的行）
+        if (!isSubsequence(notes(b), notes(next))) {
+          throw new CliError(EXIT.usage,
+            "Nested items and other non-checkbox lines in Acceptance Criteria are not criteria, and the format keeps them untouched "
+            + "(spec §5.3.2): keep every existing one, in the same order (new ones may be added). Only the `- [ ] …` lines can be changed or removed.");
         }
         // 已勾选的必须原样、**编号不变**地留着：Log 里的 `check ac=<n>` 指着它们（整段换掉时改序、删前面的都会让编号漂移）
         const checkedAt = (cs: { text: string; checked: boolean }[]) => cs.flatMap((c, i) => (c.checked ? [`${i + 1}:${c.text}`] : []));

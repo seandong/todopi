@@ -165,6 +165,29 @@ test("已勾选的编号不变：--edit 改序（含同文字挪勾）、--ac-rm
   assert.throws(() => runEditInEditor({ directory: t.d, id: t.id, actor: ME }, (x) => x.replace("- [x] same\n- [ ] same", "- [ ] same\n- [x] same")), refused);
 });
 
+test("edit --edit：验收标准小节里的嵌套项与普通文字要原样留着（spec §5.3.2）；标准行照样能改", () => {
+  const { d, id } = withTask(["A"]);
+  runEditInEditor({ directory: d, id, actor: ME }, (t) => t.replace("- [ ] A", "legacy guidance\n- [ ] A\n  - nested note"));
+  const before = readFileSync(file(d, id), "utf8");
+  const refused = (e: unknown) => e instanceof CliError && /spec §5\.3\.2/.test(e.message);
+  for (const f of [
+    (t: string) => t.replace("  - nested note\n", ""),
+    (t: string) => t.replace("legacy guidance\n", ""),
+    (t: string) => t.replace("legacy guidance", "rewritten"),
+    (t: string) => t.replace("legacy guidance\n- [ ] A\n  - nested note", "- [ ] A\n  - nested note\nlegacy guidance"),
+  ]) {
+    assert.throws(() => runEditInEditor({ directory: d, id, actor: ME }, f), refused);
+    assert.equal(readFileSync(file(d, id), "utf8"), before);
+  }
+  runEditInEditor({ directory: d, id, actor: ME }, (t) => t.replace("- [ ] A", "- [ ] A2").replace("  - nested note", "  - nested note\n- [ ] B"));
+  assert.deepEqual(criteria(d, id), ["  A2", "  B"]);
+  assert.match(readFileSync(file(d, id), "utf8"), /legacy guidance\n- \[ \] A2\n  - nested note\n- \[ \] B/);
+  // 空行不算要保留的内容：加一个、再去掉都行
+  runEditInEditor({ directory: d, id, actor: ME }, (t) => t.replace("- [ ] B", "\n- [ ] B"));
+  runEditInEditor({ directory: d, id, actor: ME }, (t) => t.replace("\n\n- [ ] B", "\n- [ ] B"));
+  assert.deepEqual(criteria(d, id), ["  A2", "  B"]);
+});
+
 test("edit --edit：编辑器开着时任务被改了（另一个 edit / check）：拒绝（冲突），不覆盖", () => {
   const { d, id } = withTask(["A"]);
   assert.throws(() => runEditInEditor({ directory: d, id, actor: ME }, (t) => {
