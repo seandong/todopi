@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `9cb14ac` —— F20 import beads 经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `6fb21f3` —— F21 安装 经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,10 +19,10 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 23 个任务，20 个 `closed/done`（F01–F20）、3 个 `open`（含从 F15 拆出的 tp-1ssqrw、从 F17 拆出的 tp-zagvp5）。
+- 账本: `.todopi/` 23 个任务，21 个 `closed/done`（F01–F21）、2 个 `open`（tp-1ssqrw OpenCode 压缩后实测、tp-zagvp5 Cursor 实机验证，都在等凭据 / 登录）（含从 F15 拆出的 tp-1ssqrw、从 F17 拆出的 tp-zagvp5）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
-- 代码状态：**F01–F20 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
+- 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
   `claim` / `release` / `done` / `close` / `reopen` / `show` / `note` / `check` /
   `edit` / `move` / `dep` / `prime` / `handoff` / `doctor --fix` / `setup claude|codex|opencode|pi|cursor|gemini` / `web` / `import <plan.md>` / `import beads` 可用。正文结构（标题、代码块）交给 commonmark 判定（D031）。写入端基座：发射器（spec §5.1 引号规则的唯一执行者）、id 生成、文件锁。
   读出端：spec §7 的派生态与 §7.4 的排序都在 `domain/` 的纯函数里，
@@ -158,6 +158,11 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+43. ~~F21 安装~~ 已完成（2026-09-27）。npm 包改为 tsc 逐文件编译的 JS（Node 20.0 起可跑），单二进制（Bun）里 runner 把自己再起一次；
+    install.sh 按 D008 决策 3 的清单；install.yml（有 / 无 Node 的干净容器）与 release.yml（先发 npm 再建 Release）。D042。
+    **重大发现：远端 Harness CI 自 09-17 起一直是红的**（没装依赖），本地三层一直绿、没人看远端——修好，并顺带修了 CI 环境才暴露的
+    runner 竞态（日志写不进去时漏报）、locale 依赖的中文判断（在某些 locale 下悄悄放行）、verify 用例被 CI=true 带偏。**以后合并推送后
+    要看远端 CI。** 评审由 Claude 子代理做（三轮 → Go）。发布（打 v 标签、npm 发包与 `todopi` 名字占位）是维护者的动作，还没做。
 42. ~~F20 `import beads`~~ 已完成（2026-09-26）。Beads Classic（v0.47.1 的字段）→ 任务（D041）：tombstone / ephemeral 不导入；只有 closed 映射成
     closed，resolution 按 close_reason 开头判 duplicate / wontfix / done；已关闭的**不标 forced**，出处记在 imported 事件里（我按规格定，可推翻）；
     parent / blocks 排建立顺序，from 只在不成环时保留；不安全的描述缩进成代码块；写之前全部预检。用 Beads 仓库自己的 2404 行导出实测：1738 条、

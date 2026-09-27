@@ -1,7 +1,8 @@
 ---
 id: "tp-234oft"
 title: "npm i -g todopi 与 curl 安装器在干净环境里都能装上并跑通第一条命令"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "seandong"
 blocked_by: ["tp-0ca49n", "tp-66vnyl"]
 rank: "ik"
@@ -11,7 +12,7 @@ external:
   harness:
     legacy_id: "F21"
 created: "2026-09-23T09:40:27Z"
-updated: "2026-09-27T00:33:44Z"
+updated: "2026-09-27T00:45:42Z"
 ---
 
 ## Description
@@ -39,8 +40,8 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - [x] 装到 `~/.local/bin`
 - [x] `~/.local/bin` 不在 PATH 时提示
 - [x] 支持环境变量钉版本（D008 决策 3）
-- [ ] CI 在「有 Node」的容器里跑一次
-- [ ] CI 在「无 Node」的容器里跑一次
+- [x] CI 在「有 Node」的容器里跑一次
+- [x] CI 在「无 Node」的容器里跑一次
 
 （2026-09-26 由散文拆成勾选项，一条对应一项核对；原文见 git 历史。标「标题」的取自任务标题。）
 
@@ -77,3 +78,7 @@ frontmatter 的 `created`/`updated` 是迁移时刻。
 - 2026-09-27T00:33:44Z seandong check ac=14: 装到 `~/.local/bin`
 - 2026-09-27T00:33:44Z seandong check ac=15: `~/.local/bin` 不在 PATH 时提示
 - 2026-09-27T00:33:44Z seandong check ac=16: 支持环境变量钉版本（D008 决策 3）
+- 2026-09-27T00:44:10Z seandong note: 验收依据（17、18）：远端 CI 的 Install 工作流 run 36283001666（main d20f192）：artifacts、with-node（node:20-bookworm-slim，install.sh 走 npm 包并跑第一条命令）、without-node（debian:bookworm-slim，无 Node，走二进制、校验通过、跑 init / add / claim / done）三个任务全部 success。同一次推送的 Harness 只剩一条用例被 CI=true 带偏（verify 在 CI=true 时跳过信任确认），已修（withConfig 摘掉 CI）。
+- 2026-09-27T00:44:10Z seandong check ac=17: CI 在「有 Node」的容器里跑一次
+- 2026-09-27T00:44:10Z seandong check ac=18: CI 在「无 Node」的容器里跑一次
+- 2026-09-27T00:45:42Z seandong done verify=pass commit=6fb21f3 dirty=true
