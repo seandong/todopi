@@ -395,12 +395,54 @@ print_overall() {
 # test 与 e2e 在私有的临时目录里跑，结束（含失败、Ctrl-C）整个删掉。单测的 mkdtempSync 与 e2e 的 mktemp 都认 TMPDIR；
 # 它们大多不自己清理——2026-09-28 系统临时目录里攒了 23.6 万个 todopi-* 目录（5.7 GB），把磁盘写满（F31）。
 # ci 在同一个进程里连跑 test 与 e2e：已经建过就复用，trap 只装一次。
+# 复用只认本 shell 里设的变量（不导出）：环境里带进来的同名变量不能冒充「已经建过」，否则隔离与清理都被绕过（Codex 评审）。
+_PRIVATE_TMP=""
 use_private_tmp() {
-  if [ -n "${HARNESS_TMP:-}" ] && [ -d "$HARNESS_TMP" ]; then return; fi
-  HARNESS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/todopi-harness.XXXXXX")" || die "建不了私有临时目录"
-  export HARNESS_TMP TMPDIR="$HARNESS_TMP"
-  trap 'rm -rf "$HARNESS_TMP"' EXIT
-  trap 'rm -rf "$HARNESS_TMP"; exit 130' INT TERM
+  if [ -n "$_PRIVATE_TMP" ]; then return; fi
+  _PRIVATE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/todopi-harness.XXXXXX")" || die "建不了私有临时目录"
+  export TMPDIR="$_PRIVATE_TMP"
+  # 给这一次运行的整棵进程树打个记号（子进程继承环境），打断时凭它找到孤儿
+  TODOPI_HARNESS_RUN="$(basename "$_PRIVATE_TMP")"
+  export TODOPI_HARNESS_RUN
+  trap 'remove_private_tmp' EXIT
+  trap 'stop_run_processes; remove_private_tmp; exit 130' INT TERM
+}
+
+# 带着本次运行记号的进程（本 shell 除外）。Linux 读 /proc/*/environ；macOS 的 ps -E 把环境接在命令行后面。
+run_processes() {
+  local marker="TODOPI_HARNESS_RUN=${TODOPI_HARNESS_RUN}"
+  if [ -d /proc/self ]; then
+    grep -lzF "$marker" /proc/[0-9]*/environ 2>/dev/null | cut -d/ -f3
+  else
+    ps -Aww -E -o pid=,command= 2>/dev/null | grep -F "$marker" | awk '{ print $1 }'
+  fi | grep -vx "$$"
+}
+
+# 被打断时 node --test 的测试文件进程还活着：它们在自己的进程组里，Ctrl-C 到不了，运行器死后成了孤儿，会一直写到那个文件跑完，
+# 删掉的目录还会被它们递归地建回来（F31 评审二轮实测）。先把它们停掉。
+stop_run_processes() {
+  [ -n "${TODOPI_HARNESS_RUN:-}" ] || return 0
+  local pids i=0
+  while [ "$i" -lt 20 ]; do
+    pids="$(run_processes | tr '\n' ' ')"
+    [ -z "$(printf '%s' "$pids" | tr -d ' ')" ] && return 0
+    # shellcheck disable=SC2086
+    kill -TERM $pids 2>/dev/null
+    sleep 0.1
+    i=$((i + 1))
+  done
+}
+
+# 被打断时 node --test 的测试文件进程还活着：它们在自己的进程组里，Ctrl-C 到不了，运行器死后成了孤儿，会一直写到那个文件跑完
+# （F31 评审二轮实测）。原地 rm -rf 会与它们赛跑——删掉一个、它们又建一个。所以先把整个目录**改名**挪开：旧路径没了，孤儿的
+# mkdtemp / 写入立刻失败（它们的测试因此很快结束），再删挪开的那份；还删不干净就在后台再试一会儿。
+remove_private_tmp() {
+  [ -n "$_PRIVATE_TMP" ] && [ -e "$_PRIVATE_TMP" ] || return 0
+  local trash="${_PRIVATE_TMP}.removing"
+  mv "$_PRIVATE_TMP" "$trash" 2>/dev/null || trash="$_PRIVATE_TMP"
+  rm -rf "$trash" 2>/dev/null
+  [ -e "$trash" ] || return 0
+  ( i=0; while [ -e "$trash" ] && [ "$i" -lt 300 ]; do sleep 1; rm -rf "$trash" 2>/dev/null; i=$((i + 1)); done ) >/dev/null 2>&1 &
 }
 
 cmd_test() {
