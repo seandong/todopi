@@ -32,7 +32,8 @@ type BItem = { name: string };
 `;
 function run(doc: string, dto = DTO, env: NodeJS.ProcessEnv = process.env): string[] {
   const root = mkdtempSync(join(tmpdir(), "todopi-arch028-"));
-  const files: Record<string, string> = { "docs/json.md": doc, "src/output/dto/a.ts": dto };
+  // 与本仓库一样是 ES 模块（没有它 tsc 按 CommonJS 判，dto 里的 export const 会报错）
+  const files: Record<string, string> = { "docs/json.md": doc, "src/output/dto/a.ts": dto, "package.json": '{ "type": "module" }\n' };
   for (const [name, body] of Object.entries(files)) {
     mkdirSync(dirname(join(root, name)), { recursive: true });
     writeFileSync(join(root, name), body);
@@ -84,7 +85,8 @@ test("多行的 ts 块之后，后面小节的错误仍报在后面那一节（�
 
 test("tsc 跑不起来：说出来，不安静地通过（那是假绿）", () => {
   const out = run(DOC, DTO_OK, { ...process.env, CHECK_JSON_DOC_TSC: "/nonexistent/tsc" });
-  assert.match(out.join("\n"), /^tsc: .*ENOENT/m);
+  assert.match(out.join("\n"), /ENOENT/);
+  assert.ok(out.length > 0);
 });
 
 test("元组与数组不能互相冒充；readonly 也算不同", () => {
@@ -151,6 +153,9 @@ test("注释、行首空白、导出列表里的注释都认得：照样要求�
     assert.match(out, /NewReport \(src\/output\/dto\/a\.ts\) is part of the --json output but has no section/, dto);
     assert.doesNotMatch(out, /Hidden|unsupported/, dto);
   }
+  // 正则字面量里的引号不会把后面的导出吞掉（Codex 五轮：`/"/` 曾让扫描器把文件剩下的部分当成字符串）
+  assert.match(run("# t\n", 'export const quoted = /"/;\nexport type NewReport = { id: string };\n').join("\n"), /NewReport .* has no section/);
+  assert.deepEqual(run(DOC, `${DTO_OK}export const re = /export type Q = 1/;\n`), []);
   // 注释与字符串里的 export、名叫 export 的属性不是导出
   assert.deepEqual(run(DOC, `${DTO_OK}// export type X = 1;\nconst s = "export type Y = 1";\nconst t = "q\\\" export type Z = { a: 1 }; \\\"";\ntype P = { export: string };\n`), []);
 });

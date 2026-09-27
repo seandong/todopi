@@ -110,13 +110,50 @@ function code(src) {
   return out;
 }
 
+const work = join(root, ".harness-results", "json-doc");
+rmSync(work, { recursive: true, force: true });
+mkdirSync(work, { recursive: true });
+const tsc = process.env.CHECK_JSON_DOC_TSC ?? join(repo, "node_modules", ".bin", "tsc");
+const COMPILER = {
+  target: "ES2023", module: "nodenext", moduleResolution: "nodenext", lib: ["ES2023"], types: ["node"],
+  typeRoots: [join(repo, "node_modules", "@types")], strict: true, allowImportingTsExtensions: true,
+  verbatimModuleSyntax: true, skipLibCheck: true,
+};
+/** 跑 tsc；返回 { failed, output } */
+function runTsc(config) {
+  writeFileSync(join(work, "tsconfig.json"), JSON.stringify(config, null, 2));
+  try {
+    execFileSync(tsc, ["-p", join(work, "tsconfig.json")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return { failed: false, output: "" };
+  } catch (err) {
+    const output = `${err.stdout ?? ""}${err.stderr ?? ""}`;
+    return { failed: true, output: output.trim() === "" ? String(err) : output };
+  }
+}
+
+// 导出清单从**编译器产出的声明文件**里读，而不是从源码里猜：.d.ts 里没有注释、没有正则字面量、没有函数体，声明都是规范形式。
+// 自己写词法去剥源码（注释、字符串、正则……）每一轮评审都能再找到一处认错的（F27 五轮），那条路走不完。
+const sourceFiles = SOURCES.flatMap((dir) => existsSync(join(root, dir))
+  ? readdirSync(join(root, dir)).filter((x) => x.endsWith(".ts") && !x.endsWith(".d.ts")).sort().map((f) => `${dir}/${f}`) : []);
+const dts = join(work, "dts");
+const emitted = runTsc({
+  compilerOptions: { ...COMPILER, declaration: true, emitDeclarationOnly: true, removeComments: true, outDir: dts, rootDir: join(root, "src") },
+  files: sourceFiles.map((f) => join(root, f)),
+});
+
 /** name → 源文件（相对 root） */
 const exported = new Map();
 for (const dir of SOURCES) {
   const abs = join(root, dir);
   if (!existsSync(abs)) continue;
   for (const f of readdirSync(abs).filter((x) => x.endsWith(".ts")).sort()) {
-    const text = code(readFileSync(join(abs, f), "utf8"));
+    const decl = join(dts, relative(join(root, "src"), join(abs, f)).replace(/\.ts$/, ".d.ts"));
+    if (!existsSync(decl)) {
+      say(`${dir}/${f}: tsc did not emit declarations for it, so its exports cannot be checked${emitted.failed ? `: ${emitted.output.split("\n")[0]}` : ""}`);
+      continue;
+    }
+    // 声明文件里只剩字面量类型里的字符串：仍去掉它们的内容，免得 "export" 这样的字面量被当成导出
+    const text = code(readFileSync(decl, "utf8"));
     // **失败关闭**：每一个 `export` 都必须是认得的形式之一，认不得的直接报错——而不是用行首正则去猜。四轮评审各找到一种绕过
     // 「每个导出都要有小节」的写法（interface、导出列表、export type *、注释 / 缩进 / default / namespace……），
     // 追着列举永远列不完；只放行下面几种，别的一律拒绝。
@@ -134,7 +171,7 @@ for (const dir of SOURCES) {
           if (/^[A-Za-z_$][\w$]*$/.test(name)) { if (!exported.has(name)) exported.set(name, `${dir}/${f}`); }
           else if (dir === "src/output/dto") say(`${dir}/${f}: cannot read the export ${JSON.stringify(item)}`);
         }
-      } else if (/^export\s+(?:async\s+)?function\b|^export\s+const\b/.test(rest)) {
+      } else if (/^export\s+(?:declare\s+)?(?:async\s+)?(?:function|const)\b/.test(rest)) {
         // 运行时的映射函数（toDoctorReport 之类）：不是类型，不进契约
       } else if (dir === "src/output/dto") {
         say(`${dir}/${f}: unsupported export form ${JSON.stringify(rest.slice(0, 40).replace(/\s+/g, " "))}; `
@@ -161,8 +198,6 @@ for (const [name, d] of documented) {
 
 const checkable = [...documented].filter(([name]) => exported.has(name));
 if (checkable.length > 0) {
-  const work = join(root, ".harness-results", "json-doc");
-  mkdirSync(work, { recursive: true });
   const imports = [...new Set(checkable.map(([n]) => exported.get(n)))].map((file) => {
     const names = checkable.filter(([n]) => exported.get(n) === file).map(([n]) => n);
     return `import type { ${names.join(", ")} } from "${relative(work, join(root, file))}";`;
@@ -184,25 +219,8 @@ if (checkable.length > 0) {
   }
   const file = join(work, "check.ts");
   writeFileSync(file, `${out.join("\n")}\n`);
-  writeFileSync(join(work, "tsconfig.json"), JSON.stringify({
-    compilerOptions: {
-      target: "ES2023", module: "nodenext", moduleResolution: "nodenext", lib: ["ES2023"], types: ["node"],
-      typeRoots: [join(repo, "node_modules", "@types")], strict: true, noEmit: true, allowImportingTsExtensions: true,
-      verbatimModuleSyntax: true, skipLibCheck: true,
-    },
-    files: ["check.ts"],
-  }, null, 2));
-  // CHECK_JSON_DOC_TSC 只给测试用：验证 tsc 跑不起来时检查器不会安静地通过
-  const tsc = process.env.CHECK_JSON_DOC_TSC ?? join(repo, "node_modules", ".bin", "tsc");
-  let result = "";
-  let failed = false;
-  try {
-    execFileSync(tsc, ["-p", join(work, "tsconfig.json")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  } catch (err) {
-    failed = true;
-    result = `${err.stdout ?? ""}${err.stderr ?? ""}`;
-    if (result.trim() === "") result = String(err);
-  }
+  // tsc 跑不起来时（找不到、崩了）检查器不能安静地通过；CHECK_JSON_DOC_TSC 只给测试用，验证这一点
+  const { failed, output: result } = runTsc({ compilerOptions: { ...COMPILER, noEmit: true }, files: ["check.ts"] });
   // tsc 没跑起来（找不到、崩了）或报了别处的错：原样说出来。**失败却一条也对不回小节时绝不安静**——那是假绿
   let attributed = 0;
   const other = [];
@@ -216,7 +234,7 @@ if (checkable.length > 0) {
   }
   if (failed && attributed === 0) for (const l of other.length > 0 ? other : ["tsc failed with no output"]) say(`tsc: ${l}`);
   else for (const l of other.filter((x) => /error/i.test(x))) say(`tsc: ${l}`);
-  rmSync(work, { recursive: true, force: true });
 }
+rmSync(work, { recursive: true, force: true });
 
 for (const p of [...new Set(problems)]) console.log(p);
