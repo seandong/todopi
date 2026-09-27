@@ -2,7 +2,7 @@
 import { discoverLedger } from "../format/discover.ts";
 import { gitHead, gitDirty } from "../fs/git.ts";
 import { runTransition, logLine, type TransitionOptions } from "./transition.ts";
-import { runVerify, tailOf } from "./verify.ts";
+import { runVerify, tailOf, confirmTrustBeforeLock } from "./verify.ts";
 import type { TransitionReport } from "../output/dto/gate.ts";
 
 /** FR-D4a：强制关闭时记进 Log 的输出长度。完整输出在 .cache/verify/。 */
@@ -13,10 +13,14 @@ export type DoneOptions = Omit<TransitionOptions, "transition" | "resolution"> &
   yes?: boolean;
   /** 覆盖 verify 超时，给测试用 */
   verifyTimeoutMs?: number;
+  /** 首次确认的提问方式；给测试注入。不给则在终端里问（exec/prompt.ts） */
+  ask?: { canAsk: () => boolean; askYesNo: (question: string) => boolean };
 };
 
 export function runDone(opts: DoneOptions): TransitionReport {
   const ledger = discoverLedger(opts.directory);
+  // 首次确认在**拿锁之前**问：verify 在锁里跑，锁里等人回答会让别的写入者等到超时
+  confirmTrustBeforeLock(ledger, opts.id, { yes: opts.yes }, opts.ask);
   return runTransition({ ...opts, transition: "done" }, {
     runVerify: (task) => {
       const command = task.frontmatter["verify"];

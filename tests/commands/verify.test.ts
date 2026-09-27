@@ -239,6 +239,88 @@ test("未信任的仓库拒绝执行，退出 2，并说清怎么批准", () => 
   });
 });
 
+// ---- 有终端时当场确认（FR-D4，F26）：提问方式注入，不碰真终端 ----
+
+function asker(answer: boolean, tty = true) {
+  const asked: string[] = [];
+  return { asked, ask: { canAsk: () => tty, askYesNo: (q: string) => { asked.push(q); return answer; } } };
+}
+const ranMarker = (d: string) => existsSync(join(d, "ran.txt"));
+
+test("有终端、答 y：原样给出命令问一次，执行并记住信任（下一个任务不再问）", () => {
+  withConfig(() => {
+    const d = repo();
+    const a = runAdd({ directory: d, title: "a", verify: "echo x > ran.txt", actor: ME });
+    const b = runAdd({ directory: d, title: "b", verify: "exit 0", actor: ME });
+    const y = asker(true);
+    runDone({ directory: d, id: a.id, actor: ME, ask: y.ask });
+    assert.equal(y.asked.length, 1);
+    assert.match(y.asked[0]!, /echo x > ran\.txt/);
+    assert.ok(ranMarker(d));
+    const last = lastLog(d, a.id);
+    assert.ok(last?.ok === true && last.verb === "done");
+    assert.ok(readFileSync(join(process.env["TODOPI_CONFIG_DIR"]!, "todopi", "trust"), "utf8").length > 0);
+    const again = asker(true);
+    runDone({ directory: d, id: b.id, actor: ME, ask: again.ask });
+    assert.equal(again.asked.length, 0);
+  });
+});
+
+test("确认提示里的命令是可见转义：控制序列擦不掉它（执行的仍是原文）", () => {
+  withConfig(() => {
+    const d = repo();
+    const t = runAdd({ directory: d, title: "T", verify: "echo x > ran.txt #\u001b[2K\r", actor: ME });
+    const y = asker(false);
+    assert.throws(() => runDone({ directory: d, id: t.id, actor: ME, ask: y.ask }));
+    assert.match(y.asked[0]!, /echo x > ran\.txt #\\x1b\[2K\\r/);
+    assert.equal(y.asked[0]!.includes("\u001b"), false);
+  });
+});
+
+test("有终端、答 n：退出 2，verify 没跑，任务与信任都没变", () => {
+  withConfig(() => {
+    const d = repo();
+    const t = runAdd({ directory: d, title: "T", verify: "echo x > ran.txt", actor: ME });
+    const before = read(d, t.id);
+    const n = asker(false);
+    assert.throws(() => runDone({ directory: d, id: t.id, actor: ME, ask: n.ask }),
+      (e: unknown) => (e as { code: number }).code === EXIT.gate && /Not approved/.test((e as Error).message));
+    assert.equal(n.asked.length, 1);
+    assert.equal(ranMarker(d), false);
+    assert.equal(read(d, t.id), before);
+    assert.equal(existsSync(join(process.env["TODOPI_CONFIG_DIR"]!, "todopi", "trust")), false);
+  });
+});
+
+test("不问的情形：没有终端（照旧拒绝、提示 --yes）、--yes、CI=true、任务没有 verify、已信任", () => {
+  withConfig(() => {
+    const d = repo();
+    const mk = (verify?: string) => runAdd({ directory: d, title: "t", verify, actor: ME }).id;
+    const noTty = asker(true, false);
+    assert.throws(() => runDone({ directory: d, id: mk("exit 0"), actor: ME, ask: noTty.ask }),
+      (e: unknown) => (e as { code: number }).code === EXIT.gate && /--yes/.test((e as Error).message));
+    assert.equal(noTty.asked.length, 0);
+    const none = asker(true);
+    runDone({ directory: d, id: mk(), actor: ME, ask: none.ask });
+    assert.equal(none.asked.length, 0);
+    const saved = process.env["CI"];
+    process.env["CI"] = "true";
+    const ci = asker(false);
+    try { runDone({ directory: d, id: mk("exit 0"), actor: ME, ask: ci.ask }); }
+    finally { if (saved === undefined) delete process.env["CI"]; else process.env["CI"] = saved; }
+    assert.equal(ci.asked.length, 0);
+  });
+  withConfig(() => {
+    const d = repo();
+    const yes = asker(false);
+    runDone({ directory: d, id: runAdd({ directory: d, title: "t", verify: "exit 0", actor: ME }).id, actor: ME, yes: true, ask: yes.ask });
+    assert.equal(yes.asked.length, 0);
+    const trusted = asker(false);
+    runDone({ directory: d, id: runAdd({ directory: d, title: "u", verify: "exit 0", actor: ME }).id, actor: ME, ask: trusted.ask });
+    assert.equal(trusted.asked.length, 0);
+  });
+});
+
 test("--yes 之后记住，下次不用再给", () => {
   withConfig(() => {
     const d = repo();
