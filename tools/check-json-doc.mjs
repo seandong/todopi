@@ -139,22 +139,30 @@ if (checkable.length > 0) {
     },
     files: ["check.ts"],
   }, null, 2));
-  const tsc = join(repo, "node_modules", ".bin", "tsc");
+  // CHECK_JSON_DOC_TSC 只给测试用：验证 tsc 跑不起来时检查器不会安静地通过
+  const tsc = process.env.CHECK_JSON_DOC_TSC ?? join(repo, "node_modules", ".bin", "tsc");
   let result = "";
+  let failed = false;
   try {
     execFileSync(tsc, ["-p", join(work, "tsconfig.json")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   } catch (err) {
+    failed = true;
     result = `${err.stdout ?? ""}${err.stderr ?? ""}`;
     if (result.trim() === "") result = String(err);
   }
-  const unmatched = [];
+  // tsc 没跑起来（找不到、崩了）或报了别处的错：原样说出来。**失败却一条也对不回小节时绝不安静**——那是假绿
+  let attributed = 0;
+  const other = [];
   for (const l of result.split("\n").filter((x) => x.trim() !== "")) {
     const m = /check\.ts\((\d+),\d+\)/.exec(l);
     const at = m === null ? undefined : lineOf.get(Number(m[1]));
-    if (at !== undefined) say(`docs/json.md:${at.line}: ${at.name} does not match the type in ${exported.get(at.name)} (field, type or optionality)`);
-    else if (/error/.test(l)) unmatched.push(l.trim());
+    if (at !== undefined) {
+      attributed++;
+      say(`docs/json.md:${at.line}: ${at.name} does not match the type in ${exported.get(at.name)} (field, type or optionality)`);
+    } else other.push(l.trim());
   }
-  for (const l of unmatched) say(`tsc: ${l}`);
+  if (failed && attributed === 0) for (const l of other.length > 0 ? other : ["tsc failed with no output"]) say(`tsc: ${l}`);
+  else for (const l of other.filter((x) => /error/i.test(x))) say(`tsc: ${l}`);
   rmSync(work, { recursive: true, force: true });
 }
 

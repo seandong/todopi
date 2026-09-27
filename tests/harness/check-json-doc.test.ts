@@ -30,14 +30,14 @@ const DOC = `# t
 type BItem = { name: string };
 \`\`\`
 `;
-function run(doc: string, dto = DTO): string[] {
+function run(doc: string, dto = DTO, env: NodeJS.ProcessEnv = process.env): string[] {
   const root = mkdtempSync(join(tmpdir(), "todopi-arch028-"));
   const files: Record<string, string> = { "docs/json.md": doc, "src/output/dto/a.ts": dto };
   for (const [name, body] of Object.entries(files)) {
     mkdirSync(dirname(join(root, name)), { recursive: true });
     writeFileSync(join(root, name), body);
   }
-  return execFileSync(process.execPath, ["--no-warnings", "tools/check-json-doc.mjs", root], { encoding: "utf8" })
+  return execFileSync(process.execPath, ["--no-warnings", "tools/check-json-doc.mjs", root], { encoding: "utf8", env })
     .split("\n").filter((l) => l.trim() !== "");
 }
 /** 正例不导出 Internal；反例（DTO 原样）用它验证「dto 里没写进文档的导出」会被报出来 */
@@ -80,4 +80,9 @@ test("多行的 ts 块之后，后面小节的错误仍报在后面那一节（�
     + "\n### `CItem`\n\n| Field | Type | Meaning |\n|---|---|---|\n| `v` | `string` | |\n";
   const out = run(doc, `${DTO_OK}export type CItem = { v: number };\n`);
   assert.deepEqual(out.map((l) => l.replace(/^docs\/json\.md:\d+: /, "")), ["CItem does not match the type in src/output/dto/a.ts (field, type or optionality)"]);
+});
+
+test("tsc 跑不起来：说出来，不安静地通过（那是假绿）", () => {
+  const out = run(DOC, DTO_OK, { ...process.env, CHECK_JSON_DOC_TSC: "/nonexistent/tsc" });
+  assert.match(out.join("\n"), /^tsc: .*ENOENT/m);
 });
