@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverLedger } from "../../src/format/discover.ts";
 import { readTasks } from "../../src/format/read.ts";
-import { createTask, createTaskUnlocked, prepareUpdate, writeNormalized } from "../../src/format/write.ts";
+import { createTask, createTaskUnlocked, prepareUpdate, withLedgerLock, writeNormalized } from "../../src/format/write.ts";
 import { runInit } from "../../src/commands/init.ts";
 import { runAdd } from "../../src/commands/add.ts";
 import { runClaim } from "../../src/commands/claim.ts";
@@ -55,4 +55,17 @@ test("handoff：整条命令退出 4（不给一份没记上的交接报告）",
   const before = snap();
   assert.throws(() => runHandoff({ directory: d, actor: ME }), refused);
   assert.equal(snap(), before);
+});
+
+test("闸门看的是磁盘上此刻的版本，不是发现账本时的快照", () => {
+  const d = mkdtempSync(join(tmpdir(), "todopi-race-"));
+  runInit({ directory: d, prefix: "tp" });
+  const ledger = discoverLedger(d);
+  const cfg = join(d, ".todopi", "config.yml");
+  writeFileSync(cfg, readFileSync(cfg, "utf8").replace(/^version: 1$/m, "version: 2"));
+  assert.equal(ledger.config.version, 1);
+  let ran = false;
+  assert.throws(() => withLedgerLock(ledger, () => { ran = true; }), refused);
+  assert.equal(ran, false);
+  assert.throws(() => createTaskUnlocked(ledger, make, () => null), refused);
 });

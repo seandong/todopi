@@ -84,4 +84,24 @@ doctor --fix
 init
 LIST
 
+# 等锁期间账本被升版（Codex 评审实测）：旧版本进程拿到锁之后要按磁盘上此刻的版本再判一次
+R="$TMP/race"
+mkdir -p "$R"
+git -C "$R" init -q
+git -C "$R" config user.name tester
+cli -C "$R" init >/dev/null 2>&1
+RT="$(cli -C "$R" add "to claim" | head -1 | cut -d' ' -f1)"
+LOCK="$(git -C "$R" rev-parse --absolute-git-dir)/todopi/leases/lock"
+mkdir -p "$(dirname "$LOCK")"
+printf '{"pid":%s,"host":"%s","at":"2026-01-01T00:00:00Z","nonce":"held-by-e2e"}' "$$" "$(hostname)" > "$LOCK"
+# claim 先写租约、再写任务文件：只有「拿到锁之后再判一次」挡得住租约
+cli -C "$R" claim "$RT" > "$TMP/race.out" 2>&1 &
+RP=$!
+node -e 'setTimeout(()=>{},800)'
+sed 's/^version: 1$/version: 2/' "$R/.todopi/config.yml" > "$TMP/c2" && cat "$TMP/c2" > "$R/.todopi/config.yml"
+rm -f "$LOCK"
+wait "$RP"; rc=$?
+[ "$rc" -eq 4 ] && [ ! -e "$(dirname "$LOCK")/$RT.json" ] && cli -C "$R" --quiet show "$RT" | grep -q "status     open" \
+  && ok "等锁期间被升版：claim 拿到锁后退出 4，租约与任务都没写" || fail "rc=${rc}：$(cat "$TMP/race.out")；leases=$(ls "$(dirname "$LOCK")")"
+
 exit "$FAILED"

@@ -42,7 +42,9 @@ export function isNewerVersion(ledger: Ledger): boolean {
  * （withLedgerLock、init、verify），不在读取口（F25；在那之前读也被拒，ls 都用不了）。
  */
 export function assertWritable(ledger: Ledger): void {
-  if (isNewerVersion(ledger)) throw readOnlyError(ledger.config.version);
+  // 读**磁盘上此刻**的版本，不用发现账本时的快照：等锁期间别的（新版）todopi 可能已经把账本升了版（Codex 评审实测）
+  const version = readConfig(ledger.dir).version;
+  if (version > SUPPORTED_VERSION) throw readOnlyError(version);
 }
 
 function readOnlyError(version: number): CliError {

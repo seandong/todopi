@@ -161,9 +161,13 @@ function parseCandidate(relPath: string, id: string, text: string): TaskFile | s
 
 /** 拿着账本的写锁跑一段。调用方需要「读 → 判断 → 可能写多个文件」落在一次持锁内时用它。 */
 export function withLedgerLock<T>(ledger: Ledger, fn: () => T): T {
-  // 所有改账本的写都经过这把锁：版本更高的账本在拿锁之前就拒绝（拿锁本身也是写）
+  // 所有改账本的写都经过这把锁：版本更高的账本在拿锁之前就拒绝（拿锁本身也是写）；拿到锁之后再看一次磁盘——
+  // 等锁的时候账本可能被新版 todopi 升了版
   assertWritable(ledger);
-  return withLock(lockPathFor(ledger), fn);
+  return withLock(lockPathFor(ledger), () => {
+    assertWritable(ledger);
+    return fn();
+  });
 }
 
 /** 准备好的一次任务改写：candidate 已通过校验，commit() 才落盘。 */
