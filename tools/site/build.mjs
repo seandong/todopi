@@ -27,7 +27,10 @@ const LINKS = { "IMPLEMENTING.md": "implementing.html", "fixtures/README.md": "f
 
 /** 一个表格单元格里的行内 Markdown → HTML（去掉包在外面的 <p>） */
 function inline(text) {
-  return new commonmark.HtmlRenderer().render(new commonmark.Parser().parse(text)).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");
+  // commonmark.js 没有「只解析行内」的入口：单元格按块解析时，打头的 `#`、`-`、`>`、`1.` 这类记号会变成标题、列表、引用
+  // （§5.2 表头那一格 `#` 曾变成一个空的 <h1>——Codex 评审）。把打头的块级记号转义掉，保证它按一段文字解析
+  const safe = text.replace(/^([#>+*=-])/, "\\$1").replace(/^(\d+)([.)])/, "$1\\$2");
+  return new commonmark.HtmlRenderer().render(new commonmark.Parser().parse(safe)).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");
 }
 
 /** 按未转义的 | 切一行表格；\| 还原成 | */

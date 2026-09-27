@@ -27,9 +27,14 @@ test("字段页是 §5.2 的 12 个字段（表格真的渲染成了表格）", 
   const body = /<tbody>([\s\S]*?)<\/tbody>/.exec(html)?.[1] ?? "";
   const rows = body.split("<tr>").length - 1;
   assert.equal(rows, 12);
+  // 表头逐格与规格一致（第一格是 `#`：曾被当成一级标题渲染成空的 <h1>）
+  const head = [...(/<thead>([\s\S]*?)<\/thead>/.exec(html)?.[1] ?? "").matchAll(/<th>([\s\S]*?)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(head, ["#", "Field", "Type", "Required", "Constraints"]);
   for (const f of ["id", "title", "status", "resolution", "assignee", "parent", "blocked_by", "rank", "verify", "labels", "external", "created"]) {
     assert.ok(body.includes(`<code>${f}</code>`), f);
   }
+  // 任何表格单元格里都不该出现块级元素（标题、列表、引用）——单元格是行内内容
+  for (const p of pages) assert.doesNotMatch(text(p), /<t[hd]>\s*<(h\d|ul|ol|blockquote|p)>/, p);
   // 规格正文里不应留下没渲染的管道表格
   assert.doesNotMatch(text(join(site, "index.html")), /<p>\|/);
 });
