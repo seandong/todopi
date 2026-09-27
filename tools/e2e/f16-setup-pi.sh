@@ -14,7 +14,7 @@ fail() { printf '  FAIL  %s\n' "$1"; FAILED=1; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin"
-printf '#!/bin/sh\nexec node %s/src/cli.ts "$@"\n' "$ROOT" > "$TMP/bin/todopi"
+if [ -n "${TODOPI_E2E_BIN:-}" ]; then printf '#!/bin/sh\nexec "%s" "$@"\n' "$TODOPI_E2E_BIN"; else printf '#!/bin/sh\nexec node %s/src/cli.ts "$@"\n' "$ROOT"; fi > "$TMP/bin/todopi"
 chmod +x "$TMP/bin/todopi"
 export PATH="$TMP/bin:$PATH"
 

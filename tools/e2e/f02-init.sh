@@ -13,7 +13,7 @@ fail() { printf '  FAIL  %s\n' "$1"; FAILED=1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-cli() { node "$ROOT/src/cli.ts" "$@"; }
+cli() { if [ -n "${TODOPI_E2E_BIN:-}" ]; then "$TODOPI_E2E_BIN" "$@"; else node "$ROOT/src/cli.ts" "$@"; fi; }
 
 # 1. 空目录里 init → 0，四样东西都在
 mkdir -p "$TMP/fresh"
@@ -72,13 +72,13 @@ if [ -e "$TMP/future/AGENTS.md" ]; then fail "版本闸门必须在任何写入�
 # 10. 输出是英文 —— CLI 的 stdout 是产品表面（AGENTS.md）
 mkdir -p "$TMP/lang"
 out="$(cli -C "$TMP/lang" init 2>&1)"
-if printf '%s' "$out" | grep -q '[一-鿿]'; then
+if printf '%s' "$out" | node -e 'process.exit(/[\u4e00-\u9fff]/u.test(require("fs").readFileSync(0, "utf8")) ? 0 : 1)'; then
   fail "init 输出含中文（CLI 的 stdout 是产品表面，MUST 是英文）：$out"
 else
   ok "init 输出是英文"
 fi
 out="$(cli -C "$TMP/lang" init --prefix BAD 2>&1)"
-if printf '%s' "$out" | grep -q '[一-鿿]'; then
+if printf '%s' "$out" | node -e 'process.exit(/[\u4e00-\u9fff]/u.test(require("fs").readFileSync(0, "utf8")) ? 0 : 1)'; then
   fail "错误信息含中文（CLI 的 stdout 是产品表面，MUST 是英文）：$out"
 else
   ok "错误信息是英文"

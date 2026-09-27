@@ -1,0 +1,50 @@
+# 发布：推送 v<version> 标签时构建 npm 包与四个平台的单二进制，生成 SHA256SUMS，建 GitHub Release 并附上。
+# install.sh 从这里取二进制（/releases/latest 与 /releases/download/v<version>/...）。
+# 发 npm 需要仓库 secret NPM_TOKEN；没有就整个失败（先发 npm 再建 Release，见下）。发布是维护者的动作。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: oven-sh/setup-bun@v2
+      - name: Tag matches package.json
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - name: Build
+        run: |
+          npm ci
+          VERSION=${GITHUB_REF_NAME#v}
+          mkdir -p out build
+          npm pack --pack-destination out
+          for t in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            bun build --compile --target=bun-$t src/main.ts --outfile build/$t/todopi
+            tar -czf out/todopi-$VERSION-$t.tar.gz -C build/$t todopi
+          done
+          (cd out && sha256sum todopi-$VERSION-*.tar.gz > SHA256SUMS)
+      # 先发 npm，再建 Release：install.sh 在有 Node 的机器上装 todopi@<version>，Release 出现而 npm 上没有这个版本时，
+      # 那些机器会拿到 404（F21 评审）。所以没有 NPM_TOKEN、或发布失败，整个任务失败、不建 Release。
+      - name: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          # 重跑时（npm 已发、上次建 Release 失败）不再发：同一版本发第二次必然失败，会卡住后面建 Release 那一步
+          if npm view "todopi@$VERSION" version >/dev/null 2>&1; then echo "todopi@$VERSION is already on npm; skipping publish"; exit 0; fi
+          if [ -z "$NODE_AUTH_TOKEN" ]; then echo "NPM_TOKEN is not set: refusing to create a release that npm does not have"; exit 1; fi
+          npm publish out/todopi-$VERSION.tgz --access public
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes

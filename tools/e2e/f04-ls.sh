@@ -13,7 +13,7 @@ fail() { printf '  FAIL  %s\n' "$1"; FAILED=1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-cli() { node "$ROOT/src/cli.ts" "$@"; }
+cli() { if [ -n "${TODOPI_E2E_BIN:-}" ]; then "$TODOPI_E2E_BIN" "$@"; else node "$ROOT/src/cli.ts" "$@"; fi; }
 # 从 --json 输出里取一个字段。用 node 而不是 grep/sed：JSON 得用 JSON 解析器读。
 jfield() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s)[process.argv[1]])))' "$1"; }
 
@@ -100,7 +100,7 @@ esac
 
 # 8. 输出是英文
 out="$(cli -C "$W" ls 2>&1)"
-if printf '%s' "$out" | grep -q '[一-鿿]'; then
+if printf '%s' "$out" | node -e 'process.exit(/[\u4e00-\u9fff]/u.test(require("fs").readFileSync(0, "utf8")) ? 0 : 1)'; then
   fail "ls 输出含中文（CLI 的 stdout 是产品表面，MUST 是英文）：$out"
 else
   ok "ls 输出是英文"

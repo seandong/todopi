@@ -1,18 +1,15 @@
 // src/cli.ts
+// 命令解析。入口是 src/main.ts（它先判断这次是不是 verify 的 runner）；开发时直接 `node src/cli.ts` 也行。
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { EXIT, CliError } from "./exit.ts";
-
-const pkg = JSON.parse(
-  readFileSync(join(import.meta.dirname, "..", "package.json"), "utf8"),
-) as { version: string };
+import { VERSION } from "./version.ts";
 
 const program = new Command();
 program
   .name("todopi")
   .description("A durable task ledger for AI coding agents")
-  .version(pkg.version)
+  .version(VERSION)
   .option("-C, --directory <dir>", "run against the ledger found from this directory")
   .option("--json", "emit structured data instead of human-readable text")
   .option("--quiet", "suppress progress and hints; keep results and errors")

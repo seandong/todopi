@@ -18,7 +18,7 @@ trap 'rm -rf "$TMP"' EXIT
 export TODOPI_CONFIG_DIR="$TMP/config"
 unset CI 2>/dev/null || true
 
-cli() { node "$ROOT/src/cli.ts" "$@"; }
+cli() { if [ -n "${TODOPI_E2E_BIN:-}" ]; then "$TODOPI_E2E_BIN" "$@"; else node "$ROOT/src/cli.ts" "$@"; fi; }
 jfield() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s)[process.argv[1]])))' "$1"; }
 
 W="$TMP/w"
@@ -167,7 +167,7 @@ fi
 # 13. 输出是英文
 I=$(cli -C "$W" --json add "english" --verify "exit 1" | jfield id)
 out="$(cli -C "$W" done "$I" 2>&1)"
-if printf '%s' "$out" | grep -q '[一-鿿]'; then
+if printf '%s' "$out" | node -e 'process.exit(/[\u4e00-\u9fff]/u.test(require("fs").readFileSync(0, "utf8")) ? 0 : 1)'; then
   fail "verify 的报告含中文（CLI 的 stdout 是产品表面，MUST 是英文）"
 else
   ok "verify 的报告是英文"

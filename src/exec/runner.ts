@@ -30,7 +30,11 @@ type Payload = {
   logPath: string | null;
 };
 
-const payload = JSON.parse(process.argv[2] ?? "{}") as Payload;
+// 参数：npm 包 / 开发时在 argv[2]；单二进制里在环境变量里（run.ts 的 RUNNER_ENV）。**读完立刻删掉**：verify 命令继承这个
+// 进程的环境，里面若再调 `todopi`（make check 之类），它会以为自己也是 runner（F21）。
+const RUNNER_ENV = "TODOPI_INTERNAL_VERIFY_RUNNER";
+const payload = JSON.parse(process.env[RUNNER_ENV] ?? process.argv[2] ?? "{}") as Payload;
+delete process.env[RUNNER_ENV];
 
 const started = Date.now();
 const tail = makeTail(payload.maxOutputBytes);
@@ -153,27 +157,37 @@ function finish(): void {
     : timedOut ? `timed out after ${String(payload.timeoutMs)}ms`
     : exitSignal !== null ? `killed by ${exitSignal}`
     : String(exitCode);
-  const json = JSON.stringify({
-    code: exitCode,
-    signal: exitSignal,
-    timedOut,
-    output: `${tail.text()}${runError ?? ""}`,
-    durationMs: Date.now() - started,
-    truncated: tail.truncated(),
-    logProblem,
-  });
+  const durationMs = Date.now() - started;
 
   // stdout 对管道是异步的：紧跟着 process.exit 会截断这一行 JSON，而现在这行
   // 可以有 1 MiB。等它落地再退。
+  //
+  // **JSON 在这里才拼，不在上面**：打开日志文件是异步的（线程池里），秒退的命令可能在「打不开」的 error 到来之前就结束了。
+  // 早先在进入 finish 时就把 logProblem 序列化进去，负载高时（整套测试并行、12 个文件）日志明明没写成、报告里却是 null
+  // （F21 在容器里稳定复现）。等日志流有了结论（写完，或 end 的回调带着错误）再拼。
   let wrote = false;
   const emit = (): void => {
     if (wrote) return;
     wrote = true;
+    const json = JSON.stringify({
+      code: exitCode,
+      signal: exitSignal,
+      timedOut,
+      output: `${tail.text()}${runError ?? ""}`,
+      durationMs,
+      truncated: tail.truncated(),
+      logProblem,
+    });
     process.stdout.write(json, () => process.exit(0));
   };
 
   if (log === null) { emit(); return; }
-  log.end(`\n--- exit: ${how} (${String(Date.now() - started)}ms) ---\n`, emit);
+  log.end(`\n--- exit: ${how} (${String(durationMs)}ms) ---\n`, (err?: Error | null) => {
+    if (err && logProblem === null) {
+      logProblem = `could not write the verify log to ${payload.logPath}: ${(err as NodeJS.ErrnoException).code ?? err.message}`;
+    }
+    emit();
+  });
   // 流坏掉时 end 的回调可能不来。别为了写日志把结果整个丢掉。
   setTimeout(emit, 2_000).unref();
 }

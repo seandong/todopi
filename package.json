@@ -8,15 +8,17 @@
     "node": ">=20"
   },
   "bin": {
-    "todopi": "src/cli.ts",
-    "tp": "src/cli.ts"
+    "todopi": "dist/main.js",
+    "tp": "dist/main.js"
   },
   "scripts": {
     "test": "node --test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "npm run build"
   },
   "dependencies": {
-    "commander": "15.0.0",
+    "commander": "14.0.3",
     "commonmark": "0.31.2",
     "fractional-indexing": "^4.0.0",
     "yaml": "2.9.1"
@@ -25,5 +27,10 @@
     "@types/commonmark": "0.27.10",
     "@types/node": "22.20.3",
     "typescript": "7.0.2"
-  }
+  },
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ]
 }

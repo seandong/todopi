@@ -9,6 +9,11 @@
 
 set -u
 
+# 用 UTF-8 locale 跑：检查的输出里有中文。认中文的判断本身已不依赖 locale（F21：grep 的 [一-鿿] 区间在 POSIX locale 下
+# 按字节比、在某些 UTF-8 locale 下直接报错返回 2——被 `if grep -q` 当成「没有」而悄悄放行；现在都改成 node 按码点判断）。
+# 只在那个 locale 确实存在时才设，免得 bash 打 setlocale 警告。
+_utf8="$(locale -a 2>/dev/null | grep -ix -m1 'c\.utf-\?8\|en_US\.utf-\?8')" && [ -n "$_utf8" ] && export LC_ALL="$_utf8"
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 2
 
