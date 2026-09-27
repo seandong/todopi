@@ -1,5 +1,5 @@
 {
   "violates": "invariant-8",
-  "reason": "actor 含空格，违反 §5.4 的 ^[^\\\\s:]{1,64}$。这正是 git config user.name 未经规范化直接使用会产生的形态；Log 行里的空格是字段分隔符，会让解析错位。",
+  "reason": "The actor contains a space, which violates §5.4's ^[^\\s:]{1,64}$. This is exactly what an unnormalized git config user.name produces; in a Log line a space is the field separator, so it throws the parse off.",
   "reader_must": "reject or report; MUST NOT silently accept"
 }

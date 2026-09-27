@@ -1,12 +1,13 @@
 ---
 id: "tp-i8vcpd"
 title: "规格语料的说明（note / reason / reader_must）改成英文"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j00"
 verify: "make check && make test"
 labels: ["m4"]
 created: "2026-09-27T12:18:46Z"
-updated: "2026-09-27T12:18:47Z"
+updated: "2026-09-27T13:51:02Z"
 ---
 
 ## Description
@@ -22,3 +23,4 @@ spec/fixtures/*/*.json 的 note 与 reason 是中文，而规格与语料面向�
 
 - 2026-09-27T12:18:46Z claude-code@Seans-MacBook-Pro.local created from=tp-s4zovm
 - 2026-09-27T12:18:47Z claude-code@Seans-MacBook-Pro.local edited fields=verify
+- 2026-09-27T13:51:02Z claude-code@Seans-MacBook-Pro.local claimed

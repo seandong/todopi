@@ -1,5 +1,5 @@
 {
-  "note": "Log 语法的全部形态：无参数动词、带 key=value、带 text、多行 text（续行缩进两格，读取端用 \\n 连接）、未知动词（MUST 保留并忽略）。check 行带上当时的标准文本。",
+  "note": "Every shape of the Log grammar: a verb without arguments, with key=value, with text, with multi-line text (continuation lines indented two spaces; readers join them with \\n), and an unknown verb (MUST be kept and ignored). The check line carries the criterion text as it was at the time.",
   "log": [
     {
       "ts": "2026-09-14T09:00:00Z",

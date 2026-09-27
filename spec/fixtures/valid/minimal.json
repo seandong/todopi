@@ -1,5 +1,5 @@
 {
-  "note": "四个必填字段加时间戳；最小的合法任务文件。",
+  "note": "The four required fields plus the timestamps: the smallest valid task file.",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "A plain title",

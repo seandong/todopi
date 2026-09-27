@@ -1,5 +1,5 @@
 {
-  "note": "标题是 YAML 关键字。不加引号时解析为 null，标题消失。yes/no/on/off/true/false 同理。",
+  "note": "The title is a YAML keyword. Unquoted it parses as null and the title disappears. The same holds for yes/no/on/off/true/false.",
   "frontmatter": {
     "id": "tp-a1b2c3",
     "title": "null",

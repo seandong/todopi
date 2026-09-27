@@ -1,5 +1,5 @@
 {
   "violates": "envelope",
-  "reason": "缺少结束的 --- 分隔符。整个文件无法按 §5.1 的信封解析。",
+  "reason": "The closing --- delimiter is missing, so the file cannot be read as the §5.1 envelope at all.",
   "reader_must": "reject or report; MUST NOT silently accept"
 }
