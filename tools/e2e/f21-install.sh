@@ -211,6 +211,12 @@ else
   note "没有 docker：noexec /tmp 的用例跳过"
 fi
 
+# 安装目录里的临时文件名不可预测（mktemp），也不留下：预先放好的 PID 名链接不会被跟随（Codex 补审）
+out="$(binstall "$TMP/c8" TODOPI_FORCE_BINARY=1)"; rc=$?
+[ "$rc" -eq 0 ] && [ -z "$(ls -A "$TMP/c8/.local/bin" | grep '^\.todopi\.new')" ] && ok "安装后不留临时文件" || fail "rc=${rc}：$(ls -A "$TMP/c8/.local/bin")"
+grep -q 'mktemp "$INSTALL_DIR/.todopi.new.XXXXXX"' install.sh && ! grep -q '\.todopi\.new\.\$\$' install.sh \
+  && ok "安装目录里的临时文件用 mktemp 独占创建，不用可预测的 PID 名" || fail "install.sh 仍用 PID 名的临时文件"
+
 # PATH 提示按 shell 给出该写的文件
 out="$(binstall "$TMP/c4" TODOPI_FORCE_BINARY=1 SHELL=/bin/zsh)"
 printf '%s' "$out" | grep -q ">> ~/.zshrc" && ok "zsh 用户的 PATH 提示写 ~/.zshrc" || fail "$out"

@@ -155,8 +155,12 @@ install_binary() {
   # mounted noexec; running it before the rename means a binary that cannot start here (for example on musl-based Linux such
   # as Alpine, which the glibc builds do not support) is never reported as installed; the rename means an interrupted install
   # never leaves half a binary in place.
-  new="$INSTALL_DIR/.todopi.new.$$"
-  cp "$work/x/todopi" "$new" && chmod 755 "$new" || { rm -f "$new"; die "could not write to ${INSTALL_DIR}"; }
+  # The temporary name comes from mktemp (created exclusively, unpredictable) rather than the PID: a predictable name in a
+  # directory someone else can write could be planted as a symlink, and cp / chmod would follow it to a file elsewhere. It is
+  # checked again after writing, before it is run or renamed.
+  new=$(mktemp "$INSTALL_DIR/.todopi.new.XXXXXX") || die "could not create a temporary file in ${INSTALL_DIR}"
+  cp "$work/x/todopi" "$new" && [ -f "$new" ] && [ ! -L "$new" ] && chmod 755 "$new" \
+    || { rm -f "$new"; die "could not write a regular file to ${INSTALL_DIR}"; }
   if ! "$new" --version >/dev/null 2>&1; then
     rm -f "$new"
     if [ "$NPM_FAILED" = "1" ]; then die "the downloaded binary does not run on this system ($(uname -s) $(uname -m)), and the npm package could not be installed either (see above)"

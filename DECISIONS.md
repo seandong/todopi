@@ -2230,4 +2230,7 @@ Node 用 spec reporter，整层被判 blocked。
   在那里试跑、再 rename（docker 里 `--tmpfs /tmp:noexec` 的用例钉住，旧版在这条上失败）。另修：npm 失败改装二进制时醒目告警，旧 npm
   留下的 `tp` 链接改指向二进制（别的工具的 `tp` 不动）；安装目录不叫 bin 时说明为什么不用 npm；试跑失败只在没有 Node 时才建议装 Node；
   fish 给 `fish_add_path`；发布工作流重跑时 npm 上已有这个版本就跳过发布，不卡住建 Release。
+- Codex 补审（2026-09-28，额度恢复后对子代理评审过的 F20 / F21 / 探针 / 看板兜底轮询再审一遍）：① install.sh 在安装目录里的临时文件
+  用可预测的 PID 名，别人可写的目录里能预先放一个同名符号链接，让 cp / chmod 顺着改写别处的文件——改用 `mktemp` 独占创建随机名、写完再确认
+  是普通文件；② Beads 里自己挡自己的 blocks 边被静默丢掉——与别的成环边一样计数并警告。其余 Go。
 

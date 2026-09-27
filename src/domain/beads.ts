@@ -166,7 +166,13 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
       if (typeof target !== "string" || (d.issue_id !== undefined && d.issue_id !== i.id)) continue;
       if (d.type !== "blocks" && d.type !== "parent-child" && d.type !== "discovered-from") { dropped.otherEdgeTypes += 1; continue; }
       if (!known.has(target)) { dropped.danglingEdges += 1; continue; }
-      if (d.type === "blocks") { if (!blockedBy.includes(target) && target !== i.id) blockedBy.push(target); }
+      if (d.type === "blocks") {
+        if (target === i.id) {
+          // 自己挡自己也是环（Codex 补审）：与别的成环边一样计数并警告，不静默丢
+          dropped.cycleEdges += 1;
+          warnings.push(`${i.id}: blocks itself in Beads; dropped that dependency`);
+        } else if (!blockedBy.includes(target)) blockedBy.push(target);
+      }
       else if (d.type === "parent-child") {
         if (parent === undefined) parent = target;
         else if (parent !== target) { dropped.extraParents += 1; warnings.push(`${i.id} has more than one parent in Beads; kept ${parent}, dropped ${target}`); }
