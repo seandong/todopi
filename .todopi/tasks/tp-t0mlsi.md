@@ -1,12 +1,13 @@
 ---
 id: "tp-t0mlsi"
 title: "首次执行 verify：有终端时当场确认，无终端时照旧拒绝并提示 --yes（FR-D4）"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "iq"
 verify: "make check && make test && bash tools/e2e/f26-trust-prompt.sh"
 labels: ["m4"]
 created: "2026-09-27T03:14:03Z"
-updated: "2026-09-27T03:14:03Z"
+updated: "2026-09-27T06:06:32Z"
 ---
 
 ## Description
@@ -22,3 +23,4 @@ updated: "2026-09-27T03:14:03Z"
 ## Log
 
 - 2026-09-27T03:14:03Z seandong created
+- 2026-09-27T06:06:32Z claude-code@Seans-MacBook-Pro.local claimed

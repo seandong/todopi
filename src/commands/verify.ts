@@ -8,6 +8,8 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runCommand } from "../exec/run.ts";
 import { isTrusted, recordTrust, trustFilePath } from "../exec/trust.ts";
+import { canAsk, askYesNo } from "../exec/prompt.ts";
+import { readTasks } from "../format/read.ts";
 import type { VerifyOutcome } from "../domain/gates.ts";
 import type { Ledger } from "../format/discover.ts";
 import { EXIT, CliError } from "../exit.ts";
@@ -48,13 +50,36 @@ function ensureTrusted(ledger: Ledger, command: string, opts: VerifyOptions): vo
       `  Approve it once with \`todopi done <id> --yes\`, or set CI=true.\n` +
       `  Trust is recorded in ${trustFilePath()} — never inside the repository.`);
   }
-  // 有终端时也不在这里读输入：v0.1 不做交互式提示（PRD §8 的命令表里没有），
-  // 让人显式给 --yes，理由与上面同源——一次可见的批准好过一次看不见的等待。
+  // 有终端时的当场确认在拿锁之前就问过了（confirmTrustBeforeLock）；走到这里说明 stderr 不是终端（输出被重定向，
+  // 问题没人看得见），或者确认之后到拿锁之间信任记录没了。照旧要求显式的 --yes。
   throw new CliError(EXIT.gate,
     `This repository has not been trusted to run verify commands yet.\n` +
     `  The command that would run: ${command}\n` +
     `  Approve it once with \`todopi done <id> --yes\`.\n` +
     `  Trust is recorded in ${trustFilePath()} — never inside the repository.`);
+}
+
+/**
+ * FR-D4 的当场确认（F26）：仓库还没被信任、要跑的任务有 verify、没给 --yes、不在 CI 里，且 stdin 与 stderr 都是终端时，
+ * 原样给出命令问一次；答 y 才记下信任。**在拿账本锁之前调用**——verify 在锁里跑，锁里等人回答会让并发的写入者超时。
+ * 其余情形（已信任、没有 verify、--yes、CI、没有终端）什么都不做，交给锁里的 ensureTrusted 照旧处理。
+ */
+export function confirmTrustBeforeLock(
+  ledger: Ledger, id: string, opts: VerifyOptions,
+  ask: { canAsk: () => boolean; askYesNo: (question: string) => boolean } = { canAsk, askYesNo },
+): void {
+  if (isTrusted(ledger.root) || opts.yes === true || process.env["CI"] === "true" || !ask.canAsk()) return;
+  const task = readTasks(ledger).find((t) => t.idFromFilename === id);
+  const command = task?.frontmatter["verify"];
+  if (typeof command !== "string" || command.trim() === "") return;
+  const yes = ask.askYesNo(
+    `This repository has not been trusted to run verify commands yet. todopi done ${id} would run:\n  ${command}\n` +
+    `Trust ${ledger.root} to run its verify commands? This is recorded in ${trustFilePath()}, never inside the repository.`);
+  if (!yes) {
+    throw new CliError(EXIT.gate, `Not approved: verify was not run and ${id} is unchanged. Run \`todopi done ${id}\` again to be asked again.`);
+  }
+  const problem = recordTrust(ledger.root);
+  if (problem !== null) throw new CliError(EXIT.usage, problem);
 }
 
 /**
