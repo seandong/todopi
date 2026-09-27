@@ -2484,6 +2484,6 @@ Node 用 spec reporter，整层被判 blocked。
   `hook_event_name`（`session.created` / `session.compacted`），pi 扩展给不了 stdin，用 `prime --hook-event`（评审二轮：两家的会话开始与
   压缩原本共用一个键，开始后 10 秒内的压缩被吞掉）。
 - 同进程加载的（OpenCode 插件、pi 扩展）：只靠时间窗挡不住——拿到空输出的一份会在之后每一轮重试。所以同一时刻（5 秒内）加载的第二份不注册；
-  过几秒的再加载是重载（pi 的 /reload、切换会话），照常注册——永久的标志会让重载之后唯一的一份也失效（Codex 评审）。OpenCode 在启动时装 npm 插件，
+  过几秒的再加载是重载（pi 的 /reload、切换会话），照常注册——永久的标志会让重载之后唯一的一份也失效（Codex 评审）；间隔用单调时钟（`performance.now()`）量，墙钟回拨不会让之后的重载都被当成重复（评审三轮）。OpenCode 在启动时装 npm 插件，
   若两份加载相隔超过 5 秒，会退回到注入两遍（重复，不是丢失）。
 

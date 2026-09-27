@@ -530,11 +530,27 @@ test("OpenCode 插件与 pi 扩展在同一进程里同一时刻装了两份：�
   assert.ok(handlers[0]!.length > 0);
   assert.deepEqual(handlers[1], [], "第二份什么都没注册");
   // 过了几秒再加载一次（pi 的 /reload、切换会话）：照常注册（F38 评审：永久的标志让重载之后唯一的一份也失效）
-  (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt = Date.now() - 60_000;
+  (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt = performance.now() - 60_000;
   const later: string[] = [];
   const { default: again } = await load("r.mjs", PI_EXTENSION);
   again({ on: (ev: string) => later.push(ev), exec: async () => ({ code: 0, stdout: "" }) });
   assert.deepEqual(later, handlers[0], "重载之后照常注册");
+  // 用的是单调时钟：先正常加载一次（由实现自己设标志），然后墙钟回拨一小时、真实时间过去 10 秒，再重载——照样注册（评审三轮）。
+  // 用墙钟时，回拨后的差是负数、「小于 5 秒」，重载被当成重复而不注册
+  delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt;
+  const first: string[] = [];
+  const { default: f1 } = await load("t1.mjs", PI_EXTENSION);
+  f1({ on: (ev: string) => first.push(ev), exec: async () => ({ code: 0, stdout: "" }) });
+  assert.deepEqual(first, handlers[0]);
+  const realNow = Date.now, realPerf = performance.now.bind(performance);
+  Date.now = () => realNow() - 3_600_000;
+  performance.now = () => realPerf() + 10_000;
+  try {
+    const back: string[] = [];
+    const { default: f2 } = await load("t2.mjs", PI_EXTENSION);
+    f2({ on: (ev: string) => back.push(ev), exec: async () => ({ code: 0, stdout: "" }) });
+    assert.deepEqual(back, handlers[0], "墙钟回拨后重载照常注册");
+  } finally { Date.now = realNow; performance.now = realPerf; }
   delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt;
 });
 

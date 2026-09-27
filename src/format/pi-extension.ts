@@ -31,8 +31,10 @@ export default function (pi) {
   // Loaded twice in the same moment (this file and the npm package, or two copies)? Only the first one injects; the other
   // registers nothing: a copy that got an empty prime would retry and inject a second time on a later turn.
   // A load seconds later is a reload (pi's /reload, a session switch) and registers normally.
-  if (Date.now() - (globalThis.__todopiPrimeLoadedAt ?? 0) < 5000) return;
-  globalThis.__todopiPrimeLoadedAt = Date.now();
+  // Monotonic clock: a wall clock set back after the first load would make every later reload look like a duplicate.
+  const loadedAt = performance.now();
+  if (globalThis.__todopiPrimeLoadedAt !== undefined && loadedAt - globalThis.__todopiPrimeLoadedAt < 5000) return;
+  globalThis.__todopiPrimeLoadedAt = loadedAt;
   const primed = new Map();
   // The event name tells prime which occasion this is: a compaction right after the start is a new injection, not a duplicate.
   const prime = async (ctx, hookEvent) => {
