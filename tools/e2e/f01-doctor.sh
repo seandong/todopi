@@ -46,10 +46,12 @@ out="$(cli -C "$TMP/bad" doctor 2>&1)"; code=$?
 [ "$code" -eq 1 ] && ok "有问题的账本退出 1" || fail "应退出 1，实际 $code"
 case "$out" in *invariant-2*) ok "输出点名 invariant-2" ;; *) fail "输出未点名 invariant-2：$out" ;; esac
 
-# 3. 格式版本过高 → 4
+# 3. 格式版本过高：doctor 是读命令，照常检查并提示；--fix 要写，退出 4（spec §9，F25 起；之前读也退出 4）
 mk_ledger "$TMP/future" 2
 out="$(cli -C "$TMP/future" doctor 2>&1)"; code=$?
-[ "$code" -eq 4 ] && ok "未来版本退出 4" || fail "应退出 4，实际 ${code}：$out"
+[ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "format version 2" && ok "未来版本：doctor 照常读，并提示版本更高" || fail "应退出 0 并提示，实际 ${code}：$out"
+out="$(cli -C "$TMP/future" doctor --fix 2>&1)"; code=$?
+[ "$code" -eq 4 ] && ok "未来版本：doctor --fix 退出 4" || fail "应退出 4，实际 ${code}：$out"
 
 # 4. 没有 .todopi/ → 1
 mkdir -p "$TMP/none"
