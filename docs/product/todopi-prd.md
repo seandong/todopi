@@ -260,7 +260,7 @@ todopi import <file.md> | import beads [path]
 | 运行时 | npm 包在 Node ≥ 20 上运行，不需要 Bun；brew/curl 提供无运行时依赖的 Bun 编译二进制。源码只用 Node API，Bun 仅作编译器（DECISIONS D006）。实测体积：**npm 装完 1.5 MB**（三个零传递依赖），二进制 61 MB（macOS arm64）/ 90 MB（Linux x64）——体积全部来自内嵌运行时，`--minify` 与 `--bytecode` 均无效。对照：同类中最接近的 Backlog.md 同为 Bun + TypeScript，但因使用 Bun 专属 API 而必须发二进制，其 npm 安装量为 67.5 MB（macOS）/ 96.3 MB（Linux）。**45 倍差距来自「源码只用 Node API」这一条决策**，见 DECISIONS D008。curl 安装器先探测 Node ≥ 20：有则装 npm 包，无则下载二进制。（F21 重测：D031 引入 commonmark 后 npm 装完 3.3 MB、四个直接依赖加 commonmark 带来的三个；二进制 64 MB（macOS arm64）。npm 包由 tsc 逐文件编译到 `dist/`，Node 20.0.0 的干净容器里实测通过，D042。） |
 | 安全 | 验证命令仅在按仓库信任后执行，且每次执行前原样打印；看板只绑定回环地址；v0.1 无任何网络访问。文档明确写出：把 `todopi` 加进 agent 的命令白名单**不是**沙箱——`done` 会执行仓库自己的 `verify` 命令，而 agent 的权限检查看不到它。**OS 级沙箱是有效的**：2026-09-16 核实，Claude Code 与 Codex 的沙箱都约束整棵进程树（macOS Seatbelt、Linux bubblewrap+Landlock+seccomp），todopi 派生的 verify 进程继承同一套限制。文档应据此建议：依赖白名单做隔离的用户同时启用 OS 沙箱。 |
 | 隐私 | 永不遥测。文档提醒 `.todopi/` 在公开仓库中是公开的。 |
-| 兼容 | 格式版本 1；CLI 拒绝写入更新的版本（退出码 4）。 |
+| 兼容 | 格式版本 1；CLI 拒绝写入更新的版本（退出码 4），但仍按版本 1 的规则读它（ls / show / prime / doctor / web 照常，stderr 提示一句；spec §9，D046）。 |
 | 本地化 | 用户可见文案（CLI 输出、README、spec、协议文本、官网）English-first；中文站点页面为辅。仓库内设计文档用中文。 |
 | 许可 | MIT。 |
 

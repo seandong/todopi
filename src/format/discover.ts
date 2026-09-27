@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { EXIT, CliError } from "../exit.ts";
 
-/** 本实现支持的最高格式版本。spec §9：读者 MUST 拒绝写入更高版本，SHOULD 仍能读。 */
+/** 本实现支持的最高格式版本。spec §9：读者 MUST 拒绝写入更高版本，SHOULD 仍能读（闸门见 assertWritable）。 */
 export const SUPPORTED_VERSION = 1;
 
 export type Config = {
@@ -27,7 +27,36 @@ export type Ledger = { root: string; dir: string; config: Config };
  */
 export function assertSupportedVersionIfPresent(dir: string): number | null {
   if (!existsSync(join(dir, "config.yml"))) return null;
-  return readConfig(dir).version;
+  const config = readConfig(dir);
+  if (config.version > SUPPORTED_VERSION) throw readOnlyError(config.version);
+  return config.version;
+}
+
+/** 账本的格式版本比本实现高：可以按 v1 的规则读，不能写（spec §9）。 */
+export function isNewerVersion(ledger: Ledger): boolean {
+  return ledger.config.version > SUPPORTED_VERSION;
+}
+
+/**
+ * 写入之前的版本闸门。spec §9：读者 MUST 拒绝写入版本高于自己的账本，SHOULD 仍能读——所以闸门在写入口
+ * （withLedgerLock、init、verify），不在读取口（F25；在那之前读也被拒，ls 都用不了）。
+ */
+export function assertWritable(ledger: Ledger): void {
+  if (isNewerVersion(ledger)) throw readOnlyError(ledger.config.version);
+}
+
+function readOnlyError(version: number): CliError {
+  return new CliError(
+    EXIT.unsupportedVersion,
+    `This ledger is format version ${version}; this build of todopi supports up to ${SUPPORTED_VERSION}, so it can read the ledger `
+      + "but not change it (spec §9). Nothing was written. Upgrade todopi to make changes.",
+  );
+}
+
+/** 读命令在高版本账本上给的一句提示（stderr）。 */
+export function newerVersionNote(ledger: Ledger): string {
+  return `note: this ledger is format version ${ledger.config.version}, newer than this todopi supports (${SUPPORTED_VERSION}). `
+    + "Reading it by version-1 rules; any change will be refused. Upgrade todopi.";
 }
 
 /** 从 startDir 向上走，直到找到含 .todopi/ 的目录或到达文件系统根。 */
@@ -71,12 +100,7 @@ function readConfig(dir: string): Config {
   if (!Number.isInteger(version)) {
     throw new CliError(EXIT.usage, `${path} is missing the required integer field "version".`);
   }
-  if (version > SUPPORTED_VERSION) {
-    throw new CliError(
-      EXIT.unsupportedVersion,
-      `This ledger is format version ${version}; this build supports up to ${SUPPORTED_VERSION}. Upgrade todopi and try again.`,
-    );
-  }
+  // 版本更高照样读出来：拒绝的是写（assertWritable），不是读（spec §9）
   return {
     version,
     id_prefix: typeof raw["id_prefix"] === "string" ? raw["id_prefix"] : "tp",

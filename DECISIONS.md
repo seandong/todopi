@@ -2306,3 +2306,15 @@ Node 用 spec reporter，整层被判 blocked。
   编辑器是 `$VISUAL`、`$EDITOR`、`vi`，经 `sh -c` 启动（与 git 一样允许 `code --wait` 这类带参数的值）。编辑器非零退出、标题清空都当放弃，什么都不写。
 - 编辑器里只给标题、Description、Acceptance Criteria、Plan：frontmatter 字段各有选项与校验，Log 是追加式记录，都不进编辑器。
 - `add --edit` 的标题可以不在命令行给；新任务的 Acceptance Criteria 里只能是未勾选的 `- [ ] …` 行（新任务不可能已经核对过什么）。
+
+## D046 — 格式版本更高的账本：读照常，写退出 4
+
+- 日期：2026-09-28（F25，v0.1 缺口审计，spec §9）。
+- **闸门从读取口挪到写入口**：之前 `readConfig` 见到更高版本就抛退出 4，连 `ls` 都用不了；spec §9 是「MUST 拒绝写入，SHOULD 仍能读取」。
+  现在 `discoverLedger` 照常返回，`assertWritable` 挡在 `withLedgerLock`（拿锁本身也是写）、`init`，以及每一个落盘处
+  （`createTaskUnlocked`、`prepareUpdate` 的 commit、`writeNormalized`）——后者是纵深防御：实现时 e2e 发现 `createTask` 绕过
+  `withLedgerLock` 直接拿锁，`add` 在 version 2 的账本上照样建了任务。
+- 读命令在 stderr 提示一句（`--quiet` 不提示，stdout 与 `--json` 不变）：按版本 1 的规则读，结果（尤其 `doctor` 的发现）可能不准。
+- `handoff` 整条退出 4，而不是给一份「交接了但每个任务都没记上」的报告：它的本分就是写。
+- `prime` 的记录与压缩标记是运行时状态，但无 git 时它们在 `.todopi/.cache/` 里：版本更高时不写，`prime` 照常输出（只是不留记录，
+  「这次会话以来的变化」没有基线）。`setup` 写的是 agent 的配置、不是账本，照常可用。

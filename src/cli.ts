@@ -22,6 +22,14 @@ program
 program.hook("preAction", async () => {
   const { setAgentOption } = await import("./commands/actor.ts");
   setAgentOption(program.opts()["agent"] as string | undefined);
+  // 账本的格式版本比本实现高：读命令照常，先说一句（写命令会在写之前退出 4）。spec §9，F25
+  if (program.opts()["quiet"] !== true) {
+    const { findLedger, isNewerVersion, newerVersionNote } = await import("./format/discover.ts");
+    let ledger = null;
+    // 坏的 config 由命令自己报，这里只管提示
+    try { ledger = findLedger((program.opts()["directory"] as string | undefined) ?? process.cwd()); } catch { ledger = null; }
+    if (ledger !== null && isNewerVersion(ledger)) process.stderr.write(`${newerVersionNote(ledger)}\n`);
+  }
 });
 
 program

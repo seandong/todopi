@@ -11,7 +11,7 @@ import { newIdBody, makeId } from "./id.ts";
 import { leasePaths } from "./lease.ts";
 import { splitEnvelope } from "./envelope.ts";
 import { commentsIn, entrySource, parseFrontmatter } from "./frontmatter.ts";
-import type { Ledger } from "./discover.ts";
+import { assertWritable, type Ledger } from "./discover.ts";
 import type { TaskFile } from "../domain/types.ts";
 import { EXIT, CliError } from "../exit.ts";
 
@@ -62,7 +62,7 @@ export function createTask(
   make: (ctx: CreateContext) => NewTask,
   validate: Validate,
 ): TaskFile {
-  return withLock(lockPathFor(ledger), () => createTaskUnlocked(ledger, make, validate));
+  return withLedgerLock(ledger, () => createTaskUnlocked(ledger, make, validate));
 }
 
 /**
@@ -121,6 +121,7 @@ export function createTaskUnlocked(
       throw new CliError(EXIT.usage, `Refusing to write a task that would not pass doctor: ${rejected}`);
     }
 
+    assertWritable(ledger);
     writeFileAtomic(path, text);
 
     // 写完读回一次真实文件，确认落盘的内容与我们写的一致。不一致只可能是文件
@@ -160,6 +161,8 @@ function parseCandidate(relPath: string, id: string, text: string): TaskFile | s
 
 /** 拿着账本的写锁跑一段。调用方需要「读 → 判断 → 可能写多个文件」落在一次持锁内时用它。 */
 export function withLedgerLock<T>(ledger: Ledger, fn: () => T): T {
+  // 所有改账本的写都经过这把锁：版本更高的账本在拿锁之前就拒绝（拿锁本身也是写）
+  assertWritable(ledger);
   return withLock(lockPathFor(ledger), fn);
 }
 
@@ -235,7 +238,7 @@ export function prepareUpdate(
 
   return {
     candidate,
-    commit: () => writeFileAtomic(join(ledger.dir, "tasks", `${id}.md`), text),
+    commit: () => { assertWritable(ledger); writeFileAtomic(join(ledger.dir, "tasks", `${id}.md`), text); },
   };
 }
 
@@ -395,5 +398,7 @@ export function planNormalized(
 
 /** 写 planNormalized 算好的内容。调用方必须已持有账本锁。 */
 export function writeNormalized(ledger: Ledger, t: TaskFile, text: string): void {
+  // 版本闸门在 withLedgerLock；落盘处再挡一次，免得哪个调用方绕过了锁（F25 里 createTask 就是这么漏的）
+  assertWritable(ledger);
   writeFileAtomic(join(ledger.dir, relPathOf(t.idFromFilename)), text);
 }

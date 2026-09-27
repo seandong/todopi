@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
 import { leaseDirFor } from "./lease.ts";
-import type { Ledger } from "./discover.ts";
+import { isNewerVersion, type Ledger } from "./discover.ts";
 import { TIMESTAMP_RE } from "../domain/types.ts";
 
 export type PrimeKey = { session: string } | { actor: string };
@@ -47,6 +47,8 @@ export type PrimeRecord = {
  * PR 都不经过 CLI——而那两种正是 FR-D4 担心的「verify 在授信之后悄悄变了」。
  */
 export function recordPrime(ledger: Ledger, key: PrimeKey, now: string, verify: Record<string, string> = {}): void {
+  // 版本更高的账本只读：会话状态也不写（无 git 时它在 .todopi/.cache/ 里）。prime 照常输出，只是不留记录
+  if (isNewerVersion(ledger)) return;
   const path = pathFor(ledger, key);
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileAtomic(path, `${JSON.stringify({ key: keyText(key), primed_at: now, verify })}\n`);
@@ -89,6 +91,8 @@ function compactedPath(ledger: Ledger, key: PrimeKey): string {
 }
 
 export function markCompacted(ledger: Ledger, key: PrimeKey): void {
+  // 版本更高的账本只读：会话状态也不写（无 git 时它在 .todopi/.cache/ 里）。prime 照常输出，只是不留记录
+  if (isNewerVersion(ledger)) return;
   const path = compactedPath(ledger, key);
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileAtomic(path, `${keyText(key)}\n`);

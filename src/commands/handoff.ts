@@ -8,7 +8,7 @@ import { hostname } from "node:os";
 import { currentActor } from "./actor.ts";
 import { isDisplayable, visibleLine } from "./view.ts";
 import { writeAsWorker } from "./worker-write.ts";
-import { discoverLedger } from "../format/discover.ts";
+import { assertWritable, discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";
 import { UNREADABLE, readPrimeRecord, verifyPrint } from "../format/session.ts";
 import { statusOf } from "../domain/derive.ts";
@@ -72,6 +72,8 @@ export function verifySnapshot(t: TaskFile): string {
 
 export function runHandoff(opts: HandoffOptions): HandoffReport {
   const ledger = discoverLedger(opts.directory);
+  // handoff 的本分是往自己的任务里记一笔：版本更高的账本写不了，整条命令当场退出 4，不给一份「交接了却没记」的报告
+  assertWritable(ledger);
   const actor = currentActor(ledger.root, opts.actor);
   const who = { actor, host: hostname() };
   const now = opts.now ?? Date.now();
