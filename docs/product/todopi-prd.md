@@ -421,12 +421,14 @@ agent 录，而不是假设六家表现一致。
 
 - **OpenCode 1.18.32**，用 `opencode.json` 的自定义 provider（`@ai-sdk/openai-compatible`，`baseURL` 指向本地假服务器
   `tools/probes/openai-fake-api.mjs`，记录每个请求体）绕开凭据：事件、插件加载、压缩、系统提示的组装走的都是 OpenCode 的真实代码路径，
-  只有模型是假的（与 D037 的 echo provider、F17 的假 Gemini API 同一个思路）。
-- 无头 `opencode run`：会话开始时插件跑 prime，`## tp-…` 出现在请求的系统提示里。（`opencode run` 的 stdin 不是终端时要接 `/dev/null`，
-  否则一直等输入、不发请求。）
-- 交互式：说一句 → 往任务里记一条 MARKER → `/compact` → 再说一句。压缩前的请求（包括压缩本身那个摘要请求，它在记下 MARKER 之后发出）
-  系统提示里没有 MARKER——插件按会话缓存了会话开始时的 prime；压缩后的第一个请求里有 MARKER。按会话记录的 prime 时间（01:02:23Z）晚于
-  MARKER（01:02:13Z）：`session.compacted` 触发、插件重跑 prime、下一次 `experimental.chat.system.transform` 推入新输出，三步都有证据。
+  只有模型是假的（与 F17 的假 Gemini API 同一个思路：看请求体，不靠模型回答——它只回一句固定的话，不像 D037 的 echo provider 那样回显）。
+- 无头 `opencode run`：会话开始时插件跑 prime（按会话的 prime 记录，01:00:13Z），当时看到的请求体系统提示里有 `## tp-…`；那一轮的请求日志
+  后来被交互式实验的清空覆盖了，没有留存。（`opencode run` 的 stdin 不是终端时要接 `/dev/null`，否则一直等输入、不发请求。）
+- 交互式：说一句 → 往任务里记一条 MARKER（01:02:13Z）→ `/compact` → 再说一句。能区分「压缩触发了重跑」与别的解释的证据：
+  压缩本身的摘要请求（01:02:23.25 发出，在 MARKER 之后、经过同一个 `system.transform`）系统提示里**没有** MARKER——插件读的是缓存，
+  不是每轮都重跑；缓存是没有过期的 Map；按会话的 prime 记录 `primed_at` 是 01:02:23Z，落在压缩窗口里（01:02:23.25–.42）、早于压缩后
+  那一轮（01:02:42.7），之后没再被覆盖——不是下一轮懒加载补跑的。压缩后的第一个请求里**有** MARKER。`session.compacted` 这个事件本身
+  没有直接观察到，是从这几条推断的。
 
 ### 2026-09-26 实测（F16 `setup pi`）
 

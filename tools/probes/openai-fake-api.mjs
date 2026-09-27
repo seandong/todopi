@@ -9,7 +9,9 @@
 //   #   压缩前的请求：系统提示里有 prime 的 `## tp-…`，没有 MARKER（插件按会话缓存了会话开始时的 prime）
 //   #   压缩后的第一个请求：系统提示里有 MARKER（session.compacted 让插件重跑了 prime）
 //
-// 每个请求体追加一行 JSON 到日志。回复是固定的一句；按请求里的 stream 决定回 SSE 还是整段 JSON。只监听 127.0.0.1。
+// 每个请求体追加一行 JSON 到日志（带收到的时刻 `at`，顺序可以直接对上 todopi note 的时间）。回复是固定的一句——它不回显系统提示，
+// 证据看请求体。按请求里的 stream 决定回 SSE 还是整段 JSON。只监听 127.0.0.1。usage 里的 prompt_tokens 固定是 50000：给模型配了
+// limit.context 时可能触发自动压缩，实验时别配。
 
 import { createServer } from "node:http";
 import { appendFileSync } from "node:fs";
@@ -27,8 +29,9 @@ createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
-    const parsed = body === "" ? {} : JSON.parse(body);
-    appendFileSync(log, `${JSON.stringify({ method: req.method, url: req.url, body: parsed })}\n`);
+    let parsed;
+    try { parsed = body === "" ? {} : JSON.parse(body); } catch { res.writeHead(400).end("bad json\n"); return; }
+    appendFileSync(log, `${JSON.stringify({ at: new Date().toISOString(), method: req.method, url: req.url, body: parsed })}\n`);
     if (req.url.endsWith("/models")) {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ object: "list", data: [{ id: "echo", object: "model", owned_by: "fake" }] }));

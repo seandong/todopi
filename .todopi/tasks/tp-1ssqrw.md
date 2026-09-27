@@ -6,7 +6,7 @@ assignee: "seandong"
 rank: "il"
 verify: "make check && bash tools/e2e/f15-setup-codex-opencode.sh"
 created: "2026-09-26T08:46:43Z"
-updated: "2026-09-27T00:54:54Z"
+updated: "2026-09-27T01:08:49Z"
 ---
 
 ## Description
@@ -15,7 +15,7 @@ updated: "2026-09-27T00:54:54Z"
 
 ## Acceptance Criteria
 
-- [ ] 用 todopi setup opencode 生成的插件，在支持压缩的真实 OpenCode 会话里：压缩前往任务记一个新标记，压缩后模型能原样引出它
+- [ ] 用 todopi setup opencode 生成的插件，在支持压缩的真实 OpenCode 会话里：压缩前往任务记一个新标记，压缩后发给模型的请求（系统提示）里有它
 - [ ] 记录 session.compacted 触发、prime 被调用、下一次 system.transform 推入新输出
 - [ ] 实测结果与 OpenCode 版本写进 PRD §17
 
@@ -24,3 +24,4 @@ updated: "2026-09-27T00:54:54Z"
 - 2026-09-26T08:46:43Z seandong created from=tp-thtkze
 - 2026-09-26T10:08:57Z seandong note: 可能的无凭据验证办法（F16 在 pi 上用过，D037）：测试专用的插件注册一个 echo provider，把系统提示原样回答，在真实 OpenCode 运行时里验证压缩后的注入。OpenCode 是否支持插件注册自定义 provider、免费档限制是否也管到自定义 provider，需要先核实。
 - 2026-09-27T00:54:54Z seandong claimed
+- 2026-09-27T01:08:49Z seandong note: 验收标准 #1 按实际做法改写：原文「压缩后模型能原样引出它」——没有真模型凭据，用本地假 OpenAI 兼容 provider 在真实 OpenCode 运行时里验证，假模型只回固定的一句，不会引出任何东西；证据改为「压缩后发给模型的请求的系统提示里有这个标记」，比模型的回答更直接（模型能不能读到系统提示是 provider 的事，不在 todopi 的边界内，同 D037）。
