@@ -16,14 +16,22 @@ import { EXIT } from "../../src/exit.ts";
 
 const ME = "me@host";
 
-/** 每条用例一个独立的配置目录：绝不碰真实的 ~/.config/todopi/trust。 */
+/**
+ * 每条用例一个独立的配置目录：绝不碰真实的 ~/.config/todopi/trust。另外摘掉环境里的 `CI`：GitHub Actions 设
+ * `CI=true`，而 verify 在 `CI=true` 时跳过信任确认——「未信任的仓库拒绝执行」那条在 CI 上就此变红（F21 修好 CI 后第一次
+ * 跑出来）。要测 `CI=true` 的用例在这里面自己设。
+ */
 function withConfig<T>(fn: () => T): T {
   const cfg = mkdtempSync(join(tmpdir(), "todopi-cfg-"));
   const saved = process.env["TODOPI_CONFIG_DIR"];
+  const savedCi = process.env["CI"];
   process.env["TODOPI_CONFIG_DIR"] = cfg;
+  delete process.env["CI"];
   try { return fn(); } finally {
     if (saved === undefined) delete process.env["TODOPI_CONFIG_DIR"];
     else process.env["TODOPI_CONFIG_DIR"] = saved;
+    if (savedCi === undefined) delete process.env["CI"];
+    else process.env["CI"] = savedCi;
   }
 }
 
