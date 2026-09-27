@@ -45,8 +45,11 @@ jobs:
       - name: install.sh takes the npm path, then the first command runs
         run: |
           apt-get update -qq && apt-get install -y -qq curl git >/dev/null
+          # 容器任务的 HOME 是从宿主机挂进来的 /github/home，属主是 runner 而不是 root；安装器（正确地）拒绝以 root 装进别人的目录，
+          # 所以用 root 自己的 HOME
+          export HOME=/root
           cd /artifacts
-          out=$(TODOPI_VERSION=$(cat VERSION) TODOPI_NPM_SPEC=/artifacts/todopi.tgz sh install.sh 2>&1); echo "$out"
+          out=$(TODOPI_VERSION=$(cat VERSION) TODOPI_NPM_SPEC=/artifacts/todopi.tgz sh install.sh 2>&1) || { echo "$out"; exit 1; }; echo "$out"
           echo "$out" | grep -q "installing the npm package"
           export PATH="$HOME/.local/bin:$PATH"
           mkdir /tmp/w && cd /tmp/w && git init -q
@@ -65,8 +68,9 @@ jobs:
           path: /artifacts
       - name: install.sh takes the binary path (checksum verified), then the first command runs
         run: |
+          export HOME=/root
           cd /artifacts
-          out=$(TODOPI_VERSION=$(cat VERSION) TODOPI_DOWNLOAD_BASE=file:///artifacts sh install.sh 2>&1); echo "$out"
+          out=$(TODOPI_VERSION=$(cat VERSION) TODOPI_DOWNLOAD_BASE=file:///artifacts sh install.sh 2>&1) || { echo "$out"; exit 1; }; echo "$out"
           echo "$out" | grep -q "no Node.js >= 20 found"
           echo "$out" | grep -q "checksum verified"
           export PATH="$HOME/.local/bin:$PATH"
