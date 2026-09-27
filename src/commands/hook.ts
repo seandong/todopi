@@ -8,7 +8,7 @@
 // 2. 用户级钩子会在**每个**项目里触发，包括没有 `.todopi/` 的；那里什么都不输出、退出 0。
 
 import { discoverLedger, findLedger } from "../format/discover.ts";
-import { markCompacted, takeCompacted } from "../format/session.ts";
+import { claimHookInjection, markCompacted, takeCompacted } from "../format/session.ts";
 import { currentActor } from "./actor.ts";
 import { EXIT, CliError } from "../exit.ts";
 
@@ -27,6 +27,19 @@ export function sessionFromHookPayload(payload: string): string | undefined {
     if (typeof v === "string" && v !== "") return v;
   }
   return undefined;
+}
+
+/**
+ * 钩子载荷里「这是哪一次」：事件名与来源（Claude Code / Codex 的 SessionStart 带 `source`：startup、resume、clear、compact……）。
+ * 去重的键带上它（F38 评审）：同一会话先 startup、很快又 compact，是两次该注入的事件，不是重复；重复的是同一事件被两份钩子各跑一遍。
+ */
+export function occasionFromHookPayload(payload: string): string {
+  let parsed: unknown;
+  try { parsed = JSON.parse(payload); } catch { return ""; }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "";
+  const o = parsed as Record<string, unknown>;
+  const pick = (k: string) => (typeof o[k] === "string" ? o[k] as string : "");
+  return `${pick("hook_event_name")}/${pick("source")}`;
 }
 
 /**
@@ -69,4 +82,18 @@ export function compactionGate(directory: string, mode: "mark" | "take", session
   const key = session !== undefined ? { session } : { actor: currentActor(ledger.root, actor) };
   if (mode === "mark") { markCompacted(ledger, key); return false; }
   return takeCompacted(ledger, key);
+}
+
+/**
+ * `prime --hook` 该不该印（F38）：同一个键（agent、事件与来源、会话 id）10 秒内只印第一次——setup 的钩子与市场包同时装了时，
+ * 同一事件不注入两遍。键由调用方拼（见 cli.ts）；没有会话 id 时调用方传 undefined。
+ * 没有会话 id 不去重：退回按 actor 时，同一 actor 并行起的几个 agent 会互相吞掉 prime。占不到锁、写不了：照常印（宁可重复也不丢）。
+ */
+export function firstInjection(directory: string, key: string | undefined): boolean {
+  if (key === undefined) return true;
+  try {
+    return claimHookInjection(discoverLedger(directory), key, Date.now());
+  } catch {
+    return true;
+  }
 }

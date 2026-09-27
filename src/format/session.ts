@@ -11,7 +11,8 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../fs/atomic.ts";
-import { leaseDirFor } from "./lease.ts";
+import { leaseDirFor, leasePaths } from "./lease.ts";
+import { withLock } from "../fs/lock.ts";
 import { isNewerVersion, type Ledger } from "./discover.ts";
 import { TIMESTAMP_RE } from "../domain/types.ts";
 
@@ -107,4 +108,27 @@ export function takeCompacted(ledger: Ledger, key: PrimeKey): boolean {
   if (!existsSync(path)) return false;
   rmSync(path, { force: true });
   return true;
+}
+
+/**
+ * 钩子注入去重（F38）：同一个键（agent、事件与来源、会话）在 `windowMs` 内第二次来要 prime 时返回 false（调用方什么都不做）。一个 agent 同时加载了
+ * `todopi setup` 写的钩子与市场装的包时，会话开始会跑两遍 prime、注入两遍。在账本的写锁里读、写上次注入的时刻——两个钩子
+ * 并发地来，恰好一个拿到 true。窗口只挡「同一时刻的重复」：resume、压缩之后的再注入都在窗口之外。
+ * 版本更高的账本不写会话状态：返回 true（照常注入，宁可重复也不丢）。
+ */
+export function claimHookInjection(ledger: Ledger, key: string, nowMs: number, windowMs = 10_000): boolean {
+  if (isNewerVersion(ledger)) return true;
+  // 键（agent|事件/来源|会话）哈希成文件名，与 prime 记录同一个目录
+  const path = pathFor(ledger, { session: `hooked:${key}` }).replace(/\.json$/, ".hooked");
+  return withLock(leasePaths(ledger).lockPath, () => {
+    let last = NaN;
+    // 没有记录就当从没注入过
+    try { last = Number(readFileSync(path, "utf8").trim()); } catch { last = NaN; }
+    // 取绝对值：各进程的 now 是拿锁**之前**取的，等锁的那个会读到比自己的 now 还新的记录——那正是刚刚的重复，不是时钟回拨
+    // （e2e 里五个并发的钩子偶尔注入两次，就是这么漏的）。只有差得比窗口还大才放行
+    if (Number.isFinite(last) && Math.abs(nowMs - last) < windowMs) return false;
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileAtomic(path, `${nowMs}\n`, undefined, { fsync: false });
+    return true;
+  });
 }

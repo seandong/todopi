@@ -284,6 +284,7 @@ test("opencode 插件：在 session.created / session.compacted 时跑 prime 并
     const chain = { cwd: () => chain, quiet: () => chain, nothrow: () => Promise.resolve(out) };
     return chain;
   };
+  delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt; // 每个真实进程都从没有这个标志开始（F38）
   const hooks = await TodopiPlugin({ $, directory: dir });
   const system = async (sessionID?: string) => {
     const out = { system: ["base"] };
@@ -291,7 +292,7 @@ test("opencode 插件：在 session.created / session.compacted 时跑 prime 并
     return out.system;
   };
   await hooks.event({ event: { type: "session.created", properties: { info: { id: "s1" } } } });
-  assert.deepEqual(calls, ['todopi --agent opencode prime --hook < <payload>|{"sessionID":"s1"}']);
+  assert.deepEqual(calls, ['todopi --agent opencode prime --hook < <payload>|{"sessionID":"s1","hook_event_name":"session.created"}']);
   assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 1"]);
   assert.deepEqual(await system("s1"), ["base", "## tp-aaaaaa: call 1"], "缓存：不是每一轮都跑 prime");
   assert.equal(calls.length, 1);
@@ -329,6 +330,7 @@ test("opencode 插件：prime 失败（todopi 还不在 PATH 上）时不缓存�
     const chain = { cwd: () => chain, quiet: () => chain, nothrow: () => Promise.resolve(out) };
     return chain;
   };
+  delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt; // 每个真实进程都从没有这个标志开始（F38）
   const hooks = await TodopiPlugin({ $, directory: dir });
   await hooks.event({ event: { type: "session.created", properties: { info: { id: "s1" } } } });
   const first = { system: ["base"] };
@@ -373,11 +375,12 @@ test("pi 扩展：session_start / session_compact 跑 prime（--session 取自 s
     on: (name: string, fn: (e: unknown, ctx: unknown) => Promise<unknown>) => handlers.set(name, fn),
     exec: async (cmd: string, args: string[]) => { calls.push([cmd, ...args]); return { code, stdout: `## tp-aaaaaa: call ${++n}\n`, stderr: "" }; },
   };
+  delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt; // 每个真实进程都从没有这个标志开始（F38）
   factory(pi);
   const ctx = (id: string) => ({ cwd: dir, sessionManager: { getSessionId: () => id } });
   const turn = async (id: string) => handlers.get("before_agent_start")!({ systemPrompt: "BASE" }, ctx(id));
   await handlers.get("session_start")!({ reason: "startup" }, ctx("s1"));
-  assert.deepEqual(calls, [["todopi", "--agent", "pi", "prime", "--hook", "--session", "s1"]]);
+  assert.deepEqual(calls, [["todopi", "--agent", "pi", "prime", "--hook", "--session", "s1", "--hook-event", "session_start"]]);
   assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" });
   assert.deepEqual(await turn("s1"), { systemPrompt: "BASE\n\n## tp-aaaaaa: call 1" }, "缓存：不是每一轮都跑 prime");
   await handlers.get("session_compact")!({ reason: "manual" }, ctx("s1"));
@@ -403,6 +406,7 @@ test("pi / opencode：没有账本时的空结果只在同一会话里出现 .to
       on: (n: string, fn: (e: unknown, ctx: unknown) => Promise<unknown>) => handlers.set(n, fn),
       exec: async () => { calls++; return { code: 0, stdout: existsSync(join(dir, ".todopi")) ? "## tp-aaaaaa: now\n" : "", stderr: "" }; },
     };
+    delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt;
     factory(pi);
     const ctx = { cwd: dir, sessionManager: { getSessionId: () => "s1" } };
     await handlers.get("session_start")!({}, ctx);
@@ -425,7 +429,8 @@ test("pi / opencode：没有账本时的空结果只在同一会话里出现 .to
       const chain = { cwd: () => chain, quiet: () => chain, nothrow: () => Promise.resolve(out) };
       return chain;
     };
-    const hooks = await TodopiPlugin({ $, directory: dir });
+    delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt; // 每个真实进程都从没有这个标志开始（F38）
+  const hooks = await TodopiPlugin({ $, directory: dir });
     await hooks.event({ event: { type: "session.created", properties: { info: { id: "s1" } } } });
     const o1 = { system: ["B"] };
     await hooks["experimental.chat.system.transform"]({ sessionID: "s1" }, o1);
@@ -504,4 +509,56 @@ test("新版钩子已经在、同一事件里还留着被改过的旧命令：�
   const r = ensureClaudeHooks(p);
   assert.equal(r.status, "unchanged");
   assert.match(r.notes.join("\n"), /SessionStart group still runs the old `todopi prime --hook` alongside/);
+});
+
+test("OpenCode 插件与 pi 扩展在同一进程里同一时刻装了两份：只有第一份注册钩子；过几秒的重载照常注册（F38）", async () => {
+  const { OPENCODE_PLUGIN } = await import("../../src/format/opencode-plugin.ts");
+  const { PI_EXTENSION } = await import("../../src/format/pi-extension.ts");
+  const d = mkdtempSync(join(tmpdir(), "todopi-twice-"));
+  const load = async (name: string, text: string) => { const f = join(d, name); writeFileSync(f, text); return import(f); };
+  delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt;
+  const a = await (await load("a.mjs", OPENCODE_PLUGIN)).TodopiPlugin({ $: () => ({}), directory: d });
+  const b = await (await load("b.mjs", OPENCODE_PLUGIN)).TodopiPlugin({ $: () => ({}), directory: d });
+  assert.ok(typeof a.event === "function" && typeof a["experimental.chat.system.transform"] === "function");
+  assert.deepEqual(b, {}, "第二份没有钩子");
+  delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt;
+  const handlers: string[][] = [[], []];
+  for (const [k, name] of [[0, "p.mjs"], [1, "q.mjs"]] as const) {
+    const { default: factory } = await load(name, PI_EXTENSION);
+    factory({ on: (ev: string) => handlers[k]!.push(ev), exec: async () => ({ code: 0, stdout: "" }) });
+  }
+  assert.ok(handlers[0]!.length > 0);
+  assert.deepEqual(handlers[1], [], "第二份什么都没注册");
+  // 过了几秒再加载一次（pi 的 /reload、切换会话）：照常注册（F38 评审：永久的标志让重载之后唯一的一份也失效）
+  (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt = performance.now() - 60_000;
+  const later: string[] = [];
+  const { default: again } = await load("r.mjs", PI_EXTENSION);
+  again({ on: (ev: string) => later.push(ev), exec: async () => ({ code: 0, stdout: "" }) });
+  assert.deepEqual(later, handlers[0], "重载之后照常注册");
+  // 用的是单调时钟：先正常加载一次（由实现自己设标志），然后墙钟回拨一小时、真实时间过去 10 秒，再重载——照样注册（评审三轮）。
+  // 用墙钟时，回拨后的差是负数、「小于 5 秒」，重载被当成重复而不注册
+  delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt;
+  const first: string[] = [];
+  const { default: f1 } = await load("t1.mjs", PI_EXTENSION);
+  f1({ on: (ev: string) => first.push(ev), exec: async () => ({ code: 0, stdout: "" }) });
+  assert.deepEqual(first, handlers[0]);
+  const realNow = Date.now, realPerf = performance.now.bind(performance);
+  Date.now = () => realNow() - 3_600_000;
+  performance.now = () => realPerf() + 10_000;
+  try {
+    const back: string[] = [];
+    const { default: f2 } = await load("t2.mjs", PI_EXTENSION);
+    f2({ on: (ev: string) => back.push(ev), exec: async () => ({ code: 0, stdout: "" }) });
+    assert.deepEqual(back, handlers[0], "墙钟回拨后重载照常注册");
+  } finally { Date.now = realNow; performance.now = realPerf; }
+  delete (globalThis as Record<string, unknown>).__todopiPrimeLoadedAt;
+});
+
+test("pi 扩展与 OpenCode 插件给 prime 传各自的事件名：会话开始与压缩不共用去重键（F38 评审二轮）", async () => {
+  const { PI_EXTENSION } = await import("../../src/format/pi-extension.ts");
+  const { OPENCODE_PLUGIN } = await import("../../src/format/opencode-plugin.ts");
+  assert.match(PI_EXTENSION, /"--hook-event", hookEvent/);
+  for (const ev of ["session_start", "session_compact", "before_agent_start"]) assert.match(PI_EXTENSION, new RegExp(`prime\\(ctx, "${ev}"\\)`));
+  assert.match(OPENCODE_PLUGIN, /hook_event_name: hookEvent/);
+  for (const ev of ["session.created", "session.compacted"]) assert.ok(OPENCODE_PLUGIN.includes(`, "${ev}")`), ev);
 });

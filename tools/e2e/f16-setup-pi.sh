@@ -29,7 +29,7 @@ out="$(todopi -C "$W" setup pi 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^created .*/.pi/extensions/todopi.ts$" && printf '%s\n' "$out" | grep -q "trust" \
   && ok "setup pi 写出扩展并提示信任" || fail "rc=${rc}：$out"
 [ "$(todopi -C "$W" setup pi 2>&1 | grep -c '^unchanged')" = "1" ] && ok "setup pi 幂等" || fail "setup pi 不幂等"
-grep -q 'pi.exec("todopi", \["--agent", "pi", "prime", "--hook", "--session", id\]' "$W/.pi/extensions/todopi.ts" && ok "扩展用 --session 传会话 id" || fail "扩展里没有预期的调用"
+grep -q 'pi.exec("todopi", \["--agent", "pi", "prime", "--hook", "--session", id, "--hook-event", hookEvent\]' "$W/.pi/extensions/todopi.ts" && ok "扩展用 --session 传会话 id、--hook-event 传事件（F38）" || fail "扩展里没有预期的调用"
 
 # 照扩展的调用方式跑：stdin 关闭（pi.exec 的 stdin 是 ignore），不能卡住；按 --session 记下会话
 out="$(cd "$W" && todopi prime --hook --session pi-sess-1 </dev/null 2>&1)"; rc=$?
