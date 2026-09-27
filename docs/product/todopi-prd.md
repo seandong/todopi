@@ -417,6 +417,17 @@ agent 录，而不是假设六家表现一致。
   todopi prime 输出」。**压缩后的注入没有实测**：免费模型不能用于压缩（「free tier can only be used from within
   OpenCode」），本机另外两个 provider 的凭据不可用。
 
+### 2026-09-27 实测（tp-1ssqrw：OpenCode 压缩后注入）
+
+- **OpenCode 1.18.32**，用 `opencode.json` 的自定义 provider（`@ai-sdk/openai-compatible`，`baseURL` 指向本地假服务器
+  `tools/probes/openai-fake-api.mjs`，记录每个请求体）绕开凭据：事件、插件加载、压缩、系统提示的组装走的都是 OpenCode 的真实代码路径，
+  只有模型是假的（与 D037 的 echo provider、F17 的假 Gemini API 同一个思路）。
+- 无头 `opencode run`：会话开始时插件跑 prime，`## tp-…` 出现在请求的系统提示里。（`opencode run` 的 stdin 不是终端时要接 `/dev/null`，
+  否则一直等输入、不发请求。）
+- 交互式：说一句 → 往任务里记一条 MARKER → `/compact` → 再说一句。压缩前的请求（包括压缩本身那个摘要请求，它在记下 MARKER 之后发出）
+  系统提示里没有 MARKER——插件按会话缓存了会话开始时的 prime；压缩后的第一个请求里有 MARKER。按会话记录的 prime 时间（01:02:23Z）晚于
+  MARKER（01:02:13Z）：`session.compacted` 触发、插件重跑 prime、下一次 `experimental.chat.system.transform` 推入新输出，三步都有证据。
+
 ### 2026-09-26 实测（F16 `setup pi`）
 
 - **pi 0.84.0**（包内 docs/extensions.md 与类型定义为一手来源）：项目本地扩展放 `.pi/extensions/*.ts`（jiti 加载，TS 不用编译），
