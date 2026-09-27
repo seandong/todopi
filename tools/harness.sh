@@ -392,8 +392,20 @@ print_overall() {
 
 # ── 命令：test（Layer 2） / e2e（Layer 3） ────────────────────────────────────
 
+# test 与 e2e 在私有的临时目录里跑，结束（含失败、Ctrl-C）整个删掉。单测的 mkdtempSync 与 e2e 的 mktemp 都认 TMPDIR；
+# 它们大多不自己清理——2026-09-28 系统临时目录里攒了 23.6 万个 todopi-* 目录（5.7 GB），把磁盘写满（F31）。
+# ci 在同一个进程里连跑 test 与 e2e：已经建过就复用，trap 只装一次。
+use_private_tmp() {
+  if [ -n "${HARNESS_TMP:-}" ] && [ -d "$HARNESS_TMP" ]; then return; fi
+  HARNESS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/todopi-harness.XXXXXX")" || die "建不了私有临时目录"
+  export HARNESS_TMP TMPDIR="$HARNESS_TMP"
+  trap 'rm -rf "$HARNESS_TMP"' EXIT
+  trap 'rm -rf "$HARNESS_TMP"; exit 130' INT TERM
+}
+
 cmd_test() {
   header "test — Layer 2（运行时行为）"
+  use_private_tmp
   have jq || die "test 需要 jq。安装：brew install jq"
   checks_init
 
@@ -497,6 +509,7 @@ cmd_test() {
 
 cmd_e2e() {
   header "e2e — Layer 3（系统确认）"
+  use_private_tmp
   have jq || die "e2e 需要 jq。安装：brew install jq"
   checks_init
   # 每个 feature 一个 tools/e2e/f<NN>-<name>.sh，与任务 verify 字段里的 system

@@ -2381,3 +2381,13 @@ Node 用 spec reporter，整层被判 blocked。
   换成规范形态），§9.1 记修订。
 - 顺带修了 doctor 的误报（同一场景实测）：invariant-6 按字符串比先后，`…+00:00` 与同一时刻的 `…Z` 被判成「updated 早于 created」。只在两边都是规范形态时
   比；不规范的已经由格式那条报了。
+
+## D052 — test / e2e 在私有临时目录里跑
+
+- 日期：2026-09-28（F31）。
+- 起因：磁盘写满。系统临时目录里攒了 23.6 万个 `todopi-*` 目录（5.7 GB）——单测的 `mkdtempSync` 与 e2e 的 `mktemp` 大多不清理，每跑一遍
+  test + e2e 多出约 900 个（21 MB），一天几十遍。
+- 不去逐个用例补清理（几百处，漏一处就又开始攒），而是在入口收口：`harness.sh` 的 test 与 e2e 先建一个私有目录、把 `TMPDIR` 指过去，退出时
+  （含失败与 Ctrl-C）整个删掉；`ci` 在同一进程里连跑两层，复用同一个。node 的 `os.tmpdir()` 与 `mktemp` 都认 `TMPDIR`。
+- 直接跑 `node --test` 或单个 e2e 脚本不经过 harness，仍会留东西；那是手动调试，量小。
+- `tools/e2e/f31-private-tmp.sh` 在全新的 `TMPDIR` 下跑 test 层（不跑 e2e 层，免得递归），跑完与中途打断两种都要求什么都不剩；约 100 秒。
