@@ -11,29 +11,30 @@
 #       TODOPI_BENCH_KEEP=/some/dir bash …         把生成的账本留在那里（剖析用），不删
 #
 # 账本是直接生成的文件（用项目自己的发射器，逐字节与 CLI 写出的一样），2,000 次 `add` 要跑好几分钟；生成后先跑 doctor，
-# 不合法就退出，免得测的是一个 CLI 自己都读不懂的账本。形状贴近真实使用：20 个容器各带子任务、三成已关闭、一成进行中
-# （其中 5 个是跑 prime 的那个 actor 持有的）、一成半有 blocked_by、每个任务 3 条验收标准与 2–6 条 Log。
+# 不合法就退出，免得测的是一个 CLI 自己都读不懂的账本。形状按下标**确定地**分配（不靠随机数凑比例），运行时再数一遍打印出来：
+# 20 个容器（其余任务有一半挂在它们下面）、三成已关闭、一成进行中（其中恰好 5 个由跑 prime 的 actor 持有）、一成半有 blocked_by
+# （指向更早的任务，不成环）、每个任务 3 条验收标准与 2–6 条 Log。
 
 set -u
 unset CLAUDECODE CODEX_THREAD_ID GEMINI_CLI OPENCODE PI_SESSION_ID CURSOR_AGENT TODOPI_AGENT TODOPI_ACTOR CI
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 2
 RUNS="${TODOPI_BENCH_RUNS:-7}"
+MAX="${TODOPI_BENCH_MAX_MS:-}"
+case "$RUNS" in ''|*[!0-9]*|0) echo "bench: TODOPI_BENCH_RUNS must be a positive integer, got '${RUNS}'" >&2; exit 2 ;; esac
+case "$MAX" in *[!0-9]*) echo "bench: TODOPI_BENCH_MAX_MS must be a number of milliseconds, got '${MAX}'" >&2; exit 2 ;; esac
 N=2000
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export TODOPI_CONFIG_DIR="$TMP/config"
 
-# 被测的 CLI：默认现编一份 dist（不动仓库里的 dist/），与发布出去的 npm 包是同一种东西
-if [ -n "${TODOPI_BENCH_BIN:-}" ]; then
-  BIN=("$TODOPI_BENCH_BIN")
-else
-  node_modules/.bin/tsc -p tsconfig.build.json --outDir "$TMP/build/dist" || { echo "bench: build failed" >&2; exit 1; }
-  ln -s "$ROOT/node_modules" "$TMP/build/node_modules"
-  printf '{ "type": "module" }\n' > "$TMP/build/package.json"
-  BIN=(node "$TMP/build/dist/main.js")
-fi
+# 现编一份 dist（不动仓库里的 dist/）：默认被测的就是它，与发布出去的 npm 包是同一种东西；生成器也从它导入发射器——
+# Node 20（项目支持的最低版本）不能直接导入 .ts
+node_modules/.bin/tsc -p tsconfig.build.json --outDir "$TMP/build/dist" || { echo "bench: build failed" >&2; exit 1; }
+ln -s "$ROOT/node_modules" "$TMP/build/node_modules"
+printf '{ "type": "module" }\n' > "$TMP/build/package.json"
+if [ -n "${TODOPI_BENCH_BIN:-}" ]; then BIN=("$TODOPI_BENCH_BIN"); else BIN=(node "$TMP/build/dist/main.js"); fi
 
 W="${TODOPI_BENCH_KEEP:-$TMP/ledger}"
 if [ -e "$W" ] && [ -n "$(ls -A "$W" 2>/dev/null)" ]; then echo "bench: $W is not empty" >&2; exit 2; fi
@@ -42,48 +43,58 @@ git -C "$W" init -q
 git -C "$W" config user.name bench
 "${BIN[@]}" -C "$W" --quiet init >/dev/null || { echo "bench: init failed" >&2; exit 1; }
 
-node --no-warnings --input-type=module - "$W/.todopi/tasks" "$N" <<'EOF' || { echo "bench: generating the ledger failed" >&2; exit 1; }
+node --no-warnings --input-type=module - "$W/.todopi/tasks" "$N" "$TMP/build/dist/format/emit.js" <<'EOF' || { echo "bench: generating the ledger failed" >&2; exit 1; }
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { emitFrontmatter, nextRank } from "./src/format/emit.ts";
-const [dir, nText] = process.argv.slice(2);
+import { pathToFileURL } from "node:url";
+const [dir, nText, emitPath] = process.argv.slice(2);
+const { emitFrontmatter, nextRank } = await import(pathToFileURL(emitPath).href);
 const n = Number(nText);
-// 可复现：固定种子的线性同余，不用 Math.random
+// id 与标题用固定种子的伪随机（看起来像真的）；形状（状态、依赖、Log 条数）按下标确定地分配，比例是精确的
 let seed = 20260928;
 const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
 const pick = (a) => a[Math.floor(rand() * a.length)];
 const ids = [];
+const seen = new Set();
 const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
 while (ids.length < n) {
   let id = "tp-";
   for (let i = 0; i < 6; i++) id += alphabet[Math.floor(rand() * 36)];
-  if (!ids.includes(id)) ids.push(id);
+  if (!seen.has(id)) { seen.add(id); ids.push(id); }
 }
 const stamp = (i, extra = 0) => new Date(Date.UTC(2026, 0, 1) + i * 3600_000 + extra * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
-const containers = ids.slice(0, 20);
+const CONTAINERS = 20;
 let rank = null;
+let benchHeld = 0;
 for (let i = 0; i < n; i++) {
   const id = ids[i];
   rank = nextRank(rank);
-  const container = i < 20;
-  const r = rand();
-  const status = container ? "open" : r < 0.3 ? "closed" : r < 0.4 ? "in_progress" : "open";
-  const actor = status === "in_progress" && i % 40 < 5 ? "bench" : pick(["alice", "bob", "carol"]);
+  const container = i < CONTAINERS;
+  const slot = i % 10;
+  // 三成关闭（0–2）、一成进行中（3）、其余打开；容器永远打开
+  const status = container ? "open" : slot <= 2 ? "closed" : slot === 3 ? "in_progress" : "open";
+  // 进行中的前 5 个由 prime 的 actor（bench）持有，其余给别人
+  const mine = status === "in_progress" && benchHeld < 5;
+  if (mine) benchHeld++;
+  const actor = mine ? "bench" : ["alice", "bob", "carol"][i % 3];
+  // 一成半有 blocked_by：i % 20 ∈ {4, 11, 17}，指向 7 个之前的非容器任务（更早 ⇒ 不成环）
+  const blocker = !container && [4, 11, 17].includes(i % 20) && i - 7 >= CONTAINERS ? ids[i - 7] : undefined;
   const fm = {
     id, title: `${pick(["Add", "Fix", "Refactor", "Document", "Test"])} ${pick(["login", "export", "search", "billing", "sync"])} ${pick(["flow", "cache", "API", "page", "job"])} #${i}`,
     status,
     resolution: status === "closed" ? "done" : undefined,
     assignee: status === "in_progress" ? actor : undefined,
-    parent: !container && rand() < 0.5 ? pick(containers) : undefined,
-    blocked_by: !container && status !== "closed" && i > 40 && rand() < 0.15 ? [ids[Math.floor(rand() * (i - 1)) + 1]].filter((b) => !containers.includes(b)) : undefined,
-    rank, verify: rand() < 0.5 ? "npm test" : undefined,
-    labels: rand() < 0.4 ? [pick(["backend", "frontend", "infra", "docs"])] : undefined,
+    parent: !container && i % 2 === 0 ? ids[(i / 2) % CONTAINERS] : undefined,
+    blocked_by: blocker === undefined ? undefined : [blocker],
+    rank, verify: i % 2 === 1 ? "npm test" : undefined,
+    labels: i % 5 < 2 ? [["backend", "frontend", "infra", "docs"][i % 4]] : undefined,
     created: stamp(i), updated: stamp(i, 30),
   };
-  if (fm.blocked_by && fm.blocked_by.length === 0) delete fm.blocked_by;
+  // Log 恰好 2–6 条：关闭的 = created + 3 条 check + done（5）+ 0–1 条 note；进行中 = created + claimed + 0–4 条 note；打开 = created + 1–5 条 note
   const log = [`${stamp(i)} ${actor} created`];
-  if (status !== "open") log.push(`${stamp(i, 5)} ${actor} claimed`);
-  for (let k = 0; k < Math.floor(rand() * 4); k++) log.push(`${stamp(i, 10 + k)} ${actor} note: progress on ${id}, step ${k + 1}`);
+  const notes = status === "closed" ? i % 2 : status === "in_progress" ? i % 5 : 1 + (i % 5);
+  if (status === "in_progress") log.push(`${stamp(i, 5)} ${actor} claimed`);
+  for (let k = 0; k < notes; k++) log.push(`${stamp(i, 10 + k)} ${actor} note: progress on ${id}, step ${k + 1}`);
   const checked = status === "closed";
   if (checked) for (let k = 1; k <= 3; k++) log.push(`${stamp(i, 20 + k)} ${actor} check ac=${k}: criterion ${k}`);
   if (checked) log.push(`${stamp(i, 30)} ${actor} done verify=pass commit=abc1234 dirty=false`);
@@ -103,6 +114,14 @@ if ! out="$("${BIN[@]}" -C "$W" doctor 2>&1)"; then
   exit 1
 fi
 SHOW_ID="$(ls "$W/.todopi/tasks" | sed -n '1000p' | sed 's/\.md$//')"
+# 形状用 CLI 自己的 --json 数一遍再印出来：描述与实际不符时一眼看得见
+SHAPE="$("${BIN[@]}" -C "$W" ls --all --json | node --no-warnings -e '
+  const t = JSON.parse(require("fs").readFileSync(0, "utf8"));
+  const c = (f) => t.filter(f).length;
+  console.log(`${t.length} tasks: ${c((x) => x.status === "closed")} closed, ${c((x) => x.status === "in_progress")} in progress `
+    + `(${c((x) => x.assignee === "bench")} held by the prime actor), ${c((x) => x.blocked_by.length > 0)} with blocked_by, `
+    + `${c((x) => x.child_progress !== undefined)} containers, ${c((x) => x.parent !== undefined)} children`);')" \
+  || { echo "bench: could not read the generated ledger back" >&2; exit 1; }
 
 # 每条命令跑 RUNS 次，墙钟时间（含进程启动：这就是用户等的时间），先热身一次
 bench() {
@@ -123,8 +142,7 @@ EOF
 }
 
 FAILED=0
-MAX="${TODOPI_BENCH_MAX_MS:-}"
-printf '\n%d tasks, %s runs each, wall-clock ms including process start (median / min / max)\n\n' "$N" "$RUNS"
+printf '\n%s\n%s runs each, wall-clock ms including process start (median / min / max)\n\n' "$SHAPE" "$RUNS"
 printf '| %-26s | %6s | %5s | %5s |\n|%s|%s|%s|%s|\n' command median min max "----------------------------" "--------" "-------" "-------"
 for c in "--version" "ls" "ls --ready" "ls --all" "ls --json" "prime" "prime --full" "show $SHOW_ID" "doctor"; do
   # shellcheck disable=SC2086
@@ -132,7 +150,7 @@ for c in "--version" "ls" "ls --ready" "ls --all" "ls --json" "prime" "prime --f
   set -- $r
   label="${c/$SHOW_ID/<id>}"
   printf '| %-26s | %6s | %5s | %5s |\n' "todopi $label" "$1" "$2" "$3"
-  if [ -n "$MAX" ] && [ "$c" != "doctor" ] && [ "$1" -gt "$MAX" ]; then FAILED=1; fi
+  if [ -n "$MAX" ] && [ "$1" -gt "$MAX" ]; then FAILED=1; fi
 done
 
 # CPU 型号：macOS 的 sysctl、x86 Linux 的 /proc/cpuinfo、ARM Linux 的 lscpu（它的 /proc/cpuinfo 没有 model name）
@@ -141,7 +159,10 @@ cpu() {
   m="$(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
   [ -z "$m" ] && m="$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2)"
   [ -z "$m" ] && m="$(lscpu 2>/dev/null | grep -m1 'Model name' | cut -d: -f2)"
-  printf '%s' "${m:-unknown CPU}" | sed 's/^ *//'
+  m="$(printf '%s' "$m" | sed 's/^ *//')"
+  # 虚拟机里的 lscpu 会给一个 "-"
+  case "$m" in ''|-) m="unknown CPU" ;; esac
+  printf '%s' "$m"
 }
 load="$(uptime 2>/dev/null | sed -n 's/.*load averages*: *//p')"
 printf '\nmachine: %s %s, %s, %s cores, node %s; load average %s\n' "$(uname -s)" "$(uname -m)" "$(cpu)" \
