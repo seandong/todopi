@@ -147,6 +147,49 @@ test("edit --edit：改了 / 删了 / 挪了已勾选的，或新加一条勾选
   }
 });
 
+test("已勾选的编号不变：--edit 改序（含同文字挪勾）、--ac-rm 删它前面的都拒绝；删它后面的可以", () => {
+  const { d, id } = withTask(["A", "B", "C"]);
+  runCheck({ directory: d, id, n: 2, actor: ME });
+  const before = readFileSync(file(d, id), "utf8");
+  const refused = (e: unknown) => e instanceof CliError && e.code === EXIT.usage && /renumber|Checked acceptance criteria/.test(e.message);
+  assert.throws(() => runEditInEditor({ directory: d, id, actor: ME }, (t) => t.replace("- [ ] A\n- [x] B", "- [x] B\n- [ ] A")), refused);
+  // 选项形式当场说清是哪一条会被改号
+  assert.throws(() => runEdit({ directory: d, id, actor: ME, criteria: { remove: new Set([1]) } }),
+    (e: unknown) => e instanceof CliError && /removing criterion 1 would renumber checked criterion 2/.test(e.message));
+  assert.equal(readFileSync(file(d, id), "utf8"), before);
+  runEdit({ directory: d, id, actor: ME, criteria: { remove: new Set([3]) } });
+  assert.deepEqual(criteria(d, id), ["  A", "x B"]);
+  // 两条同文字：把勾从第一条挪到第二条，文字列表不变，编号变了
+  const t = withTask(["same", "same"]);
+  runCheck({ directory: t.d, id: t.id, n: 1, actor: ME });
+  assert.throws(() => runEditInEditor({ directory: t.d, id: t.id, actor: ME }, (x) => x.replace("- [x] same\n- [ ] same", "- [ ] same\n- [x] same")), refused);
+});
+
+test("edit --edit：编辑器开着时任务被改了（另一个 edit / check）：拒绝（冲突），不覆盖", () => {
+  const { d, id } = withTask(["A"]);
+  assert.throws(() => runEditInEditor({ directory: d, id, actor: ME }, (t) => {
+    runEdit({ directory: d, id, actor: ME, criteria: { add: ["B"] } });
+    return t;
+  }), code(EXIT.conflict));
+  assert.deepEqual(criteria(d, id), ["  A", "  B"]);
+  assert.throws(() => runEditInEditor({ directory: d, id, actor: ME }, (t) => {
+    runCheck({ directory: d, id, n: 1, actor: ME });
+    return t.replace("## Plan", "## Plan\n\nnew");
+  }), code(EXIT.conflict));
+  assert.deepEqual(criteria(d, id), ["x A", "  B"]);
+});
+
+test("edit --edit 与 --title / --description / --plan / --ac-* 同时给：打开编辑器之前就拒绝", () => {
+  const { d, id } = withTask(["A"]);
+  const never = () => { throw new Error("editor must not open"); };
+  for (const extra of [{ plan: "p" }, { title: "t" }, { description: "x" }, { criteria: { add: ["B"] } }]) {
+    assert.throws(() => runEditInEditor({ directory: d, id, actor: ME, ...extra }, never), (e: unknown) => e instanceof CliError && /drop --/.test(e.message));
+  }
+  // 空的 criteria（CLI 总会传一个）与 --verify 这类编辑器里没有的字段可以一起用
+  const r = runEditInEditor({ directory: d, id, actor: ME, verify: "true", criteria: { add: [], set: new Map(), remove: new Set() } }, (t) => t);
+  assert.deepEqual(r.fields, ["verify"]);
+});
+
 test("edit --edit：标题清空 = 放弃；编辑器出错 = 什么都不写；原样保存 = 什么都没变", () => {
   const { d, id } = withTask(["one"]);
   const before = readFileSync(file(d, id), "utf8");

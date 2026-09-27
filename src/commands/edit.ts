@@ -38,7 +38,18 @@ export type EditOptions = {
    * 按原顺序留着。与 criteria 不同时给。
    */
   acceptanceSection?: string;
+  /** `--edit` 打开编辑器时给人看的那一页：写锁里重算一遍，对不上说明编辑器开着的时候任务被别人改了，拒绝而不是覆盖 */
+  baseline?: string;
 };
+
+/** 编辑器里的那一页（标题与三个小节的原文），`--edit` 打开时与写锁里各算一次。 */
+function bufferOf(task: { frontmatter: Record<string, unknown>; body: string }): string {
+  const whole = (h: string) => normalizeText(sectionLines(task.body, h, true).map((l) => l.text).join("\n"));
+  return buildBuffer({
+    title: String(task.frontmatter["title"] ?? ""),
+    description: whole("## Description"), acceptance: whole("## Acceptance Criteria"), plan: whole("## Plan"),
+  });
+}
 
 const strList = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
@@ -64,6 +75,11 @@ export function runEdit(opts: EditOptions): EditReport {
 
   // 归属：edit 在 PRD FR-C6 的写入严格匹配名单里，走 writeAsWorker 的默认检查。
   writeAsWorker(opts, (task, { now, actor }) => {
+    if (opts.baseline !== undefined && bufferOf(task) !== opts.baseline) {
+      throw new CliError(EXIT.conflict,
+        `Task ${opts.id} changed while the editor was open, so saving would overwrite that change. Nothing was written; `
+        + `run \`todopi edit ${opts.id} --edit\` again to edit the current version.`);
+    }
     const fm: Record<string, unknown> = { ...task.frontmatter };
     const changed = new Set<string>();
     const set = (k: string, v: unknown): void => {
@@ -190,15 +206,12 @@ export function runEdit(opts: EditOptions): EditReport {
             "The edit would change how the rest of the task body is read: new text contains a line that starts a section "
             + "(`## …`) or a block that is never closed. Indent that line by four spaces or put it in a closed code fence, then retry.");
         }
-        // 整段换掉验收标准（--edit）：已勾选的必须原样、按原顺序留着
-        if (opts.acceptanceSection !== undefined) {
-          const was = before.filter((c) => c.checked).map((c) => c.text);
-          const now = after.filter((c) => c.checked).map((c) => c.text);
-          if (JSON.stringify(was) !== JSON.stringify(now)) {
-            throw new CliError(EXIT.usage,
-              "Checked acceptance criteria are part of the record and cannot be changed, removed, reordered or added as checked. "
-              + "Uncheck one with `todopi check <id> <n> --undo` first if it really needs to change.");
-          }
+        // 已勾选的必须原样、**编号不变**地留着：Log 里的 `check ac=<n>` 指着它们（整段换掉时改序、删前面的都会让编号漂移）
+        const checkedAt = (cs: { text: string; checked: boolean }[]) => cs.flatMap((c, i) => (c.checked ? [`${i + 1}:${c.text}`] : []));
+        if (JSON.stringify(checkedAt(before)) !== JSON.stringify(checkedAt(after))) {
+          throw new CliError(EXIT.usage,
+            "Checked acceptance criteria are part of the record: they cannot be changed, removed, moved or renumbered, and new "
+            + `criteria cannot start checked. Uncheck one with \`todopi check ${opts.id} <n> --undo\` first if it really needs to change.`);
         }
         return next;
       };
@@ -218,18 +231,22 @@ export function runEdit(opts: EditOptions): EditReport {
  * 标题行为空视为放弃，什么都不写。
  */
 export function runEditInEditor(opts: EditOptions, edit: (text: string) => string = editText): EditReport {
+  // 编辑器里改的就是这几项：同时用选项给会被编辑器的结果盖掉，打开编辑器之前就说清楚
+  const c = opts.criteria;
+  const clash = [opts.title !== undefined && "--title", opts.description !== undefined && "--description", opts.plan !== undefined && "--plan",
+    ((c?.add?.length ?? 0) + (c?.set?.size ?? 0) + (c?.remove?.size ?? 0) > 0) && "--ac-*"].filter((x): x is string => x !== false);
+  if (clash.length > 0) {
+    throw new CliError(EXIT.usage, `--edit edits the title, description, acceptance criteria and plan itself; drop ${clash.join(", ")} or --edit.`);
+  }
   const ledger = discoverLedger(opts.directory);
   const task = readTasks(ledger).find((t) => t.idFromFilename === opts.id);
   if (task === undefined) throw new CliError(EXIT.usage, `No task ${opts.id} in this ledger. Run "todopi ls" to see what is there.`);
-  const whole = (h: string) => normalizeText(sectionLines(task.body, h, true).map((l) => l.text).join("\n"));
-  const initial = buildBuffer({
-    title: String(task.frontmatter["title"] ?? ""),
-    description: whole("## Description"), acceptance: whole("## Acceptance Criteria"), plan: whole("## Plan"),
-  });
+  const initial = bufferOf(task);
   const edited = parseBuffer(editOrExplain(edit, initial));
   if (edited === null) throw new CliError(EXIT.usage, "Aborted: the title line is empty. Nothing was changed.");
   return runEdit({
-    ...opts, title: edited.title, description: edited.description, acceptanceSection: edited.acceptance, plan: edited.plan,
+    ...opts, criteria: undefined, baseline: initial,
+    title: edited.title, description: edited.description, acceptanceSection: edited.acceptance, plan: edited.plan,
   });
 }
 

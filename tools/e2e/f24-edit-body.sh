@@ -50,6 +50,12 @@ before="$(cat "$W"/.todopi/tasks/"$A".md)"
 out="$(cli -C "$W" edit "$A" --ac-set "1=changed" 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "check $A 1 --undo" && [ "$(cat "$W"/.todopi/tasks/"$A".md)" = "$before" ] \
   && ok "改已勾选的标准被拒，指向 check --undo，文件不变" || fail "rc=${rc}：$out"
+T2="$(cli -C "$W" add "renumber" --ac "x" --ac "y" | head -1 | cut -d' ' -f1)"
+cli -C "$W" check "$T2" 2 >/dev/null 2>&1
+out="$(cli -C "$W" edit "$T2" --ac-rm 1 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "would renumber checked criterion 2" && ok "删已勾选项前面的标准被拒（会改掉 check ac=2 的指向）" || fail "rc=${rc}：$out"
+out="$(cli -C "$W" edit "$A" --plan p --edit 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "drop --plan" && ok "--edit 与 --plan 同时给：拒绝" || fail "rc=${rc}：$out"
 cli -C "$W" doctor >/dev/null 2>&1 && ok "改完 doctor 通过" || fail "doctor：$(cli -C "$W" doctor 2>&1)"
 
 out="$(cli -C "$W" add 2>&1)"; rc=$?

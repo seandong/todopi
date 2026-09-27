@@ -37,7 +37,8 @@ export type CriteriaEdit = { add?: string[]; set?: Map<number, string>; remove?:
 
 /**
  * 按编号改验收标准：`set` 改文字、`remove` 删、`add` 追加到最后一条之后（没有标准时新建小节）。**只能动没勾的**——
- * 已勾选的是记录，悄悄改掉它的文字等于改写「当时核对的是什么」（FR-T4、F24）。编号越界、动了勾选的，抛错说明原因。
+ * 已勾选的是记录，悄悄改掉它的文字等于改写「当时核对的是什么」（FR-T4、F24）。已勾选的编号也不能变（Log 里的 `check ac=<n>`
+ * 指着它），所以已勾选项之前的不能删。编号越界、动了勾选的，抛错说明原因。
  * 只改标准那几行本身：嵌套项与非复选框行（spec §5.3.2 要求原样保留）一个字节都不动。
  */
 export function editCriteria(body: string, edit: CriteriaEdit): string {
@@ -47,6 +48,11 @@ export function editCriteria(body: string, edit: CriteriaEdit): string {
     const c = criteria[n - 1];
     if (c === undefined) throw new Error(`there is no criterion ${n} (the task has ${criteria.length})`);
     if (c.checked) throw new Error(`criterion ${n} is checked; uncheck it with \`todopi check <id> ${n} --undo\` before changing it`);
+  }
+  // 删掉一条会让它后面的编号都减一：后面有已勾选的，就等于改了 Log 里 `check ac=<n>` 指的那一条
+  for (const n of edit.remove ?? []) {
+    const m = criteria.findIndex((c, i) => i > n - 1 && c.checked);
+    if (m >= 0) throw new Error(`removing criterion ${n} would renumber checked criterion ${m + 1}; checked criteria keep their numbers`);
   }
   for (const t of [...(edit.add ?? []), ...(edit.set?.values() ?? [])]) {
     if (t.trim() === "" || /[\r\n]/.test(t)) throw new Error(`a criterion must be a single, non-empty line: ${JSON.stringify(t)}`);
