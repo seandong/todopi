@@ -63,6 +63,20 @@ occ() { printf '%s' "{\"sessionID\":\"o1\",\"hook_event_name\":\"$1\"}" | (cd "$
 occ session.created "$TMP/o1.out"; occ session.compacted "$TMP/o2.out"
 [ -s "$TMP/o1.out" ] && [ -s "$TMP/o2.out" ] && ok "OpenCode：session.created 之后马上 session.compacted，两次都注入" || fail "OpenCode 压缩后的 prime 被吞了"
 
+# Gemini 的 BeforeAgent（压缩后的再注入）不走时间窗，由压缩标记把关：setup 的钩子与扩展同时装着、并发地来，标记只能被取走一次
+gem() { printf '%s' "{\"session_id\":\"$1\",\"hook_event_name\":\"BeforeAgent\",\"cwd\":\"$W\"}" \
+  | (cd "$W" && cli --agent gemini prime --hook --if-compacted --hook-json gemini:BeforeAgent) > "$2" 2>/dev/null; }
+multi=0
+for r in 1 2 3 4 5 6 7 8; do
+  printf '%s' "{\"session_id\":\"g$r\",\"hook_event_name\":\"PreCompress\",\"cwd\":\"$W\"}" \
+    | (cd "$W" && cli --agent gemini prime --hook --mark-compacted) >/dev/null 2>&1
+  for k in 1 2 3 4; do gem "g$r" "$TMP/g$r-$k.out" & done
+  wait
+  n=0; for k in 1 2 3 4; do grep -q "held task" "$TMP/g$r-$k.out" && n=$((n + 1)); done
+  [ "$n" -eq 1 ] || multi="$multi $r:$n"
+done
+[ "$multi" = 0 ] && ok "Gemini：压缩后并发的 BeforeAgent 恰好一个注入（八轮）" || fail "轮次:注入次数 =$multi"
+
 # 别的会话照常
 hook "$TMP/s2.out" "{\"session_id\":\"s2\",\"cwd\":\"$W\"}"
 [ -s "$TMP/s2.out" ] && ok "别的会话照常注入" || fail "s2 没有输出"

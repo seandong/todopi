@@ -2487,3 +2487,20 @@ Node 用 spec reporter，整层被判 blocked。
   过几秒的再加载是重载（pi 的 /reload、切换会话），照常注册——永久的标志会让重载之后唯一的一份也失效（Codex 评审）；间隔用单调时钟（`performance.now()`）量，墙钟回拨不会让之后的重载都被当成重复（评审三轮）。OpenCode 在启动时装 npm 插件，
   若两份加载相隔超过 5 秒，会退回到注入两遍（重复，不是丢失）。
 
+
+## D058 — 市场 / 注册表的包由生成器从 setup 的同一份源生成
+
+- 日期：2026-09-28（tp-lv7y3h；用户定：Gemini 扩展单独一个仓库、npm 名 `@todopi/opencode` 与 `@todopi/pi`、重复钩子在 prime 里去重即 D057）。
+- 六家的包都由 `tools/plugins/build.mjs` 生成：钩子命令取 `CLAUDE_HOOKS` / `CODEX_HOOKS` / `GEMINI_HOOKS` / `CURSOR_HOOKS`，OpenCode 插件与
+  pi 扩展取 setup 写的同一份代码（只把第一行「重跑 setup 会替换」的标记换成出处），版本号取 package.json。`tests/plugins.test.ts` 用 `--check`
+  比对仓库里的文件，并逐条核对钩子命令——包与 setup 的命令一字不差，D057 的去重键才对得上。手写一份会漂移。
+- 布局：一个仓库放三家的市场文件（`.claude-plugin/`、`.agents/plugins/`、`.cursor-plugin/`），各指向自己的插件目录。三份必须一起在：Codex、Cursor
+  找不到自己的就退回读 `.claude-plugin/` 的，会装上 Claude Code 的钩子。Gemini 扩展的清单只能在所装仓库的根：放在 `plugins/gemini/`，由维护者推到
+  `seandong/todopi-gemini`。OpenCode、pi 走 npm（`packages/`，不进根包的 `files`）。
+- 插件在所有项目里生效，不只是有账本的：Cursor 插件的规则改成有条件的措辞（「If this repository has a `.todopi/` directory…」）；Gemini 扩展不带
+  协议段做上下文文件（在别的项目里就是错话），自动压缩后的指针靠用户再跑一次 `setup gemini`（扩展的 README 写明）。
+- 本机实测（2026-09-28，各家都在沙箱配置里、用本分支的 CLI）：Claude Code、Codex 用真模型，Gemini、OpenCode、pi 用 `tools/probes/` 的假 API 看
+  请求体——五家会话开始都收到了 prime；与 setup 的钩子同时装着时都只注入一次。Cursor 未登录，没测（并入 tp-zagvp5）。
+- 实测抓到两个问题：Codex 的清单放在插件根的 `plugin.json` 能装上，但钩子从不出现在 `/hooks` 里——必须放在 `.codex-plugin/plugin.json`。
+  Gemini 的 BeforeAgent（`--if-compacted`）并发时标记会被取走不止一次：先查后删不是原子的，而 macOS（APFS）上几个进程同时 unlink 同一个文件
+  可以都返回成功，所以取标记改在账本的写锁里做；拿不到锁照常注入（与 D057 同）。e2e 里压缩后四个并发的 BeforeAgent 恰好一个注入（八轮）。

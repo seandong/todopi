@@ -6,7 +6,7 @@ rank: "im"
 verify: "make check && bash tools/e2e/f17-setup-cursor-gemini.sh"
 labels: ["m3"]
 created: "2026-09-26T11:44:21Z"
-updated: "2026-09-26T11:44:21Z"
+updated: "2026-09-27T16:12:52Z"
 ---
 
 ## Description
@@ -24,3 +24,4 @@ updated: "2026-09-26T11:44:21Z"
 ## Log
 
 - 2026-09-26T11:44:21Z seandong created from=tp-yuka3e
+- 2026-09-27T16:12:52Z claude-code@Seans-MacBook-Pro.local note: tp-lv7y3h：Cursor 插件（plugins/cursor/）本机没法测——cursor-agent 未登录。实机验证时一并跑：在有进行中任务的仓库里 cursor-agent --plugin-dir <todopi>/plugins/cursor，问它进行中的任务；再叠上 todopi setup cursor 看是否只注入一次。

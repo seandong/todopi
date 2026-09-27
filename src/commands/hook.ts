@@ -81,7 +81,12 @@ export function compactionGate(directory: string, mode: "mark" | "take", session
   const ledger = discoverLedger(directory);
   const key = session !== undefined ? { session } : { actor: currentActor(ledger.root, actor) };
   if (mode === "mark") { markCompacted(ledger, key); return false; }
-  return takeCompacted(ledger, key);
+  // 取标记要占账本的写锁：占不到（锁被别人久占）就照常注入——宁可重复也不丢，与 firstInjection 同
+  try {
+    return takeCompacted(ledger, key);
+  } catch {
+    return true;
+  }
 }
 
 /**

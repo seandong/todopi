@@ -1,0 +1,14 @@
+{
+  "name": "todopi",
+  "description": "Durable task ledger for AI coding agents: injects the current todopi tasks at session start and after compaction.",
+  "owner": {
+    "name": "seandong"
+  },
+  "plugins": [
+    {
+      "name": "todopi",
+      "source": "./plugins/cursor",
+      "description": "Durable task ledger for AI coding agents: injects the current todopi tasks at session start and after compaction."
+    }
+  ]
+}

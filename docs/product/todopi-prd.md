@@ -288,7 +288,7 @@ todopi import <file.md> | import beads [path]
 - [ ] npm `todopi`、brew tap、curl 安装脚本上线；`@todopi` scope 已占 —— 发布工作流、install.sh、brew formula 已就绪（F21、F34）；打标签、NPM_TOKEN、tap 仓库、占名是维护者的动作
 - [ ] 六家 `todopi setup <agent>` 在全新克隆上各自验证通过（市场条目不在此清单，见 FR-A4）
 - [x] `import beads` 用至少两份真实 Beads Classic 导出测过（Beads 仓库自己的 v0.47.1 导出，加 F32 的六份，D041）
-- [ ] 首发后一周的跟进动作准备好：awesome 列表 PR、六个市场/注册表条目
+- [ ] 首发后一周的跟进动作准备好：awesome 列表 PR、六个市场/注册表条目 —— 六家的包与四个 awesome 条目已在仓库里（tp-lv7y3h，`docs/marketplaces.md`，D058），五家本机装过、会话开始收到 prime；Cursor 未登录没测（并入 tp-zagvp5）；提交与发布是维护者的动作
 - [ ] 域名：todopi.com 已续费，todopi.dev 已注册
 
 ## 14. 风险
