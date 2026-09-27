@@ -229,3 +229,14 @@ test("旧版的 Gemini 与 Cursor 钩子：就地改成带 --agent 的命令（F
   ensureCursorHooks(c);
   assert.deepEqual(json(c).hooks.sessionStart, [{ command: "./mine.sh" }, { command: "todopi --agent cursor prime --hook --hook-json cursor", timeout: 5 }]);
 });
+
+test("Cursor：旧命令被改过（多了别的键）时不迁移、补新的并提示；新版已在时旧的也提示（Codex 评审）", () => {
+  const d = tmp();
+  const c = join(d, "hooks.json");
+  writeFileSync(c, JSON.stringify({ version: 1, hooks: { sessionStart: [{ command: "todopi prime --hook --hook-json cursor", matcher: "x" }] } }));
+  const r = ensureCursorHooks(c);
+  assert.equal(json(c).hooks.sessionStart.length, 2);
+  assert.match(r.notes.join("\n"), /old `todopi prime --hook --hook-json cursor` with settings of your own/);
+  const again = ensureCursorHooks(c);
+  assert.match(again.notes.join("\n"), /still runs the old/);
+});

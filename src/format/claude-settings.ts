@@ -143,7 +143,16 @@ export function ensureHookConfig(path: string, list: HookList,
   for (const [event, command, matcher, legacy] of list) {
     if (event in hooks && !Array.isArray(hooks[event])) refuse(path, `hooks.${event} is not a list`);
     const groups: unknown[] = Array.isArray(hooks[event]) ? hooks[event] : [];
-    if (groups.some((g) => isOurGroup(g, command, matcher))) continue;
+    const stillOld = (): boolean => legacy !== undefined && groups.some((g) => isObject(g) && Array.isArray(g["hooks"])
+      && g["hooks"].some((x) => isObject(x) && x["command"] === legacy));
+    if (groups.some((g) => isOurGroup(g, command, matcher))) {
+      // 新版已经在：同一事件里若还有旧命令（被改过、没迁移的），照样提示——它也会跑，而且身份可能不同（Codex 评审）
+      if (stillOld()) {
+        notes.push(`${path}: a ${event} group still runs the old \`${legacy}\` alongside the current one; `
+          + "if both run, prime runs twice — remove the old one.");
+      }
+      continue;
+    }
     // 旧版 setup 的标准组：把那一项的命令就地改成新的（别的键、别的项原样）
     const old = legacy === undefined ? undefined : groups.find((g) => isOurGroup(g, legacy, matcher));
     if (old !== undefined && isObject(old) && Array.isArray(old["hooks"])) {
@@ -230,22 +239,32 @@ export function ensureCursorHooks(path: string): SettingsResult {
   if ("hooks" in settings && !isObject(settings["hooks"])) refuse(path, "has a \"hooks\" entry that is not an object");
   const hooks: Record<string, unknown> = isObject(settings["hooks"]) ? settings["hooks"] : {};
   let changed = false;
+  const notes: string[] = [];
   const standard = (h: unknown, cmd: string | undefined): boolean => isObject(h) && h["command"] === cmd
     && Object.keys(h).every((k) => ["command", "timeout"].includes(k))
     && (h["timeout"] === undefined || (typeof h["timeout"] === "number" && h["timeout"] > 0));
   for (const [event, command, , legacy] of CURSOR_HOOKS) {
     if (event in hooks && !Array.isArray(hooks[event])) refuse(path, `hooks.${event} is not a list`);
     const entries: unknown[] = Array.isArray(hooks[event]) ? hooks[event] : [];
-    if (entries.some((h) => standard(h, command))) continue;
+    if (entries.some((h) => standard(h, command))) {
+      if (legacy !== undefined && entries.some((h) => isObject(h) && h["command"] === legacy)) {
+        notes.push(`${path}: hooks.${event} still runs the old \`${legacy}\` alongside the current one; if both run, prime runs twice — remove the old one.`);
+      }
+      continue;
+    }
     // 旧版 setup 写的那一项：就地改成新命令（F22）
     const old = entries.find((h) => standard(h, legacy));
     if (isObject(old)) { old["command"] = command; changed = true; continue; }
+    if (legacy !== undefined && entries.some((h) => isObject(h) && h["command"] === legacy)) {
+      notes.push(`${path}: hooks.${event} has the old \`${legacy}\` with settings of your own; left as is and added the current one. `
+        + "If both run, prime runs twice — remove one.");
+    }
     hooks[event] = [...entries, { command }];
     changed = true;
   }
-  if (!changed) return { status: "unchanged", notes: [] };
+  if (!changed) return { status: "unchanged", notes };
   settings["hooks"] = hooks;
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(path, `${JSON.stringify(settings, null, 2)}\n`, mode);
-  return { status: link === null ? "created" : "updated", notes: [] };
+  return { status: link === null ? "created" : "updated", notes };
 }

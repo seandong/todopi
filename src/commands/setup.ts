@@ -69,7 +69,9 @@ export function runSetup(opts: SetupOptions): SetupReport {
   } else if (opts.agent === "cursor") {
     // Cursor 原生读 AGENTS.md。钩子：会话开始注入、结束检查交接；压缩后靠始终生效的规则文件（D038）。
     const path = at([".cursor", "hooks.json"], [".cursor", "hooks.json"]);
-    files.push({ path, status: ensureCursorHooks(path).status });
+    const r = ensureCursorHooks(path);
+    files.push({ path, status: r.status });
+    notes.push(...r.notes);
     // 用户级规则在 Cursor 的设置界面里，不是文件；规则文件只在项目里写。
     if (ledger !== null) {
       const rule = join(ledger.root, ".cursor", "rules", "todopi.mdc");

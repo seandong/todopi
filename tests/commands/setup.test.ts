@@ -494,3 +494,14 @@ test("同一组里既有被改过的旧命令、又有标准的旧命令：只�
   ] }]);
   assert.match(r.notes.join("\n"), /still runs the old/);
 });
+
+test("新版钩子已经在、同一事件里还留着被改过的旧命令：提示可能跑两遍（Codex 评审）", () => {
+  const d = tmp();
+  const p = join(d, "settings.json");
+  writeFileSync(p, JSON.stringify({ hooks: {
+    SessionStart: [{ hooks: [{ type: "command", command: "todopi --agent claude-code prime --hook" }, { type: "command", command: "todopi prime --hook", async: true }] }],
+    SessionEnd: [{ hooks: [{ type: "command", command: "todopi --agent claude-code handoff --check --hook" }] }] } }));
+  const r = ensureClaudeHooks(p);
+  assert.equal(r.status, "unchanged");
+  assert.match(r.notes.join("\n"), /SessionStart group still runs the old `todopi prime --hook` alongside/);
+});
