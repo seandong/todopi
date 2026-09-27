@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `6fb21f3` —— F21 安装 经 todopi done 关闭（verify=pass dirty=false）。
+- Last commit: `8e9951c` —— tp-1ssqrw（OpenCode 压缩后注入实测）经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 23 个任务，21 个 `closed/done`（F01–F21）、2 个 `open`（tp-1ssqrw OpenCode 压缩后实测、tp-zagvp5 Cursor 实机验证，都在等凭据 / 登录）（含从 F15 拆出的 tp-1ssqrw、从 F17 拆出的 tp-zagvp5）。
+- 账本: `.todopi/` 23 个任务，22 个 `closed/done`（F01–F21 与 tp-1ssqrw）、1 个 `open`（tp-zagvp5 Cursor 实机验证，等 `cursor-agent login` 与 IDE 手工验证）（含从 F15 拆出的 tp-1ssqrw、从 F17 拆出的 tp-zagvp5）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,9 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+44. ~~tp-1ssqrw OpenCode 压缩后注入实测~~ 已完成（2026-09-27）。不需要凭据：OpenCode 自带的自定义 provider 指向本地假 OpenAI 兼容服务器
+    （tools/probes/openai-fake-api.mjs），在真实运行时里看请求体——压缩后第一个请求的系统提示里出现压缩前刚记的标记，之前（含压缩摘要请求）
+    都没有。验收标准 #1 原文「模型能原样引出」按替代验证改写（假模型不回显；看请求体更直接），Log 里写明。子代理评审 Go。
 43. ~~F21 安装~~ 已完成（2026-09-27）。npm 包改为 tsc 逐文件编译的 JS（Node 20.0 起可跑），单二进制（Bun）里 runner 把自己再起一次；
     install.sh 按 D008 决策 3 的清单；install.yml（有 / 无 Node 的干净容器）与 release.yml（先发 npm 再建 Release）。D042。
     **重大发现：远端 Harness CI 自 09-17 起一直是红的**（没装依赖），本地三层一直绿、没人看远端——修好，并顺带修了 CI 环境才暴露的

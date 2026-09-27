@@ -2062,6 +2062,9 @@ Node 用 spec reporter，整层被判 blocked。
 - **未实测**：OpenCode 的压缩后注入——免费模型不能用于压缩，本机另外两个 provider 的凭据不可用。机制上
   （compacted 事件刷新缓存 + 系统提示）与会话开始注入同一条路径。
 
+- 补记（2026-09-27，tp-1ssqrw）：OpenCode 的压缩后注入用本地假 OpenAI 兼容 provider 在真实运行时里实测通过（PRD §17）。D037 里
+  「OpenCode 也许能用同样的办法验证」成立——不需要凭据，用的是 OpenCode 自带的自定义 provider 配置，不用写测试专用插件。
+
 ## D037 — pi 经 before_agent_start 注入；用测试专用的 echo provider 在真实运行时里验证
 
 - 日期：2026-09-26（F16）。事实与实测见 PRD §17。
