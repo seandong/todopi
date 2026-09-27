@@ -100,6 +100,8 @@ export function markCompacted(ledger: Ledger, key: PrimeKey): void {
 
 /** 取走标记：有就删掉并返回 true。 */
 export function takeCompacted(ledger: Ledger, key: PrimeKey): boolean {
+  // 取走也是写（删文件）：版本更高时不动它，当作没有（Codex 评审）
+  if (isNewerVersion(ledger)) return false;
   const path = compactedPath(ledger, key);
   if (!existsSync(path)) return false;
   rmSync(path, { force: true });

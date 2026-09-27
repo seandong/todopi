@@ -2316,5 +2316,5 @@ Node 用 spec reporter，整层被判 blocked。
   `withLedgerLock` 直接拿锁，`add` 在 version 2 的账本上照样建了任务。
 - 读命令在 stderr 提示一句（`--quiet` 不提示，stdout 与 `--json` 不变）：按版本 1 的规则读，结果（尤其 `doctor` 的发现）可能不准。
 - `handoff` 整条退出 4，而不是给一份「交接了但每个任务都没记上」的报告：它的本分就是写。
-- `prime` 的记录与压缩标记是运行时状态，但无 git 时它们在 `.todopi/.cache/` 里：版本更高时不写，`prime` 照常输出（只是不留记录，
+- `prime` 的记录与压缩标记是运行时状态，但无 git 时它们在 `.todopi/.cache/` 里：版本更高时不写也不取走（取走是删文件，Codex 评审），`prime` 照常输出（只是不留记录，
   「这次会话以来的变化」没有基线）。`setup` 写的是 agent 的配置、不是账本，照常可用。

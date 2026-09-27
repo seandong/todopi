@@ -26,6 +26,7 @@ B="$(cli -C "$W" add "open" | head -1 | cut -d' ' -f1)"
 C="$(cli -C "$W" add "closed" | head -1 | cut -d' ' -f1)"
 cli -C "$W" claim "$A" >/dev/null 2>&1
 cli -C "$W" close "$C" --resolution obsolete >/dev/null 2>&1
+cli -C "$W" prime --session s1 --mark-compacted >/dev/null 2>&1
 sed 's/^version: 1$/version: 2/' "$W/.todopi/config.yml" > "$TMP/c" && cat "$TMP/c" > "$W/.todopi/config.yml"
 grep -q "^version: 2$" "$W/.todopi/config.yml" || fail "没能把账本改成 version 2"
 
@@ -40,6 +41,9 @@ for c in "ls" "ls --json" "show $A" "show $A --full" "prime" "doctor"; do
 done
 cli -C "$W" ls --json 2>/dev/null | jq -e 'type == "array" and length >= 2' >/dev/null && ok "ls --json 的 stdout 仍是可解析的 JSON（提示只在 stderr）" || fail "ls --json 不可解析"
 cli -C "$W" show "$A" 2>/dev/null | grep -q "status     in progress" && ok "show 读出的状态照旧" || fail "$(cli -C "$W" show "$A" 2>&1)"
+cli -C "$W" prime --session s1 --if-compacted >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && [ "$(snapshot)" = "$before" ] && ls "$W"/.git/todopi/leases/sessions/*.compacted >/dev/null 2>&1 \
+  && ok "prime --if-compacted：不取走压缩标记（取走也是写）" || fail "rc=${rc}；压缩标记被动了"
 err="$(cli -C "$W" --quiet ls 2>&1 >/dev/null)"
 [ -z "$err" ] && ok "--quiet：不提示" || fail "--quiet 仍有：$err"
 

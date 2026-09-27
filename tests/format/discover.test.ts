@@ -54,6 +54,16 @@ test("版本更高：prime 记录与压缩标记不写（会话状态也在账�
   assert.equal(takeCompacted(l, { actor: "a" }), false);
 });
 
+test("版本更高：之前留下的压缩标记不被取走（取走 = 删文件，也是写）", () => {
+  const root = makeLedger(1);
+  markCompacted(discoverLedger(root), { actor: "a" });
+  writeFileSync(join(root, ".todopi", "config.yml"), "version: 2\nid_prefix: tp\n");
+  const l = discoverLedger(root);
+  assert.equal(takeCompacted(l, { actor: "a" }), false);
+  writeFileSync(join(root, ".todopi", "config.yml"), "version: 1\nid_prefix: tp\n");
+  assert.equal(takeCompacted(discoverLedger(root), { actor: "a" }), true);
+});
+
 test("config.yml 的未知键被保留", () => {
   const root = makeLedger();
   writeFileSync(join(root, ".todopi", "config.yml"), "version: 1\nfuture_key: keep-me\n");
