@@ -1,12 +1,13 @@
 ---
 id: "tp-zdp7uh"
 title: "性能基准：2,000 个任务下常用读命令的耗时，可复现的脚本"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "is"
 verify: "make check && make test && bash tools/bench/ledger-2000.sh"
 labels: ["m4"]
 created: "2026-09-27T03:14:03Z"
-updated: "2026-09-27T03:14:03Z"
+updated: "2026-09-27T08:40:43Z"
 ---
 
 ## Description
@@ -22,3 +23,4 @@ PRD §10 的「2,000 个任务 < 200 ms」没有当前版本可复现的证据�
 ## Log
 
 - 2026-09-27T03:14:03Z seandong created
+- 2026-09-27T08:40:43Z claude-code@Seans-MacBook-Pro.local claimed

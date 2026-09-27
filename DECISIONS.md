@@ -2361,3 +2361,12 @@ Node 用 spec reporter，整层被判 blocked。
 - 协议文本不抄进 README，只链到 `src/protocol.ts`：抄一份就多一处会漂的副本。
 - 体积写**文件大小**（npm 安装后约 2.3 MB，自身 JS 约 460 KB，2026-09-28 按 0.0.1 实测），不写磁盘块占用（约 3.4 MB，随文件系统变）。
 - vs Beads 只写按 Beads 当前 README 核实过的事实（存储是嵌入式 Dolt、`issues.jsonl` 是导出；没有常驻进程），不写没有出处的数字。
+
+## D050 — 性能基准：可复现的脚本，不设门禁
+
+- 日期：2026-09-28（F29，v0.1 缺口审计，PRD §10）。
+- `tools/bench/ledger-2000.sh` 用项目自己的发射器直接生成 2,000 个任务（固定种子，形状贴近真实使用），先过 `doctor` 再测；测的是现编的
+  dist（用户实际跑的东西），每条命令热身一次后跑 N 次取中位数，墙钟时间含进程启动。
+- **不设门禁**：CI runner 之间差得太多，任何阈值都会假红或假绿。CI 每次都跑（显式 `shell: bash` 取 pipefail，脚本失败才红），表格进 job summary；
+  `TODOPI_BENCH_MAX_MS` 留给想在本机设阈值的人。
+- 首轮结果（PRD §10）：`ls` / `show` / `doctor` 在 200 ms 以内，`prime` 超出——结果照实记下，优化拆成 tp-fpy1s4，不在基准任务里顺手改。
