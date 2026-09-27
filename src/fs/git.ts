@@ -3,7 +3,8 @@
 // 「在不在 git 里」——一旦判断错开，锁和租约会落在不同的地方，互不可见。
 
 import { execFileSync } from "node:child_process";
-import { isAbsolute, resolve } from "node:path";
+import { lstatSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 
 /**
  * 仓库的 git 公共目录（绝对路径）；不在 git 仓库里返回 null（spec §1.3 允许）。
@@ -14,23 +15,35 @@ import { isAbsolute, resolve } from "node:path";
  * 而 spec §8 要求同一仓库的所有 worktree 共用一套租约。
  */
 export function gitCommonDir(root: string): string | null {
-  // 一次运行里租约目录与会话目录各问一遍，每遍是一个 git 子进程（约 10 ms，F36）。只缓存找到了的结果：
-  // 「不在 git 里」可能在同一进程里变（先查、再 git init，测试就这么做），找到了的仓库公共目录不会变
-  const hit = COMMON_DIR.get(root);
-  if (hit !== undefined) return hit;
+  // 一次运行里租约目录与会话目录各问一遍，每遍是一个 git 子进程（约 10 ms，F36）。缓存键带上 `<root>/.git` 此刻的身份
+  // （inode、大小、修改时间）：长期运行的 todopi web 里，主仓库挪走后 `git worktree repair` 会改写 worktree 的 .git 文件，
+  // 身份一变就重新问（Codex 评审）。没有 `<root>/.git`（账本在仓库的子目录里）就不缓存；「不在 git 里」也不缓存（之后可能 git init）
+  const identity = gitEntryIdentity(root);
+  const hit = identity === null ? undefined : COMMON_DIR.get(root);
+  if (hit !== undefined && hit.identity === identity) return hit.dir;
   try {
     const out = execFileSync("git", ["rev-parse", "--git-common-dir"], {
       cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     if (out === "") return null;
     const dir = isAbsolute(out) ? out : resolve(root, out);
-    COMMON_DIR.set(root, dir);
+    if (identity !== null) COMMON_DIR.set(root, { identity, dir });
     return dir;
   } catch {
     return null;
   }
 }
-const COMMON_DIR = new Map<string, string>();
+const COMMON_DIR = new Map<string, { identity: string; dir: string }>();
+
+/** `<root>/.git`（目录或 worktree 的指针文件）的身份；不存在返回 null。 */
+function gitEntryIdentity(root: string): string | null {
+  try {
+    const st = lstatSync(join(root, ".git"));
+    return `${st.ino}:${st.size}:${st.mtimeMs}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * `git config user.name` 的**原始值**；没配置或不在仓库里返回 null。
