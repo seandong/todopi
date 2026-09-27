@@ -21,7 +21,9 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 2
 RUNS="${TODOPI_BENCH_RUNS:-7}"
 MAX="${TODOPI_BENCH_MAX_MS:-}"
-case "$RUNS" in ''|*[!0-9]*|0) echo "bench: TODOPI_BENCH_RUNS must be a positive integer, got '${RUNS}'" >&2; exit 2 ;; esac
+case "$RUNS" in ''|*[!0-9]*) echo "bench: TODOPI_BENCH_RUNS must be a positive integer, got '${RUNS}'" >&2; exit 2 ;; esac
+[ "$((10#$RUNS))" -gt 0 ] || { echo "bench: TODOPI_BENCH_RUNS must be a positive integer, got '${RUNS}'" >&2; exit 2; }
+RUNS="$((10#$RUNS))"
 case "$MAX" in *[!0-9]*) echo "bench: TODOPI_BENCH_MAX_MS must be a number of milliseconds, got '${MAX}'" >&2; exit 2 ;; esac
 N=2000
 
@@ -97,7 +99,8 @@ for (let i = 0; i < n; i++) {
   for (let k = 0; k < notes; k++) log.push(`${stamp(i, 10 + k)} ${actor} note: progress on ${id}, step ${k + 1}`);
   const checked = status === "closed";
   if (checked) for (let k = 1; k <= 3; k++) log.push(`${stamp(i, 20 + k)} ${actor} check ac=${k}: criterion ${k}`);
-  if (checked) log.push(`${stamp(i, 30)} ${actor} done verify=pass commit=abc1234 dirty=false`);
+  // 与 CLI 写的一样：有 verify 的记 pass，没有的记 none（不能把「没有验证命令」写成「验证通过」——Codex 评审）
+  if (checked) log.push(`${stamp(i, 30)} ${actor} done verify=${fm.verify === undefined ? "none" : "pass"} commit=abc1234 dirty=false`);
   const body = [
     "## Description", "", `Generated task ${i} for the benchmark.`, "",
     "## Acceptance Criteria", "", ...[1, 2, 3].map((k) => `- [${checked ? "x" : " "}] criterion ${k}`), "",
