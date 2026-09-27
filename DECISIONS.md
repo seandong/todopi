@@ -2430,5 +2430,6 @@ Node 用 spec reporter，整层被判 blocked。
 - **原始 HTML 显示成文字、不执行**（Codex 评审二轮：表格单元格里的 `<svg onload=…>` 原样进了页面）：解析后把所有原始 HTML 节点换成文字 /
   代码块、`javascript:` / `data:` / `vbscript:` 链接目标拿掉；站点自己的 HTML（标题锚点、表格）在这之后才加——表格先换成占位段落、渲染完再换回。
   比 commonmark 的 safe 模式（直接删掉原始 HTML）更忠实：内容一个字不丢。单元格打头的块级记号（`#` `-` `>` `1.` 围栏 `___` `<`）都转义，
-  保证单元格是行内文字。`tests/site.test.ts` 用一份刻意构造的规格（`TODOPI_SITE_SPEC`）验证。
+  保证单元格是行内文字。Markdown 图片换成指向同一地址的普通链接（不点不加载——评审三轮：`![x](https://…)` 会让页面一打开就去外部取）。
+  `tests/site.test.ts` 用一份刻意构造的规格（`TODOPI_SITE_SPEC`）验证。
 - 语料的说明（`note` / `reason`）现在是中文，而规格与语料是面向用户的、应当 English-first：拆成跟进任务，站点照原文显示。

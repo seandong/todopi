@@ -49,6 +49,16 @@ function neutralize(doc) {
     } else if ((node.type === "link" || node.type === "image") && /^\s*(javascript|vbscript|data):/i.test(node.destination ?? "")) {
       node.destination = "#";
     }
+    // 图片一打开页面就去取：换成指向同一地址的普通链接（alt 文字当链接文字），不点就不加载——站点不加载任何外部资源（Codex 评审三轮）
+    if (node.type === "image") {
+      const link = new commonmark.Node("link");
+      link.destination = node.destination;
+      link.title = node.title;
+      while (node.firstChild) link.appendChild(node.firstChild);
+      if (!link.firstChild) { const t = new commonmark.Node("text"); t.literal = node.destination ?? "image"; link.appendChild(t); }
+      node.insertBefore(link);
+      node.unlink();
+    }
   }
   return doc;
 }

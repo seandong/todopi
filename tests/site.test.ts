@@ -76,6 +76,7 @@ test("原始 HTML 与危险链接：显示成文字、不执行；表格照样�
   writeFileSync(join(src, "todopi-format-v1.md"), [
     "# Spec", "",
     "Inline <svg onload=alert(1)>x</svg> and [bad](javascript:alert(2)) and [ok](IMPLEMENTING.md).", "",
+    "Pixels: ![pixel](https://evil.example/p1) ![](//evil.example/p2) ![js](javascript:alert(7)).", "",
     "<script>alert(4)</script>", "",
     "### 5.2 Frontmatter fields", "",
     "| # | Field | Note |", "|---|---|---|",
@@ -92,9 +93,14 @@ test("原始 HTML 与危险链接：显示成文字、不执行；表格照样�
     // 真标签上的事件属性（转义成文字的 `&lt;svg onload=` 不算）
     assert.doesNotMatch(html, /<[a-z][^>]*\son\w+=/i, f);
     assert.doesNotMatch(html, /href="javascript:/i, f);
+    // 真标签上的 src（转义成文字的 `&lt;img src=` 不算）：页面不去任何地方取东西
+    assert.doesNotMatch(html, /<[a-z][^>]*\ssrc=/i, f);
   }
   const index = readFileSync(join(o, "spec", "index.html"), "utf8");
   assert.match(index, /&lt;svg onload=alert\(1\)&gt;x&lt;\/svg&gt;/, "原文照样看得见");
+  // Markdown 图片不生成 <img>（打开页面就会去外部取），变成普通链接
+  assert.match(index, /<a href="https:\/\/evil.example\/p1">pixel<\/a>/);
+  assert.match(index, /<a href="\/\/evil.example\/p2">\/\/evil.example\/p2<\/a>/);
   assert.match(index, /&lt;script&gt;alert\(4\)&lt;\/script&gt;/);
   assert.match(index, /<table><thead><tr><th>#<\/th><th>Field<\/th><th>Note<\/th><\/tr><\/thead>/, "表格仍是表格");
   assert.match(index, /<td>___<\/td>/, "___ 单元格保留原文");
