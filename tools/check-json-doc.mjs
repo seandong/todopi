@@ -80,23 +80,67 @@ for (let i = 0; i < lines.length; i++) {
 
 // ---- 源码里的导出类型 ----
 
+/**
+ * 去掉注释，把字符串与模板字面量的内容换成空白（保留长度与换行）：注释能把 `export` 与后面的关键字隔开，字符串里的 `export` 不是导出。
+ * 模板字面量里的 `${…}` 不展开——dto 里没有理由写它们，写了也只是被当成空白，不会让一个导出消失。
+ */
+function code(src) {
+  let out = "";
+  for (let i = 0; i < src.length;) {
+    const c = src[i];
+    const two = src.slice(i, i + 2);
+    if (two === "//") { while (i < src.length && src[i] !== "\n") { out += " "; i++; } continue; }
+    if (two === "/*") {
+      const e = src.indexOf("*/", i + 2);
+      const stop = e < 0 ? src.length : e + 2;
+      for (; i < stop; i++) out += src[i] === "\n" ? "\n" : " ";
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      out += c; i++;
+      while (i < src.length && src[i] !== c) {
+        if (src[i] === "\\") { out += "  "; i += 2; continue; }
+        out += src[i] === "\n" ? "\n" : " "; i++;
+      }
+      if (i < src.length) { out += c; i++; }
+      continue;
+    }
+    out += c; i++;
+  }
+  return out;
+}
+
 /** name → 源文件（相对 root） */
 const exported = new Map();
 for (const dir of SOURCES) {
   const abs = join(root, dir);
   if (!existsSync(abs)) continue;
   for (const f of readdirSync(abs).filter((x) => x.endsWith(".ts")).sort()) {
-    const text = readFileSync(join(abs, f), "utf8");
-    // 声明（type / interface，可带 declare）与导出列表（`export { A, type B as C }`、`export type { D }`，含 `from "…"` 的重导出）都算——
-    // 只认 `export type Name` 时，一个 `export interface` 的 DTO 就绕过了「每个导出都要有小节」（Codex 评审）
-    const names = [
-      ...[...text.matchAll(/^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z][A-Za-z0-9]*)\b/gm)].map((m) => m[1]),
-      ...[...text.matchAll(/^export\s+(?:type\s+)?\{([^}]*)\}/gm)].flatMap((m) => m[1].split(",")
-        .map((x) => x.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim()).filter((x) => /^[A-Za-z][A-Za-z0-9]*$/.test(x))),
-    ];
-    for (const n of names) if (!exported.has(n)) exported.set(n, `${dir}/${f}`);
-    // `export * from`、`export type * from`（含 `* as Ns`）导出了什么这里看不见：dto 里不许用，逐个写出来
-    if (dir === "src/output/dto" && /^export\s+(?:type\s+)?\*/m.test(text)) say(`${dir}/${f}: \`export *\` hides which types are part of --json; export them by name`);
+    const text = code(readFileSync(join(abs, f), "utf8"));
+    // **失败关闭**：每一个 `export` 都必须是认得的形式之一，认不得的直接报错——而不是用行首正则去猜。四轮评审各找到一种绕过
+    // 「每个导出都要有小节」的写法（interface、导出列表、export type *、注释 / 缩进 / default / namespace……），
+    // 追着列举永远列不完；只放行下面几种，别的一律拒绝。
+    for (const m of text.matchAll(/\bexport\b/g)) {
+      const rest = text.slice(m.index);
+      // 名叫 export 的属性（`{ export: string }`）不是导出
+      if (/^export\s*[?:(,;)]/.test(rest)) continue;
+      const decl = /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)\s*(?:[=<{]|extends\b)/.exec(rest);
+      const list = /^export\s+(?:type\s+)?\{([^}]*)\}/.exec(rest);
+      if (decl !== null) {
+        if (!exported.has(decl[1])) exported.set(decl[1], `${dir}/${f}`);
+      } else if (list !== null) {
+        for (const item of list[1].split(",").map((x) => x.trim()).filter((x) => x !== "")) {
+          const name = item.replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim();
+          if (/^[A-Za-z_$][\w$]*$/.test(name)) { if (!exported.has(name)) exported.set(name, `${dir}/${f}`); }
+          else if (dir === "src/output/dto") say(`${dir}/${f}: cannot read the export ${JSON.stringify(item)}`);
+        }
+      } else if (/^export\s+(?:async\s+)?function\b|^export\s+const\b/.test(rest)) {
+        // 运行时的映射函数（toDoctorReport 之类）：不是类型，不进契约
+      } else if (dir === "src/output/dto") {
+        say(`${dir}/${f}: unsupported export form ${JSON.stringify(rest.slice(0, 40).replace(/\s+/g, " "))}; `
+          + "export --json types as `export type Name = …` or `export interface Name …`, or list them by name");
+      }
+    }
   }
 }
 

@@ -123,8 +123,34 @@ test("interface、declare、导出列表与重导出也算导出：没写进文�
   assert.match(run(doc("number"), "export interface NewReport { id: string }\n").join("\n"), /NewReport does not match/);
 });
 
-test("dto 里的 export * / export type *（含 * as Ns）：报出来（看不见导出了什么）", () => {
-  for (const line of ['export * from "./b.ts";', 'export type * from "./b.ts";', 'export * as Ns from "./b.ts";', 'export type * as Ns from "./b.ts";']) {
-    assert.match(run(DOC, `${DTO_OK}${line}\n`).join("\n"), /`export \*` hides which types/, line);
+test("失败关闭：认不得的导出形式直接报错（注释、缩进、default、namespace、星号、class、enum、export =）", () => {
+  for (const dto of [
+    'export * from "./b.ts";\n', 'export type * from "./b.ts";\n', 'export * as Ns from "./b.ts";\n', 'export type * as Ns from "./b.ts";\n',
+    'export /*c*/ * from "./b.ts";\n',
+    "export default interface NewReport { id: string }\n",
+    "export namespace Models {\n  export type NewReport = { id: string };\n}\n",
+    "export class NewReport { id = \"\" }\n",
+    "export enum Kind { A }\n",
+    "type NewReport = { id: string };\nexport = NewReport;\n",
+  ]) {
+    assert.match(run(DOC, `${DTO_OK}${dto}`).join("\n"), /unsupported export form/, dto);
   }
+});
+
+test("注释、行首空白、导出列表里的注释都认得：照样要求有小节", () => {
+  for (const dto of [
+    "export /*c*/ interface NewReport { id: string }\n",
+    "export type /*c*/ NewReport = { id: string };\n",
+    " export type NewReport = { id: string };\n",
+    "  export interface NewReport extends Base { id: string }\ninterface Base { x: number }\n",
+    "type NewReport = { id: string };\nexport { /*c*/ NewReport };\n",
+    "type NewReport = { id: string };\nexport type { /*c*/ NewReport };\n",
+    "// export type Hidden = string;\ntype NewReport = { id: string };\nexport {\n  NewReport, // trailing\n};\n",
+  ]) {
+    const out = run("# t\n", dto).join("\n");
+    assert.match(out, /NewReport \(src\/output\/dto\/a\.ts\) is part of the --json output but has no section/, dto);
+    assert.doesNotMatch(out, /Hidden|unsupported/, dto);
+  }
+  // 注释与字符串里的 export、名叫 export 的属性不是导出
+  assert.deepEqual(run(DOC, `${DTO_OK}// export type X = 1;\nconst s = "export type Y = 1";\nconst t = "q\\\" export type Z = { a: 1 }; \\\"";\ntype P = { export: string };\n`), []);
 });

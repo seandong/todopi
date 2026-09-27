@@ -2343,6 +2343,9 @@ Node 用 spec reporter，整层被判 blocked。
   `tools/check-json-doc.mjs`（ARCH-028）把 `docs/json.md` 每个小节翻成 TypeScript，与同名的导出类型做精确相等的断言（先展平交集），交给 tsc 判；
   另查 `src/output/dto/` 的每个导出类型都有小节（内部投影列在 INTERNAL 并写明理由）、小节里提到的类型都有自己的小节。命令与报告的对应由
   `tests/output/json-doc-mapping.test.ts` 真跑一遍核对（类型检查看不见 cli.ts 把哪份报告交给了 `--json`）。
+- **dto 目录里的导出失败关闭**（Codex 四轮评审各找到一种绕过「每个导出都要有小节」的写法）：先去掉注释与字符串内容，再要求每个 `export` 都是
+  认得的形式——`export (declare)? type|interface Name`、`export (type)? { … }` 列表、运行时的 `export function` / `export const`；
+  `default`、`namespace`、`class`、`enum`、星号、`export =` 以及任何别的形式一律报错，而不是继续追着列举。
 - **版本承诺**：加字段（含可选字段）随时可以；删改字段名、改类型、改可选性、改含义、给封闭的字面量联合加值、换一个命令印的报告，都是破坏性变更，升主版本。
   **1.0 之前以最左边的非零位为主版本**（0.1.x 的破坏性变更去 0.2.0）——这是对 PRD「升主版本」在 0.x 期间的解释（与 Cargo 的约定相同），
   否则 1.0 之前任何一次破坏性变更都只能等到 1.0。
