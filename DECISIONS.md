@@ -2448,3 +2448,11 @@ Node 用 spec reporter，整层被判 blocked。
   安装——下载与 sha256 校验通过（改坏 sha256 时 `Formula reports different checksum` 拒绝），`brew style` 无问题，二进制按 test 块的步骤
   （`--version`、`init`）通过；**安装本身被 Homebrew 拒绝：本机 Command Line Tools 过旧**（更新要 sudo，是维护者机器上的事，没动）。
   临时 tap 与下载缓存都已清掉。首次真正的 `brew install` 留待 tap 上线后在 CLT 较新的机器上做。
+
+## D055 — 可见转义只有一份：domain/visible.ts
+
+- 日期：2026-09-28（F35，F27 时发现、F26 评审的同类问题）。
+- prime 与 handoff 以前用 `commands/view.ts` 里一份只转 C0/C1 控制字符的实现，零宽与双向文字字符（U+200B、U+202E……）照样进模型的上下文与终端，
+  能藏住或倒转文字；F26 为 verify 确认提示写的 `domain/visible.ts` 是按 Unicode 类别转的。合并成一份：`visible`（单行，换行与 Tab 也转义）与
+  `visibleMultiline`（Log 条目，保留换行与 Tab），`view.ts` 那两个函数删掉。ARCH-027 的检查器改用同一个类别判据，夹具里加零宽与从右到左覆盖字符，
+  并自检它们确实进了输出；把转义改回只转 C0/C1 时检查器报出 prime 的标题、标准、Log 里的漏网字符。

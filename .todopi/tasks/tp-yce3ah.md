@@ -1,12 +1,13 @@
 ---
 id: "tp-yce3ah"
 title: "prime / handoff 输出里的零宽与双向文字字符也转义（commands/view.ts 的 visible 只管 C0/C1）"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "ix"
 verify: "make check && make test"
 labels: ["m4"]
 created: "2026-09-27T07:19:45Z"
-updated: "2026-09-27T07:20:09Z"
+updated: "2026-09-27T13:03:06Z"
 ---
 
 ## Description
@@ -22,3 +23,4 @@ F26 评审发现：只转义 C0/C1 控制字符时，U+200B、U+202E 之类能�
 
 - 2026-09-27T07:19:45Z claude-code@Seans-MacBook-Pro.local created from=tp-eo6vyg
 - 2026-09-27T07:20:09Z claude-code@Seans-MacBook-Pro.local edited fields=verify
+- 2026-09-27T13:03:06Z claude-code@Seans-MacBook-Pro.local claimed

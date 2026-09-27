@@ -6,7 +6,9 @@
 
 import { hostname } from "node:os";
 import { currentActor } from "./actor.ts";
-import { isDisplayable, visibleLine } from "./view.ts";
+import { isDisplayable } from "./view.ts";
+// 单行字段（标题、assignee、verify……）连换行也转义：里面的换行会让后半截看起来像另一条列表项（F12 评审）
+import { visible as visibleLine } from "../domain/visible.ts";
 import { writeAsWorker } from "./worker-write.ts";
 import { assertWritable, discoverLedger } from "../format/discover.ts";
 import { readTasks } from "../format/read.ts";

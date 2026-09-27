@@ -264,13 +264,13 @@
     },
     {
       "id": "ARCH-027",
-      "description": "注入模型上下文的输出（prime、handoff）不含原始控制字符",
+      "description": "注入模型上下文的输出（prime、handoff）不含看不见的字符（控制、零宽、双向文字等）",
       "applies_when": "test -f src/commands/prime.ts",
       "check": "node tools/check-injected-output.mjs controls",
       "expect": "empty",
-      "what": "prime 或 handoff（任一输出形态）的文本里有换行以外的控制字符，或 JSON 里有控制字符，或 `log` 之外的字段里有换行 / Tab。",
+      "what": "prime 或 handoff（任一输出形态）的文本里有换行以外的看不见的字符（控制、格式——零宽与双向文字——、默认不可见、非普通空白），或 JSON 解码后的字符串里有这类字符，或 `log` 之外的字段里有换行 / Tab。",
       "why": "这些输出会进模型的上下文，也会打到终端上：一条验收标准或一个 assignee 不该能改终端颜色、挪光标，多行 verify 不该在报告里伪造出一行任务。F11 评审一、二轮与 F12 评审一轮四次找到漏网的字段（标准、assignee、只在渲染时转义导致 JSON 里仍带 ESC、多行 verify）。第一版检查器允许 JSON 字符串里有换行、也没跑不带 --check 的 handoff（F12 评审六轮两个假绿）；现在只有 `log` 条目可以多行，四种输出形态都跑，并自检带控制字符的字段确实进了输出。",
-      "fix": "在 commands/ 的投影里经 visible()（多行字段）或 visibleLine()（单行字段）处理，见 src/commands/view.ts。"
+      "fix": "在 commands/ 的投影里经 domain/visible.ts 的 visibleMultiline()（多行字段）或 visible()（单行字段）处理——全仓只有这一份转义实现（F35 合并了 commands/view.ts 里那份只转 C0/C1 的）。"
     },
     {
       "id": "ARCH-028",
