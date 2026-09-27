@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `22a81bc` —— F32 import beads 用更多真实导出测过 经 todopi done 关闭（verify=pass；dirty 只是账本自身的 note / check 改动）。
+- Last commit: `ea5f122` —— F33 格式规格站点 经 todopi done 关闭（verify=pass；dirty 只是账本自身的 note / check 改动）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 38 个任务，33 个 `closed/done`、5 个 `open`：v0.1 缺口审计剩下的 2 个（tp-s4zovm 规格站点、tp-ujjc6y brew）与派生的 tp-yce3ah（F27）、tp-fpy1s4（F29）（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
+- 账本: `.todopi/` 39 个任务，34 个 `closed/done`、5 个 `open`：v0.1 缺口审计剩下的 tp-ujjc6y（brew）与派生的 tp-yce3ah（F27）、tp-fpy1s4（F29）、tp-i8vcpd（F33）（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,9 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+58. ~~F33 格式规格站点（首发清单 §13）~~ 已完成（2026-09-28）：tools/site/build.mjs（make site）从 spec/ 生成静态页（规格、12 字段表、实现者笔记、
+    语料库与每个语料一页），无脚本、不加载外部资源（原始 HTML 显示成文字、危险链接拿掉、图片变普通链接）；部署是维护者的事（docs/site.md）。
+    D053。Codex 四轮 → Go。另建 tp-i8vcpd（语料说明改英文）。
 57. ~~F32 import beads 用更多真实导出测过（首发清单）~~ 已完成（2026-09-28）：六个别的公开仓库的 .beads/issues.jsonl（按提交钉住，1,211 行）
     全部导入、doctor 通过、重复导入 0 新建。发现自定义状态（cancelled / done）被静默建成 open：导出里没有状态类别，仍照 open 建，但按状态汇总警告，
     给 todopi id（带 Beads id）与关法。D041 补记。Codex 三轮 → Go。
