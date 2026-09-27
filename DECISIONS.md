@@ -2184,6 +2184,25 @@ Node 用 spec reporter，整层被判 blocked。
 - 子代理复审三轮（Go，两条 P3 顺手修）：判断 from 能否保留时只算已决定保留的 from（先全拿下再逐条放回），否则一条注定要丢的会
   连带丢掉本可保留的；两处 DFS 改为显式栈，一万五千个任务的 blocks 链不再爆栈。
 
+- **更多真实导出**（2026-09-28，F32，首发清单「至少两份真实导出」）：在 GitHub 上找了六个别的公开仓库提交的 `.beads/issues.jsonl`，按提交钉住：
+
+  | 仓库@提交 | 行数 | 导入（开 / 关） | 跳过 / 丢弃 |
+  |---|---|---|---|
+  | mantoni/beads-ui@e3c3345db41c | 208 | 208（1 / 207） | 1 条评论 |
+  | DavidWells/markdown-magic@a41aa9e00187 | 16 | 16（0 / 16） | — |
+  | Dicklesworthstone/rano@996082d9334b | 104 | 104（0 / 104） | 5 条评论 |
+  | imbue-ai/offload@7a747d6450cb | 235 | 234（14 / 220；自定义状态 cancelled 4、done 1 照 open 建并警告） | 1 tombstone、14 条评论 |
+  | luna-system/ada@4a2972a2faf0 | 150 | 150（78 / 72） | — |
+  | davetashner/stringer@d80820b94ada | 498 | 498（45 / 453） | — |
+
+  每一份都 doctor 通过、重复导入 0 新建。数据只在本地用，不进仓库（许可各不相同）。
+- **非 Classic 的状态**（同上，imbue-ai/offload 实测）：那份导出里有 `cancelled` 与 `done`——Classic 的类型里没有，是项目自定义的状态。
+  第一版按名字把「明显结束」的建成 closed；Codex 评审指出 Beads 的自定义状态各有类别（active / wip / done / frozen），类别在项目配置里、
+  **不在导出里**，一个叫 done 的状态完全可以是「待验收」的 active。关错了悄无声息地离开 ready 队列、重导入又因已导入而跳过；开着则看得见、
+  一条命令就改。所以规则仍是**只有 closed 关**，自定义状态照 open 建，按状态**汇总警告**：个数、前 5 个的 todopi id（各带对应的 Beads id——警告里的命令要的是
+  todopi id，只给 Beads id 照着跑只会得到 No task，评审二轮）、怎么关（`todopi done` / `close --resolution wontfix`），原状态照样进 Log。
+  警告在建完之后由 commands/ 组装（plan 阶段还没有 todopi id）。`status` 不是字符串的行按格式错误拒绝（曾抛 TypeError）。
+
 ## D042 — 分发：tsc 逐文件编译的 npm 包、main.ts 入口、install.sh 与两条 CI
 
 - 日期：2026-09-26（F21）。D006 决策 10 与 D008 决策 3 的落地。

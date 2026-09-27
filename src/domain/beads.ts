@@ -63,6 +63,11 @@ export type BeadsPlan = {
   skipped: { tombstone: number; ephemeral: number; existing: number };
   dropped: { danglingEdges: number; otherEdgeTypes: number; cycleEdges: number; fromEdges: number; extraParents: number; comments: number };
   warnings: string[];
+  /**
+   * 自定义状态（非 Classic），照 open 建：按状态分组的 Beads id。警告由 commands/ 在建完之后组装——那时才知道 todopi id，
+   * 而警告里给的命令（`todopi done <id>`）要的是 todopi id（F32 评审二轮）。
+   */
+  customStatuses: { status: string; beadsIds: string[] }[];
 };
 
 const MAX_TITLE = 200;
@@ -134,6 +139,16 @@ function descriptionOf(i: BeadsIssue, overflowTitle: string | undefined, safe: S
   return safe(text) ? text : indented(text);
 }
 
+/**
+ * Beads Classic（v0.47.1 的 types.go）认得的状态；tombstone 在前面就跳过了。只有 closed 关。
+ *
+ * 别的状态是项目自定义的（F32：imbue-ai/offload 的导出里有 cancelled 与 done）。**不按名字猜它结束了没有**：Beads 的自定义状态各有类别
+ * （active / wip / done / frozen），类别在项目配置里、不在导出里——一个叫 done 的状态完全可以是「待验收」的 active（F32 评审）。
+ * 关错了悄无声息地从 ready 队列里消失，重导入又因为已导入而跳过、纠正不了；开着则看得见、一条 close 就改过来。所以照 open 建，
+ * 按状态汇总大声警告，点名 Beads id 与改法。
+ */
+const CLASSIC_STATUSES = new Set(["open", "in_progress", "blocked", "deferred", "closed", "pinned", "hooked"]);
+
 export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<string>, safe: SafeText): BeadsPlan {
   const skipped = { tombstone: 0, ephemeral: 0, existing: 0 };
   const dropped = { danglingEdges: 0, otherEdgeTypes: 0, cycleEdges: 0, fromEdges: 0, extraParents: 0, comments: 0 };
@@ -157,6 +172,8 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
   const orderOf = new Map(byPriority.map((i, n) => [i.id, n]));
 
   const planned = new Map<string, BeadsPlanned>();
+  /** 自定义状态：照 open 建，记下哪些 Beads id（警告由 commands/ 在建完后给，带 todopi id） */
+  const unknownStatus = new Map<string, string[]>();
   for (const i of byPriority) {
     let parent: string | undefined;
     const blockedBy: string[] = [];
@@ -189,8 +206,10 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
       if (l === null) warnings.push(`${i.id}: label ${JSON.stringify(raw)} cannot be written as a todopi label; dropped`);
       else if (!labels.includes(l)) labels.push(l);
     }
-    const closed = i.status === "closed";
-    const was = [`Beads ${i.id}`, `status ${i.status ?? "open"}`, `priority P${i.priority ?? 2}`];
+    const status = typeof i.status === "string" ? i.status : "open";
+    if (!CLASSIC_STATUSES.has(status)) unknownStatus.set(status, [...(unknownStatus.get(status) ?? []), i.id]);
+    const closed = status === "closed";
+    const was = [`Beads ${i.id}`, `status ${status}`, `priority P${i.priority ?? 2}`];
     if (i.assignee) was.push(`assignee ${i.assignee}`);
     if (closed && i.close_reason) was.push(`close reason: ${i.close_reason.replace(/\s+/g, " ").trim()}`);
     planned.set(i.id, {
@@ -286,5 +305,6 @@ export function planBeadsImport(issues: BeadsIssue[], alreadyImported: Set<strin
       stack.push({ id: target, targets: next(planned.get(target)!), at: 0 });
     }
   }
-  return { tasks: out, skipped, dropped, warnings };
+  const customStatuses = [...unknownStatus].map(([status, beadsIds]) => ({ status, beadsIds }));
+  return { tasks: out, skipped, dropped, warnings, customStatuses };
 }

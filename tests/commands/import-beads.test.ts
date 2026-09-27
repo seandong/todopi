@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
-import { runImportBeads, parseIssues, preflight } from "../../src/commands/import-beads.ts";
+import { runImportBeads, parseIssues, preflight, customStatusWarnings } from "../../src/commands/import-beads.ts";
 import { runLs } from "../../src/commands/ls.ts";
 import { runShow } from "../../src/commands/show.ts";
 import { runDoctor } from "../../src/commands/doctor.ts";
@@ -81,6 +81,43 @@ test("计划：tombstone 与 ephemeral 跳过；parent / blocked_by 的目标先
   const order = [...p.tasks].sort((a, b) => a.order - b.order).map((t) => t.beadsId);
   assert.deepEqual(order, ["bd-b", "bd-epic", "bd-a", "bd-c", "bd-d"], "priority 0 最先");
   assert.equal(p.dropped.otherEdgeTypes, 1, "related 没有对应物");
+});
+
+test("状态：只有 closed 关；自定义状态（哪怕叫 done / cancelled）照 open 建，按状态汇总警告并点名 Beads id；Classic 状态不警告（F32）", () => {
+  // 自定义状态的类别（active / done……）在 Beads 的项目配置里、不在导出里：叫 done 的也可能是「待验收」，不能凭名字关（F32 评审）
+  const I = (id: string, status: string | undefined, close_reason?: string) => ({ id, title: id, status, priority: 2, issue_type: "task", created_at: T0, updated_at: T0, close_reason });
+  const p = planBeadsImport([
+    I("c1", "cancelled"), I("d1", "done"), I("d2", "done"), I("r1", "review"),
+    I("o1", "in_progress"), I("o2", "deferred"), I("o3", undefined), I("x1", "closed", "Won't fix"),
+    ...Array.from({ length: 7 }, (_, k) => I(`q${k}`, "qa")),
+  ] as BeadsIssue[], new Set(), () => true);
+  const t = (id: string) => p.tasks.find((x) => x.beadsId === id)!;
+  for (const id of ["c1", "d1", "d2", "r1", "o1", "o2", "o3", "q0"]) assert.equal(t(id).status, "open", id);
+  assert.deepEqual([t("x1").status, t("x1").resolution], ["closed", "wontfix"]);
+  assert.match(t("d1").note, /status done/, "原状态进 Log");
+  assert.deepEqual(p.customStatuses.map((c) => [c.status, c.beadsIds]).sort(),
+    [["cancelled", ["c1"]], ["done", ["d1", "d2"]], ["qa", ["q0", "q1", "q2", "q3", "q4", "q5", "q6"]], ["review", ["r1"]]],
+    "每种状态一组，Classic 状态不在内");
+  const w = customStatusWarnings(p.customStatuses, new Map([["d1", "tp-aaaaaa"], ["d2", "tp-bbbbbb"], ...Array.from({ length: 7 }, (_, k) => [`q${k}`, `tp-q0000${k}`] as [string, string])]));
+  assert.match(w.find((x) => x.includes('"done"'))!, /^2 issue\(s\) .*: tp-aaaaaa \(Beads d1\), tp-bbbbbb \(Beads d2\)\./);
+  assert.match(w.find((x) => x.includes('"qa"'))!, /tp-q00004 \(Beads q4\), and 2 more\./);
+  assert.match(w[0]!, /todopi done <id>/);
+});
+
+test("自定义状态的警告给的是 todopi id：照着跑 todopi done 能关上（F32 评审二轮）", () => {
+  const d = repo();
+  beads(d, [{ id: "bead-await", title: "Awaiting review", status: "review", priority: 2, issue_type: "task", created_at: T0, updated_at: T0 }]);
+  const r = runImportBeads({ directory: d, actor: ME });
+  const w = r.warnings.find((x) => /custom Beads status "review"/.test(x))!;
+  const id = /: (tp-[0-9a-z]+) \(Beads bead-await\)/.exec(w)?.[1];
+  assert.equal(id, r.created[0]!.id);
+  assert.equal(runShow({ directory: d, id: id!, actor: ME }).status, "open");
+});
+
+test("status 不是字符串的行：格式错误点名行号，什么都不导入（不抛 TypeError）", () => {
+  assert.throws(() => parseIssues('{"id":"a","title":"A","status":"open"}\n{"id":"bad","title":"B","status":17}\n', "x.jsonl"),
+    (e: unknown) => e instanceof CliError && e.code === EXIT.usage && /line 2 /.test(e.message));
+  assert.equal(parseIssues('{"id":"a","title":"A","status":null}\n{"id":"b","title":"B"}\n', "x.jsonl").length, 2, "缺或 null 当 open");
 });
 
 test("计划：成环的依赖丢掉一条边并警告；多个父级取第一个；指向没导入的条目的边丢掉", () => {
