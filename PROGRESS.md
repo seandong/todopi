@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `f24b1fc` —— F28 README 首发版 经 todopi done 关闭（verify=pass；dirty 只是账本自身的 note / check 改动）。
+- Last commit: `6ac7f4b` —— F29 性能基准 经 todopi done 关闭（verify=pass；dirty 只是账本自身的 note / check 改动）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 37 个任务，29 个 `closed/done`、8 个 `open`：v0.1 缺口审计剩下的 6 个与 F27 派生的 tp-yce3ah（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
+- 账本: `.todopi/` 38 个任务，30 个 `closed/done`、8 个 `open`：v0.1 缺口审计剩下的 5 个与派生的 tp-yce3ah（F27）、tp-fpy1s4（F29）（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,9 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+54. ~~F29 性能基准（PRD §10）~~ 已完成（2026-09-28）：tools/bench/ledger-2000.sh 确定地生成 2,000 个任务（形状运行时印出）、doctor 把关、
+    各命令热身后取中位数；CI 里跑、不设阈值。参考结果（Docker Linux 虚拟机，宿主 M4 Pro）：ls 155、show 85、doctor 148、prime 215 ms——
+    prime 超出 200 ms，拆出 tp-fpy1s4。D050。Codex 三轮 → Go。
 53. ~~F28 README 首发版（FR-A4、首发清单 §13）~~ 已完成（2026-09-28）：六家各一节（setup、写的文件、压缩后怎么恢复、Codex 钩子与 pi 项目要信任）、
     PATH、--user 的范围、install.sh 的分支与二进制平台、协议（链 src/protocol.ts）、vs Beads（按 Beads 当前 README 核实）、读音。纠正 done 可强制、
     体积按文件大小。tests/readme.test.ts 把易过时的事实与实现对着查。D049。Codex 三轮 → Go。

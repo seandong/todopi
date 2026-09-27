@@ -32,6 +32,13 @@ jobs:
       - name: Run harness (Layer 1-3, 按可用性降级)
         run: ./tools/harness.sh ci
 
+      # 性能基准（F29）：不是门禁——阈值不设，runner 之间差得太多。只要求脚本跑得通（生成的账本过 doctor、每条命令成功），
+      # 表格进 job summary，PRD §10 的参考数字就取自这里
+      - name: Benchmark on a 2,000-task ledger (not a gate)
+        # 显式 shell: bash 才带 pipefail：默认的 bash -e 下，tee 会吞掉脚本的失败
+        shell: bash
+        run: bash tools/bench/ledger-2000.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Publish scope summary
         if: always()
         run: cat .harness-results/ci-summary.md >> "$GITHUB_STEP_SUMMARY"
