@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -65,4 +65,40 @@ test("站内链接与锚点都能到；外链只有普通 <a>，不加载任何�
     }
   }
   assert.deepEqual(broken, []);
+});
+
+test("原始 HTML 与危险链接：显示成文字、不执行；表格照样是表格；`___` 单元格不变成分隔线（F33 评审二轮）", () => {
+  const src = mkdtempSync(join(tmpdir(), "todopi-site-src-"));
+  mkdirSync(join(src, "fixtures", "valid"), { recursive: true });
+  mkdirSync(join(src, "fixtures", "invalid"), { recursive: true });
+  writeFileSync(join(src, "fixtures", "README.md"), "# Corpus\n");
+  writeFileSync(join(src, "IMPLEMENTING.md"), "# Notes\n\n<div onclick=\"alert(3)\">block</div>\n");
+  writeFileSync(join(src, "todopi-format-v1.md"), [
+    "# Spec", "",
+    "Inline <svg onload=alert(1)>x</svg> and [bad](javascript:alert(2)) and [ok](IMPLEMENTING.md).", "",
+    "<script>alert(4)</script>", "",
+    "### 5.2 Frontmatter fields", "",
+    "| # | Field | Note |", "|---|---|---|",
+    "| 1 | `id` | <img src=x onerror=alert(5)> |",
+    "| ___ | `t` | [x](javascript:alert(6)) |", "",
+    "### 5.3 Body", "",
+  ].join("\n"));
+  const o = mkdtempSync(join(tmpdir(), "todopi-site-out-"));
+  execFileSync(process.execPath, ["tools/site/build.mjs", o], { stdio: "ignore", env: { ...process.env, TODOPI_SITE_SPEC: src } });
+  for (const f of ["index.html", "fields.html", "implementing.html"]) {
+    const html = readFileSync(join(o, "spec", f), "utf8");
+    // 没有任何可执行的东西：原始标签、事件属性、javascript: 链接
+    assert.doesNotMatch(html, /<(svg|img|script|iframe)[\s>]/i, f);
+    // 真标签上的事件属性（转义成文字的 `&lt;svg onload=` 不算）
+    assert.doesNotMatch(html, /<[a-z][^>]*\son\w+=/i, f);
+    assert.doesNotMatch(html, /href="javascript:/i, f);
+  }
+  const index = readFileSync(join(o, "spec", "index.html"), "utf8");
+  assert.match(index, /&lt;svg onload=alert\(1\)&gt;x&lt;\/svg&gt;/, "原文照样看得见");
+  assert.match(index, /&lt;script&gt;alert\(4\)&lt;\/script&gt;/);
+  assert.match(index, /<table><thead><tr><th>#<\/th><th>Field<\/th><th>Note<\/th><\/tr><\/thead>/, "表格仍是表格");
+  assert.match(index, /<td>___<\/td>/, "___ 单元格保留原文");
+  assert.match(index, /<td>&lt;img src=x onerror=alert\(5\)&gt;<\/td>/, "打头是 < 的单元格仍是行内文字，不变成 <pre>");
+  assert.match(index, /href="implementing.html"/, "站内链接照样改写");
+  assert.match(readFileSync(join(o, "spec", "implementing.html"), "utf8"), /&lt;div onclick=/);
 });

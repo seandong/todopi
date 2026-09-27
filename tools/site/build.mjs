@@ -15,7 +15,8 @@ import * as commonmark from "commonmark";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const out = resolve(process.argv[2] ?? join(repo, ".site"));
-const spec = join(repo, "spec");
+// TODOPI_SITE_SPEC 只给测试用：拿一份刻意构造的规格验证渲染（原始 HTML、危险链接）是安全的
+const spec = resolve(process.env.TODOPI_SITE_SPEC ?? join(repo, "spec"));
 const site = join(out, "spec");
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -25,26 +26,63 @@ const slug = (text) => text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, 
 /** 规格里指向仓库文件的链接，在站点里指向对应的页 */
 const LINKS = { "IMPLEMENTING.md": "implementing.html", "fixtures/README.md": "fixtures/index.html" };
 
+/**
+ * 把解析树里的原始 HTML 变成文字、把危险的链接目标拿掉（F33 评审二轮：表格单元格里的 `<svg onload=…>` 原样进了页面）。
+ * 规格是 Markdown，本来就不该有原始 HTML；万一有，照原文**显示**出来而不是执行，内容一个字不丢——比 commonmark 的 safe 模式
+ * （直接删掉）更忠实。站点自己要插的 HTML（标题锚点、表格）都在这一步之后才加进去。
+ */
+function neutralize(doc) {
+  const nodes = [];
+  const w = doc.walker();
+  for (let e = w.next(); e; e = w.next()) if (e.entering) nodes.push(e.node);
+  for (const node of nodes) {
+    if (node.type === "html_inline") {
+      const t = new commonmark.Node("text");
+      t.literal = node.literal;
+      node.insertBefore(t);
+      node.unlink();
+    } else if (node.type === "html_block") {
+      const pre = new commonmark.Node("code_block");
+      pre.literal = node.literal;
+      node.insertBefore(pre);
+      node.unlink();
+    } else if ((node.type === "link" || node.type === "image") && /^\s*(javascript|vbscript|data):/i.test(node.destination ?? "")) {
+      node.destination = "#";
+    }
+  }
+  return doc;
+}
+
 /** 一个表格单元格里的行内 Markdown → HTML（去掉包在外面的 <p>） */
 function inline(text) {
-  // commonmark.js 没有「只解析行内」的入口：单元格按块解析时，打头的 `#`、`-`、`>`、`1.` 这类记号会变成标题、列表、引用
-  // （§5.2 表头那一格 `#` 曾变成一个空的 <h1>——Codex 评审）。把打头的块级记号转义掉，保证它按一段文字解析
-  // 单元格已经 trim 过，缩进代码块不会出现；围栏（``` / ~~~）会开一个代码块，同样转义第一个字符
-  const safe = text.replace(/^([#>+*=-])/, "\\$1").replace(/^(\d+)([.)])/, "$1\\$2").replace(/^(`{3}|~{3})/, "\\$1");
-  return new commonmark.HtmlRenderer().render(new commonmark.Parser().parse(safe)).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");
+  // commonmark.js 没有「只解析行内」的入口：单元格按块解析时，打头的块级记号会把它变成标题、列表、引用、代码块、分隔线
+  // （§5.2 表头那一格 `#` 曾变成空的 <h1>；`___` 成了 <hr>、文字丢了——Codex 评审）。把打头的记号转义，保证按一段文字解析。
+  // 单元格已经 trim 过，缩进代码块不会出现。
+  const safe = text
+    .replace(/^([#>+*=-])/, "\\$1")
+    .replace(/^(\d+)([.)])/, "$1\\$2")
+    .replace(/^(`{3}|~{3})/, "\\$1")
+    .replace(/^(_)(?=(\s*_){2,}\s*$)/, "\\$1")
+    // 打头的 < 会开一个 HTML 块（neutralize 后成了单元格里的 <pre>）：转义，按行内文字显示
+    .replace(/^</, "\\<");
+  const html = new commonmark.HtmlRenderer().render(neutralize(new commonmark.Parser().parse(safe))).trim();
+  return html.replace(/^<p>([\s\S]*)<\/p>$/, "$1");
 }
 
 /** 按未转义的 | 切一行表格；\| 还原成 | */
 const cellsOf = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
 const DELIM = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+const TABLE_MARK = (n) => `TODOPITABLEPLACEHOLDER${n}`;
 
 /**
- * GFM 管道表格 → HTML 表格块。commonmark.js 只实现 CommonMark 本身，没有表格扩展，规格里的每张表（包括 12 字段表）原样渲染会变成
- * 一段文字。围栏代码块里的不动。生成的 HTML 没有空行，按 CommonMark 的 HTML 块规则整块原样输出。
+ * GFM 管道表格 → HTML 表格。commonmark.js 只实现 CommonMark 本身，没有表格扩展，规格里的每张表（包括 12 字段表）原样渲染会变成
+ * 一段文字。围栏代码块里的不动。表格在正文里先换成一个占位段落，正文渲染完再换回来——若直接作为 HTML 块写进 Markdown，
+ * neutralize 会把它当原始 HTML 显示成文字。
  */
 function gfmTables(md) {
   const lines = md.split("\n");
   const outLines = [];
+  const tables = [];
   let fence = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -55,42 +93,46 @@ function gfmTables(md) {
       const rows = [];
       let j = i + 2;
       while (j < lines.length && lines[j].trim().startsWith("|")) { rows.push(cellsOf(lines[j])); j++; }
-      outLines.push("", "<table>", `<thead><tr>${head.map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead>`,
-        `<tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody>`, "</table>", "");
+      tables.push(`<table><thead><tr>${head.map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead>`
+        + `<tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
+      outLines.push("", TABLE_MARK(tables.length - 1), "");
       i = j - 1;
       continue;
     }
     outLines.push(line);
   }
-  return outLines.join("\n");
+  return { text: outLines.join("\n"), tables };
 }
 
-/** Markdown → HTML：标题带锚点，站内链接改写；返回 HTML 与目录（二、三级标题） */
+/** Markdown → HTML：原始 HTML 显示成文字，标题带锚点，站内链接改写；返回 HTML 与目录（二、三级标题） */
 function render(markdown, { links = LINKS, base = "" } = {}) {
-  const doc = new commonmark.Parser().parse(gfmTables(markdown));
+  const { text: body, tables } = gfmTables(markdown);
+  const doc = neutralize(new commonmark.Parser().parse(body));
   const toc = [];
   const used = new Set();
+  const headings = [];
   const walker = doc.walker();
-  for (let e = walker.next(); e; e = walker.next()) {
-    const node = e.node;
-    if (!e.entering) continue;
-    if (node.type === "link" && node.destination in links) node.destination = base + links[node.destination];
-    if (node.type === "heading") {
-      let text = "";
-      const w = node.walker();
-      for (let t = w.next(); t; t = w.next()) if (t.entering && (t.node.type === "text" || t.node.type === "code")) text += t.node.literal;
-      let id = slug(text);
-      for (let n = 1; used.has(id); n++) id = `${slug(text)}-${n}`;
-      used.add(id);
-      // 锚点作为标题前的一个空 HTML 行内节点插进去
-      const anchor = new commonmark.Node("html_inline");
-      anchor.literal = `<a class="anchor" id="${esc(id)}" href="#${esc(id)}" aria-label="Link to this section">#</a>`;
-      node.prependChild(anchor);
-      if (node.level === 2 || node.level === 3) toc.push({ level: node.level, id, text });
-    }
+  for (let e = walker.next(); e; e = walker.next()) if (e.entering && e.node.type === "heading") headings.push(e.node);
+  for (const node of headings) {
+    let text = "";
+    const w = node.walker();
+    for (let t = w.next(); t; t = w.next()) if (t.entering && (t.node.type === "text" || t.node.type === "code")) text += t.node.literal;
+    let id = slug(text);
+    for (let n = 1; used.has(id); n++) id = `${slug(text)}-${n}`;
+    used.add(id);
+    // 锚点是站点自己加的 HTML：在 neutralize 之后插，不会被当成原始 HTML 显示
+    const anchor = new commonmark.Node("html_inline");
+    anchor.literal = `<a class="anchor" id="${esc(id)}" href="#${esc(id)}" aria-label="Link to this section">#</a>`;
+    node.prependChild(anchor);
+    if (node.level === 2 || node.level === 3) toc.push({ level: node.level, id, text });
+  }
+  const walker2 = doc.walker();
+  for (let e = walker2.next(); e; e = walker2.next()) {
+    if (e.entering && e.node.type === "link" && e.node.destination in links) e.node.destination = base + links[e.node.destination];
   }
   let html = new commonmark.HtmlRenderer({ safe: false }).render(doc);
-  // 表格单元格里的链接是 gfmTables 单独渲染的、没经过上面的遍历：在成品上再改写一遍
+  html = html.replace(/<p>TODOPITABLEPLACEHOLDER(\d+)<\/p>/g, (_, n) => tables[Number(n)]);
+  // 表格单元格里的链接是单独渲染的、没经过上面的遍历：在成品上再改写一遍
   for (const [from, to] of Object.entries(links)) html = html.replaceAll(`href="${esc(from)}"`, `href="${esc(base + to)}"`);
   return { html, toc };
 }
