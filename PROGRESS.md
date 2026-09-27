@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `e405adf` —— Codex 补审修复合入；Install 工作流改用 root 自己的 HOME。
+- Last commit: `1fb6529` —— v0.1 缺口审计：13 个新任务（M4）进账本。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 23 个任务，22 个 `closed/done`（F01–F21 与 tp-1ssqrw）、1 个 `open`（tp-zagvp5 Cursor 实机验证，等 `cursor-agent login` 与 IDE 手工验证）（含从 F15 拆出的 tp-1ssqrw、从 F17 拆出的 tp-zagvp5）。
+- 账本: `.todopi/` 36 个任务，22 个 `closed/done`、14 个 `open`：v0.1 缺口审计建的 13 个（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,11 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+46. v0.1 缺口审计（2026-09-28）：Codex 与 Claude 子代理各自独立地把 PRD §7–§12、README 与实现逐条对照，报告在 docs/plans/2026-09-28-v01-gap-audit-*.md。
+    核实后建成 13 个任务（label m4），按对用户的影响排序：FR-C4 agent 环境推断身份（同机多个 agent 现在都是同一个 git 用户名）、CLI 表面补齐
+    （别名、close --reason、--quiet、done 被拒时提示 check）、建好后改验收标准与 Plan / --edit、更高版本账本只读可用、首次 verify 的终端确认、
+    --json 契约文档、README 首发版、性能基准、规格措辞、第二份 Beads 导出、规格站点、brew。**审计中子代理误改了维护者的 ~/.cursor/hooks.json**
+    （多了 todopi 的 sessionStart 与 sessionEnd 两项；它被拒绝回滚，我没有代做，留给维护者删）。
 45. Codex 补审（2026-09-28）：额度恢复后，把只经子代理评审的 F20 / F21 / 探针 / 看板兜底轮询交给 Codex 再审。发现并修好：Beads 自己挡自己的
     边被静默丢（改为计数并警告）；install.sh 的安装目录竞态——临时文件名可预测、别人可写的目录、上级目录与路径里的符号链接、ACL（含上级目录；
     macOS 家目录默认的 deny ACL 不算）、getfacl 读失败时误判为安全。最终做法：解析成物理路径一次、此后只用它，逐级查属主 / 权限位 / ACL，
