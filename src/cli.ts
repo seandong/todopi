@@ -70,7 +70,8 @@ program
   .command("add")
   .aliases(["new", "create"])
   .argument("<title>", "what the task is")
-  .description("create a task in the ledger")
+  // commander 的帮助只列第一个别名：把全部写进描述，create 才看得见（Codex 评审）
+  .description("create a task in the ledger (also: new, create)")
   .option("-d, --description <text>", "longer description for the task body")
   .option("--ac <text...>", "acceptance criteria; repeat or pass several")
   .option("--label <label...>", "labels to attach")

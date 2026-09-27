@@ -27,6 +27,9 @@ cli -C "$W" init >/dev/null 2>&1
 A="$(cli -C "$W" new "via new" | head -1 | cut -d' ' -f1)"
 B="$(cli -C "$W" create "via create" | head -1 | cut -d' ' -f1)"
 [ -n "$A" ] && [ -n "$B" ] && [ "$(cli -C "$W" list | wc -l | tr -d ' ')" = "2" ] && ok "new / create / list 都可用" || fail "new=$A create=$B list=$(cli -C "$W" list)"
+h="$(cli --help)"
+printf '%s' "$h" | grep -q "add|new" && printf '%s' "$h" | grep -q "create" && printf '%s' "$h" | grep -q "ls|list" \
+  && printf '%s' "$h" | grep -q "note|log" && printf '%s' "$h" | grep -q "dep|block" && ok "帮助里看得到全部别名（含 create）" || fail "$h"
 cli -C "$W" log "$A" "via log" >/dev/null 2>&1 && cli -C "$W" show "$A" --full | grep -q "via log" && ok "log 是 note 的别名" || fail "log 不可用"
 cli -C "$W" block add "$B" --on "$A" >/dev/null 2>&1 && cli -C "$W" show "$B" | grep -q "blocked_by $A" && ok "block 是 dep 的别名" || fail "block 不可用：$(cli -C "$W" show "$B")"
 
