@@ -2433,3 +2433,16 @@ Node 用 spec reporter，整层被判 blocked。
   保证单元格是行内文字。Markdown 图片换成指向同一地址的普通链接（不点不加载——评审三轮：`![x](https://…)` 会让页面一打开就去外部取）。
   `tests/site.test.ts` 用一份刻意构造的规格（`TODOPI_SITE_SPEC`）验证。
 - 语料的说明（`note` / `reason`）现在是中文，而规格与语料是面向用户的、应当 English-first：拆成跟进任务，站点照原文显示。
+
+## D054 — Homebrew：formula 由发布工作流按 SHA256SUMS 生成
+
+- 日期：2026-09-28（F34，首发清单 §13）。
+- `tools/brew/formula.mjs` 按一次发布的 `SHA256SUMS` 生成 `Formula/todopi.rb`：macOS / Linux × arm64 / x64 各取 Release 里的单文件二进制，
+  每个都带 sha256（Homebrew 下载后校验，不符拒装）；没有依赖（二进制自带运行时），`tp` 是链接；test 块核对 `--version` 与 `init`。
+  哪个平台缺了、版本号不对就失败，不生成一份装不上的 formula。
+- `release.yml`：生成 formula 并作为 Release 资产附上；仓库有 `HOMEBREW_TAP_TOKEN` 时在建 Release **之后**提交到 `seandong/homebrew-tap`
+  （formula 的地址指向 Release 资产）；没有就跳过。建 tap 仓库、给 token 是维护者的事（`docs/brew.md`）。
+- **本机实测**（2026-09-28，Homebrew 7.0.6，macOS arm64）：用 bun 现编的 darwin-arm64 二进制、file:// 地址生成 formula，放进临时的本地 tap
+  安装——下载与 sha256 校验通过（改坏 sha256 时 `Formula reports different checksum` 拒绝），`brew style` 无问题，二进制按 test 块的步骤
+  （`--version`、`init`）通过；**安装本身被 Homebrew 拒绝：本机 Command Line Tools 过旧**（更新要 sudo，是维护者机器上的事，没动）。
+  临时 tap 与下载缓存都已清掉。首次真正的 `brew install` 留待 tap 上线后在 CLT 较新的机器上做。

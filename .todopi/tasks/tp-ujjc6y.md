@@ -1,12 +1,13 @@
 ---
 id: "tp-ujjc6y"
 title: "brew：formula 与发布时更新它的步骤"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "iw"
 verify: "make check && make test"
 labels: ["m4"]
 created: "2026-09-27T03:14:04Z"
-updated: "2026-09-27T03:14:04Z"
+updated: "2026-09-27T12:43:59Z"
 ---
 
 ## Description
@@ -22,3 +23,4 @@ updated: "2026-09-27T03:14:04Z"
 ## Log
 
 - 2026-09-27T03:14:04Z seandong created
+- 2026-09-27T12:43:59Z claude-code@Seans-MacBook-Pro.local claimed
