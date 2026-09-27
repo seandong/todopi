@@ -145,6 +145,17 @@ const emitted = runTsc({
 
 /** name → 源文件（相对 root） */
 const exported = new Map();
+/** name → 导出它的所有文件 */
+const sourcesOf = new Map();
+/**
+ * 登记一个导出。同名的类型从两个文件导出（哪怕其中一个只是转发）、且其中有 dto 或它写进了文档时报错：文档一个名字只有一节，检查只能拿它与
+ * 一个定义比；留着第一个、悄悄丢掉第二个，第二个就绕过了检查（Codex 七轮）。domain 内部的转发（gates.ts 转出 ownership.ts 的 LeaseView）
+ * 与 --json 无关，不管。
+ */
+function register(name, source) {
+  if (!exported.has(name)) exported.set(name, source);
+  sourcesOf.set(name, [...new Set([...(sourcesOf.get(name) ?? []), source])]);
+}
 for (const source of sourceFiles) {
   const isDto = source.startsWith("src/output/dto/");
   const declFile = join(dts, relative(join(root, "src"), join(root, source)).replace(/\.ts$/, ".d.ts"));
@@ -164,11 +175,11 @@ for (const source of sourceFiles) {
     const decl = /^export\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)\s*(?:[=<{]|extends\b)/.exec(rest);
     const list = /^export\s+(?:type\s+)?\{([^}]*)\}/.exec(rest);
     if (decl !== null) {
-      if (!exported.has(decl[1])) exported.set(decl[1], source);
+      register(decl[1], source);
     } else if (list !== null) {
       for (const item of list[1].split(",").map((x) => x.trim()).filter((x) => x !== "")) {
         const name = item.replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim();
-        if (/^[A-Za-z_$][\w$]*$/.test(name)) { if (!exported.has(name)) exported.set(name, source); }
+        if (/^[A-Za-z_$][\w$]*$/.test(name)) register(name, source);
         else if (isDto) say(`${source}: cannot read the export ${JSON.stringify(item)}`);
       }
     } else if (/^export\s+(?:declare\s+)?(?:async\s+)?(?:function|const)\b/.test(rest)) {
@@ -180,6 +191,11 @@ for (const source of sourceFiles) {
   }
 }
 
+for (const [name, files] of sourcesOf) {
+  if (files.length > 1 && (documented.has(name) || files.some((f) => f.startsWith("src/output/dto/")))) {
+    say(`${name} is exported by ${files.join(" and ")}; give each --json type one name and one place`);
+  }
+}
 for (const [name, file] of exported) {
   if (file.startsWith("src/output/dto/") && !INTERNAL.has(name) && !documented.has(name)) {
     say(`docs/json.md: ${name} (${file}) is part of the --json output but has no section`);

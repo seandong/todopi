@@ -166,3 +166,15 @@ test("子目录里的 dto 也查（只看一层时它绕过了检查）", () => 
   const bad = run(DOC, DTO_OK, process.env, { "src/output/dto/nested/b.ts": "export default interface D { id: string }\n" });
   assert.match(bad.join("\n"), /src\/output\/dto\/nested\/b\.ts: unsupported export form/);
 });
+
+test("同名类型从两个文件导出：报错（只核对一个定义时，另一个绕过了检查）", () => {
+  const out = run(DOC, DTO_OK, process.env, { "src/output/dto/b.ts": "export type AReport = { id: number };\n" });
+  assert.match(out.join("\n"), /AReport is exported by src\/output\/dto\/a\.ts and src\/output\/dto\/b\.ts/);
+  const fwd = run(DOC, DTO_OK, process.env, { "src/output/dto/b.ts": 'export type { AReport } from "./a.ts";\n' });
+  assert.match(fwd.join("\n"), /AReport is exported by/);
+  // 写进文档的名字：domain 里两处导出也报
+  const dom = run(DOC, DTO_OK, process.env, { "src/domain/x.ts": "export type BItem = { name: string };\n" });
+  assert.match(dom.join("\n"), /BItem is exported by src\/domain\/x\.ts and src\/output\/dto\/a\.ts|BItem is exported by src\/output\/dto\/a\.ts and src\/domain\/x\.ts/);
+  // 与 --json 无关的 domain 内部转发：不管
+  assert.deepEqual(run(DOC, DTO_OK, process.env, { "src/domain/x.ts": "export type L = { a: 1 };\n", "src/domain/y.ts": 'export type { L } from "./x.ts";\n' }), []);
+});
