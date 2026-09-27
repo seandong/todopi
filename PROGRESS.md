@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `1fb6529` —— v0.1 缺口审计：13 个新任务（M4）进账本。
+- Last commit: `a2cdb54` —— F22 agent 环境推断身份 经 todopi done 关闭（verify=pass dirty=false）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 36 个任务，22 个 `closed/done`、14 个 `open`：v0.1 缺口审计建的 13 个（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
+- 账本: `.todopi/` 36 个任务，23 个 `closed/done`、13 个 `open`：v0.1 缺口审计建的 13 个（label m4），加 tp-zagvp5（Cursor 实机验证，等维护者）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,10 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+47. ~~F22 agent 环境推断身份（FR-C4）~~ 已完成（2026-09-28）。六家 agent 给工具子进程设的变量逐家按一手资料核实（D043）：Claude Code
+    CLAUDECODE、Codex CODEX_THREAD_ID、Gemini GEMINI_CLI、OpenCode OPENCODE、pi PI_SESSION_ID、Cursor CURSOR_AGENT；恰好一个信号才推断
+    （嵌套时分不出哪层在跑）。钩子子进程里不一定有这些变量，setup 写出的钩子与插件显式带 --agent；旧钩子就地迁移。测试与 e2e 与跑它的
+    agent 无关。Codex 三轮 → Go。**本仓库从此在 Claude Code 里是 claude-code@<host>，不再是 seandong。**
 46. v0.1 缺口审计（2026-09-28）：Codex 与 Claude 子代理各自独立地把 PRD §7–§12、README 与实现逐条对照，报告在 docs/plans/2026-09-28-v01-gap-audit-*.md。
     核实后建成 13 个任务（label m4），按对用户的影响排序：FR-C4 agent 环境推断身份（同机多个 agent 现在都是同一个 git 用户名）、CLI 表面补齐
     （别名、close --reason、--quiet、done 被拒时提示 check）、建好后改验收标准与 Plan / --edit、更高版本账本只读可用、首次 verify 的终端确认、
