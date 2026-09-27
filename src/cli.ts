@@ -68,8 +68,10 @@ program
 
 program
   .command("add")
+  .aliases(["new", "create"])
   .argument("<title>", "what the task is")
-  .description("create a task in the ledger")
+  // commander 的帮助只列第一个别名：把全部写进描述，create 才看得见（Codex 评审）
+  .description("create a task in the ledger (also: new, create)")
   .option("-d, --description <text>", "longer description for the task body")
   .option("--ac <text...>", "acceptance criteria; repeat or pass several")
   .option("--label <label...>", "labels to attach")
@@ -146,7 +148,7 @@ async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
   process.stderr.write(renderDiagnostics(report));
 }
 
-lsOptions(program.command("ls").description("list tasks in the ledger"))
+lsOptions(program.command("ls").alias("list").description("list tasks in the ledger"))
   .option("--ready", "only tasks that can be claimed right now")
   .action(lsAction);
 
@@ -263,11 +265,12 @@ program
     const { renderSetup } = await import("./output/render/setup.ts");
     const opts = program.opts();
     const report = runSetup({ directory: (opts["directory"] as string | undefined) ?? process.cwd(), agent, user: cmdOpts.user });
-    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderSetup(report));
+    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderSetup(report, { quiet: opts["quiet"] === true }));
   });
 
 program
   .command("note")
+  .alias("log")
   .description("append a line to a task's log; the text may span several lines")
   .argument("<id>", "the task to note on")
   .argument("<text>", "what happened and why")
@@ -337,7 +340,7 @@ program
     process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderMove(report));
   });
 
-const dep = program.command("dep").description("add or remove a blocking dependency");
+const dep = program.command("dep").alias("block").description("add or remove a blocking dependency");
 for (const op of ["add", "rm"] as const) {
   dep
     .command(op)
@@ -480,14 +483,14 @@ program
       const { runImportBeads } = await import("./commands/import-beads.ts");
       const { renderImportBeads } = await import("./output/render/import-beads.ts");
       const report = runImportBeads({ directory, path, actor });
-      process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImportBeads(report));
+      process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImportBeads(report, { quiet: opts["quiet"] === true }));
       return;
     }
     if (path !== undefined) throw new CliError(EXIT.usage, `import takes one plan file; got an extra argument ${JSON.stringify(path)}.`);
     const { runImport } = await import("./commands/import.ts");
     const { renderImport } = await import("./output/render/import.ts");
     const report = runImport({ directory, file, actor });
-    process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImport(report));
+    process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImport(report, { quiet: opts["quiet"] === true }));
   });
 
 program
@@ -519,8 +522,9 @@ program
       throw err;
     });
     const url = `http://127.0.0.1:${server.port}/`;
+    // 地址是结果；后面那句是提示，--quiet 去掉
     process.stdout.write(`todopi board: ${url}\n`
-      + `Read-only; ${server.mode === "poll" ? "polling" : "watching"} ${ledger.dir} for changes. Press Ctrl+C to stop.\n`);
+      + (opts["quiet"] === true ? "" : `Read-only; ${server.mode === "poll" ? "polling" : "watching"} ${ledger.dir} for changes. Press Ctrl+C to stop.\n`));
     if (cmdOpts.open === true && !(await openInBrowser(url))) {
       process.stderr.write(`Could not open a browser; open ${url} yourself.\n`);
     }

@@ -386,3 +386,17 @@ test("updated 被刷新（spec §6.3）", () => {
   runDone({ directory: d, id: t.id, actor: ME });
   assert.doesNotMatch(read(d, t.id), /^updated: "2020-01-01T00:00:00Z"$/m);
 });
+
+test("close 不带 --force 也能记 --reason：写进 closed 那一行的文字；done 仍只在强制时收理由；空理由拒绝（F23，§8）", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME });
+  runClose({ directory: d, id: t.id, actor: ME, resolution: "obsolete", reason: "superseded by\n  the new design" });
+  const last = logsOf(d, t.id).at(-1)!;
+  assert.ok(last.ok && last.verb === "closed" && last.args["resolution"] === "obsolete" && last.args["forced"] === undefined);
+  assert.equal(last.ok && last.text, "superseded by the new design", "换行压成空格");
+  assert.equal(runDoctor({ directory: d }).ok, true);
+
+  const u = runAdd({ directory: d, title: "U", actor: ME });
+  assert.throws(() => runDone({ directory: d, id: u.id, actor: ME, reason: "why" }), (e: unknown) => (e as { code: number }).code === EXIT.usage);
+  assert.throws(() => runClose({ directory: d, id: u.id, actor: ME, resolution: "wontfix", reason: "   " }), (e: unknown) => (e as { code: number }).code === EXIT.usage);
+});

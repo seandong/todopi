@@ -69,7 +69,7 @@ test("多道门禁一起报，不是只报第一条", () => {
 });
 
 test("每道门禁都给出自己的下一步动作，不只有结尾那两条", () => {
-  assert.match(renderGateReport(report([acceptance])), /- \[x\]/, "指出怎么勾");
+  assert.match(renderGateReport(report([acceptance])), /todopi check tp-000001 \d/, "指出怎么勾");
   assert.match(renderGateReport(report([children])), /A parent closes when its children do/i);
   assert.match(renderGateReport(report([ownership], 3)), /claim tp-000001 --steal/);
 });
@@ -101,11 +101,11 @@ test("接管的命令带上 id", () => {
   assert.match(out, /todopi claim tp-000001 --steal/);
 });
 
-test("验收标准那道门给的是**现在就能做**的动作", () => {
-  // `todopi check` 要到 F09 才有，现在建议它等于让 agent 去撞 unknown command。
+test("验收标准那道门：每条没勾的给一条 todopi check，不叫人改文件（协议：Never edit those files by hand，F23）", () => {
   const out = renderGateReport(report([acceptance]));
-  assert.doesNotMatch(out, /todopi check /, "check 还不存在，不能建议它");
-  assert.match(out, /\.todopi\/tasks\/tp-000001\.md/, "要指出改哪个文件");
+  for (const c of acceptance.unchecked) assert.match(out, new RegExp(`todopi check tp-000001 ${c.n}\\b`), `标准 ${c.n}`);
+  assert.doesNotMatch(out, /\.todopi\/tasks\//, "不再指向任务文件");
+  assert.doesNotMatch(out, /- \[x\]/, "不再教人手改勾选框");
   assert.match(out, /todopi close tp-000001 --resolution wontfix/, "并给出「不做了」的正当出口");
 });
 

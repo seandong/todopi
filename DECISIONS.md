@@ -2280,3 +2280,11 @@ Node 用 spec reporter，整层被判 blocked。
 - 对本仓库自己的影响：在 Claude Code 里跑的 todopi 从此是 `claude-code@<host>`，不再是 `seandong`；F22 之前以 seandong 认领的任务用
   `--as seandong` 收尾。
 
+## D044 — CLI 表面补齐的两个取舍
+
+- 日期：2026-09-28（F23，v0.1 缺口审计）。
+- `--reason` 只对 close 独立可用：放弃一件事的理由本身值得留下（§8 把 close 的 `--reason` 与 `--force` 列为独立参数）；done 的理由只在强制时
+  才有意义——正常完成的证据是 verify 与勾选的标准，给 done 一个不强制的理由只会让人以为它有分量。
+- `--quiet` 在 setup 上去掉**全部**提示，包括「可能跑两遍」这类警告：§8 的定义是「抑制进度与提示性输出，只保留结果本身与错误」，这些警告不改变
+  setup 的结果（文件照样写了），属于提示。要看提示就不加 `--quiet`；`--json` 里 notes 始终在。
+
