@@ -197,16 +197,16 @@ program
  * 目录：没用 -C 指定时，载荷里有 Cursor 的 `workspace_roots` 就用它的第一项——Cursor 的用户级钩子在
  * `~/.cursor/` 里运行，不在项目根（官方文档），按工作目录找账本永远找不到（F17）。
  */
-async function hookContext(explicit: string | undefined): Promise<{ skip: boolean; session?: string; directory: string }> {
+async function hookContext(explicit: string | undefined): Promise<{ skip: boolean; session?: string; occasion?: string; directory: string }> {
   const { findLedger } = await import("./format/discover.ts");
-  const { sessionFromHookPayload, directoryFromHookPayload } = await import("./commands/hook.ts");
+  const { sessionFromHookPayload, directoryFromHookPayload, occasionFromHookPayload } = await import("./commands/hook.ts");
   let payload = "";
   if (process.stdin.isTTY !== true) {
     try { payload = readFileSync(0, "utf8"); } catch { payload = ""; }
   }
   const directory = explicit ?? directoryFromHookPayload(payload) ?? process.cwd();
   if (findLedger(directory) === null) return { skip: true, directory };
-  return { skip: false, session: sessionFromHookPayload(payload), directory };
+  return { skip: false, session: sessionFromHookPayload(payload), occasion: occasionFromHookPayload(payload), directory };
 }
 
 program
@@ -236,14 +236,18 @@ program
     // 压缩标记（D038）：压缩前的钩子只打标记；每轮之前的钩子只在标记在时才往下走。
     if (cmdOpts.markCompacted === true) { compactionGate(directory, "mark", base.session, base.actor); return; }
     if (cmdOpts.ifCompacted === true && !compactionGate(directory, "take", base.session, base.actor)) return;
+    // 钩子里的去重（F38）：同一 agent、同一事件与来源、同一会话，10 秒内只有第一份钩子往下走——setup 的钩子与市场包同时装了时
+    // 不注入两遍。**在 prime 之前判**：被挡下的这一份什么都不做，也不写 prime 记录（否则会挪动 handoff 的 verify 基准——评审）。
+    // --if-compacted 不在此列：压缩后的再注入已经由压缩标记把关。没有会话 id 不去重。
+    if (cmdOpts.hook === true && cmdOpts.ifCompacted !== true && base.session !== undefined) {
+      const agent = (opts["agent"] as string | undefined) ?? process.env["TODOPI_AGENT"] ?? "";
+      if (!firstInjection(directory, `${agent}|${hook.occasion ?? ""}|${base.session}`)) return;
+    }
     const json = opts["json"] === true;
     const { text, warnings } = cmdOpts.full === true
       ? ((r) => ({ text: json ? JSON.stringify(r.report, null, 2) + "\n" : renderPrimeFull(r.report), warnings: r.warnings }))(runPrimeFull(base))
       : ((r) => ({ text: json ? JSON.stringify(r.report, null, 2) + "\n" : renderPrime(r.report), warnings: r.warnings }))(
         runPrime({ ...base, budget: cmdOpts.budget === undefined ? undefined : parseBudget(cmdOpts.budget) }));
-    // 钩子里：同一会话 10 秒内的第二次注入什么都不印（setup 的钩子与市场包同时装了，F38）。--if-compacted 不在此列：
-    // 压缩后的再注入是有意的，而且已经由压缩标记把关（只有第一个取走标记的钩子会印）
-    if (cmdOpts.hook === true && cmdOpts.ifCompacted !== true && text.trim() !== "" && !firstInjection(directory, base.session)) return;
     process.stdout.write(cmdOpts.hookJson === undefined ? text : wrapHookOutput(cmdOpts.hookJson, text));
     for (const w of warnings) process.stderr.write(`${w}\n`);
   });

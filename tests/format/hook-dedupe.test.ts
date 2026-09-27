@@ -25,9 +25,12 @@ test("同一会话：第一次 true，窗口内 false，窗口外又 true；别�
   assert.equal(claimHookInjection(l, "s2", t0 + 1), true, "别的会话");
   assert.equal(claimHookInjection(l, "s1", t0 + 10_000), true, "窗口之外（resume、压缩后）");
   assert.equal(claimHookInjection(l, "s1", t0 + 10_001), false, "刚才那次重新开了窗口");
-  // 时钟回拨（记录比现在还新）：不当成「刚注入过」，照常注入
-  assert.equal(claimHookInjection(l, "s3", t0 + 50_000), true);
-  assert.equal(claimHookInjection(l, "s3", t0), true);
+  // 记录比自己的 now 还新一点：并发时等锁的那一方就是这样（now 在拿锁前取）——算重复
+  assert.equal(claimHookInjection(l, "s3", t0 + 5_000), true);
+  assert.equal(claimHookInjection(l, "s3", t0 + 4_000), false);
+  // 差得比窗口还大（时钟大幅回拨）：放行
+  assert.equal(claimHookInjection(l, "s4", t0 + 50_000), true);
+  assert.equal(claimHookInjection(l, "s4", t0), true);
 });
 
 test("没有会话 id 不去重；版本更高的账本不写会话状态、照常注入", () => {

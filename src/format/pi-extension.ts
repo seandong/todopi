@@ -28,10 +28,11 @@ const hasLedger = (dir) => {
 };
 
 export default function (pi) {
-  // Loaded twice (this file and the npm package, or two copies)? Only the first one injects: the other registers nothing.
-  // A copy that got an empty prime would keep retrying and inject a second time on a later turn.
-  if (globalThis.__todopiPrimeLoaded) return;
-  globalThis.__todopiPrimeLoaded = true;
+  // Loaded twice in the same moment (this file and the npm package, or two copies)? Only the first one injects; the other
+  // registers nothing: a copy that got an empty prime would retry and inject a second time on a later turn.
+  // A load seconds later is a reload (pi's /reload, a session switch) and registers normally.
+  if (Date.now() - (globalThis.__todopiPrimeLoadedAt ?? 0) < 5000) return;
+  globalThis.__todopiPrimeLoadedAt = Date.now();
   const primed = new Map();
   const prime = async (ctx) => {
     const id = ctx.sessionManager.getSessionId();

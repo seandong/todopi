@@ -30,6 +30,19 @@ export function sessionFromHookPayload(payload: string): string | undefined {
 }
 
 /**
+ * 钩子载荷里「这是哪一次」：事件名与来源（Claude Code / Codex 的 SessionStart 带 `source`：startup、resume、clear、compact……）。
+ * 去重的键带上它（F38 评审）：同一会话先 startup、很快又 compact，是两次该注入的事件，不是重复；重复的是同一事件被两份钩子各跑一遍。
+ */
+export function occasionFromHookPayload(payload: string): string {
+  let parsed: unknown;
+  try { parsed = JSON.parse(payload); } catch { return ""; }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "";
+  const o = parsed as Record<string, unknown>;
+  const pick = (k: string) => (typeof o[k] === "string" ? o[k] as string : "");
+  return `${pick("hook_event_name")}/${pick("source")}`;
+}
+
+/**
  * 钩子载荷里的项目目录：Cursor 的公共字段 `workspace_roots`（官方文档）。多根工作区里账本不一定在第一个根，
  * 所以取**第一个找得到账本的根**（F17 评审）；都找不到就返回 undefined，调用方照常按工作目录找、找不到就静默。
  * 绝不抛。只认这一个字段：别家的钩子在项目目录里运行，工作目录就对。
@@ -72,13 +85,14 @@ export function compactionGate(directory: string, mode: "mark" | "take", session
 }
 
 /**
- * `prime --hook` 该不该印（F38）：有会话 id 时，同一会话 10 秒内只印第一次——setup 的钩子与市场包同时装了时，会话开始不注入两遍。
+ * `prime --hook` 该不该印（F38）：同一个键（agent、事件与来源、会话 id）10 秒内只印第一次——setup 的钩子与市场包同时装了时，
+ * 同一事件不注入两遍。键由调用方拼（见 cli.ts）；没有会话 id 时调用方传 undefined。
  * 没有会话 id 不去重：退回按 actor 时，同一 actor 并行起的几个 agent 会互相吞掉 prime。占不到锁、写不了：照常印（宁可重复也不丢）。
  */
-export function firstInjection(directory: string, session: string | undefined): boolean {
-  if (session === undefined) return true;
+export function firstInjection(directory: string, key: string | undefined): boolean {
+  if (key === undefined) return true;
   try {
-    return claimHookInjection(discoverLedger(directory), session, Date.now());
+    return claimHookInjection(discoverLedger(directory), key, Date.now());
   } catch {
     return true;
   }
