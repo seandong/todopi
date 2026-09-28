@@ -2,6 +2,7 @@
 // 命令解析。入口是 src/main.ts（它先判断这次是不是 verify 的 runner）；开发时直接 `node src/cli.ts` 也行。
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { EXIT, CliError } from "./exit.ts";
 import { VERSION } from "./version.ts";
 
@@ -31,6 +32,21 @@ program.hook("preAction", async () => {
     if (ledger !== null && isNewerVersion(ledger)) process.stderr.write(`${newerVersionNote(ledger)}\n`);
   }
 });
+
+/**
+ * 这次输出要不要上色（tp-rk6o8q）：判定只在 output/style.ts 的 chooseStyle 里，这里只收集事实。钩子路径由调用方说（hook）。
+ */
+async function styleFor(hook = false) {
+  const { chooseStyle } = await import("./output/style.ts");
+  const { agentPresent } = await import("./commands/actor.ts");
+  return chooseStyle({
+    json: program.opts()["json"] === true,
+    hook,
+    agent: agentPresent(),
+    env: process.env,
+    isTTY: process.stdout.isTTY === true,
+  });
+}
 
 program
   .command("doctor")
@@ -70,7 +86,7 @@ program
       prefix: cmdOpts.prefix,
     });
     process.stdout.write(
-      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),
+      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]), style: await styleFor(), home: homedir() }),
     );
   });
 
@@ -290,7 +306,7 @@ program
     const { renderSetup } = await import("./output/render/setup.ts");
     const opts = program.opts();
     const report = runSetup({ directory: (opts["directory"] as string | undefined) ?? process.cwd(), agent, user: cmdOpts.user });
-    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderSetup(report, { quiet: opts["quiet"] === true }));
+    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderSetup(report, { quiet: opts["quiet"] === true, style: await styleFor(), home: homedir() }));
   });
 
 program

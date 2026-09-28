@@ -89,8 +89,8 @@ fi
 # 11. --quiet 去掉提示但保留结果
 out="$(cli -C "$TMP/lang" --quiet init 2>&1)"
 case "$out" in
-  *"Next: todopi add"*) fail "--quiet 不应打印提示" ;;
-  *"Ledger:"*)          ok "--quiet 去掉提示、保留结果" ;;
+  *"Next:"*)            fail "--quiet 不应打印提示" ;;
+  *"Initialized todopi in"*) ok "--quiet 去掉提示、保留结果" ;;
   *)                    fail "--quiet 把结果也吞掉了：$out" ;;
 esac
 

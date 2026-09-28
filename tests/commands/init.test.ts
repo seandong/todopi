@@ -89,8 +89,10 @@ test("--quiet 去掉提示但保留结果；输出是英文", () => {
   const r = runInit({ directory: d, prefix: "tp" });
   const full = renderText(r);
   const quiet = renderText(r, { quiet: true });
-  assert.match(full, /Next: todopi add/);
-  assert.doesNotMatch(quiet, /Next: todopi add/);
-  assert.match(quiet, /Ledger:/, "结果不得被 quiet 吞掉");
+  assert.match(full, /Next:\n  todopi setup claude .*\n  todopi add/, "下一步先接入 agent，再建任务（tp-rk6o8q）");
+  assert.doesNotMatch(quiet, /Next:|todopi setup/);
+  assert.match(quiet, /^Initialized todopi in \//, "结果不得被 quiet 吞掉");
+  assert.match(quiet, /\+ AGENTS\.md +todopi protocol added/);
+  assert.doesNotMatch(full, /\x1b/, "默认 PLAIN：没有转义");
   assert.doesNotMatch(full, /[一-鿿]/, "CLI 输出 MUST 是英文");
 });

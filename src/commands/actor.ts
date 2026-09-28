@@ -3,7 +3,7 @@
 // 读命令与写命令共用这一个入口——两处各写一遍，迟早会对同一个人得出两个身份。
 
 import { hostname } from "node:os";
-import { AGENT_NAMES, agentFromEnv, resolveActor } from "../domain/actor.ts";
+import { AGENT_NAMES, AGENT_SIGNALS, agentFromEnv, resolveActor } from "../domain/actor.ts";
 import { gitUserName } from "../fs/git.ts";
 import { EXIT, CliError } from "../exit.ts";
 
@@ -47,4 +47,17 @@ export function currentAgent(): string | undefined {
     return hint;
   }
   return agentFromEnv(process.env);
+}
+
+/**
+ * 有没有 agent 在场（决定要不要上色，tp-rk6o8q）：--agent / TODOPI_AGENT 给了，或环境里**任何一个** agent 信号在。
+ * 与 currentAgent 不同：嵌套时（两家的信号都在）身份推断不猜，上色则更要保守——转义不能进任何一家的上下文。
+ */
+export function agentPresent(): boolean {
+  const hint = agentOption ?? process.env["TODOPI_AGENT"];
+  if (hint !== undefined && hint !== "") return true;
+  return AGENT_SIGNALS.some((s) => {
+    const v = process.env[s.env];
+    return v !== undefined && v !== "";
+  });
 }
