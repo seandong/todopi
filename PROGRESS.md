@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `1dc5e28` —— 终端输出 Cargo 式的评审二轮修复（tp-rk6o8q）。
+- Last commit: `2801d0a` —— init --setup 评审四轮修复（tp-jyvt6i）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 46 个任务，42 个 `closed/done`、4 个 `open`：tp-jyvt6i（init --setup，下一个做）、tp-0obw6s（board.test 偶发失败），加两个等维护者的：tp-ujjc6y（brew 实测）、tp-zagvp5（Cursor 实机验证）。
+- 账本: `.todopi/` 46 个任务，43 个 `closed/done`、3 个 `open`：tp-0obw6s（board.test 偶发失败，下一个做），加两个等维护者的：tp-ujjc6y（brew 实测）、tp-zagvp5（Cursor 实机验证）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,9 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+68. ~~tp-jyvt6i `init --setup <agent>`~~ 已完成（2026-09-28）：dogfood 反馈，初始化时一并接入 agent（可重复、可逗号分隔）；未知 agent 与空 --setup 写之前报错；
+    某一家失败时错误里说清已写文件、失败的一家（可能已写一部分，重跑安全）、还差哪几家与恢复命令（带 -C <root>；路径含会被转义的字符时改说在项目根下跑）。
+    InitReport 新增可选 setup: SetupReport[]。Codex 五轮 → Go。真终端（herdr pane）里跑过。
 67. ~~tp-rk6o8q 终端输出统一为 Cargo 式~~ 已完成（2026-09-28）：dogfood 反馈「init 输出真丑」，用户选 Cargo / uv 式、所有命令统一。style.ts（PLAIN / MONO / ANSI / ANSI_PIPED，
     唯一判定 chooseStyle）+ render/layout.ts（动作行、task、error/warning/note、Next）；有没有人在看（interactive）与上不上色分开——管道里只有数据行，
     ls | head -1、wc -l 照旧；--json、钩子、agent 在场一律纯文本。错误统一 error: 前缀、控制字符可见转义。ARCH-029：转义只在 style.ts。
