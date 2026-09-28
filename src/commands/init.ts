@@ -8,6 +8,7 @@ import { EXIT, CliError } from "../exit.ts";
 import type { InitReport } from "../output/dto/init.ts";
 import type { SetupReport } from "../output/dto/setup.ts";
 import { AGENTS, runSetup } from "./setup.ts";
+import { visible } from "../domain/visible.ts";
 
 /** id_prefix 的约束来自 spec §3。 */
 const PREFIX_RE = /^[a-z][a-z0-9]{0,7}$/;
@@ -69,9 +70,9 @@ function partialFailure(root: string, init: { created: string[]; agents: InitRep
     ...(init.agents === "unchanged" ? [] : ["AGENTS.md"]),
     ...done.flatMap((r) => r.files.filter((f) => f.status !== "unchanged").map((f) => relative(root, f.path))),
   ];
-  // 路径里有控制字符（Tab、换行……）时，错误出口会把它们写成可见的 \t，引号里的路径就不再是原路径：不给一条冒称能照抄的命令，
-  // 改说「在项目根下跑」（评审三轮）
-  const copyable = !/[\u0000-\u001f\u007f]/.test(root);
+  // 错误出口会把不可见字符（Tab、换行、零宽空格……）写成可见的 \t、\u200b，引号里的路径就不再是原路径：这时不给冒称能照抄的
+  // 命令，改说「在项目根下跑」。判据就是出口用的那一套 visible()，两边不会各自一套规则（评审三、四轮）
+  const copyable = visible(root) === root;
   const how = copyable
     ? `run: ${remaining.map((a) => `todopi -C ${shellQuote(root)} setup ${a}`).join(" && ")}`
     : `run from the project root: ${remaining.map((a) => `todopi setup ${a}`).join(" && ")}`;

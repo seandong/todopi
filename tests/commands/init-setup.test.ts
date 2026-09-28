@@ -148,8 +148,10 @@ test("用 -C 从项目外跑：提示里的恢复命令交给 /bin/sh 原样执�
   }
 });
 
-test("路径里有 Tab：不给冒称能照抄的命令，改说在项目根下跑", () => {
-  const { stderr } = failClaude("tab\there");
-  assert.doesNotMatch(stderr, /todopi -C /);
-  assert.match(stderr, /run from the project root: todopi setup claude$/m);
+test("路径里有错误出口会转义的字符（Tab、零宽空格）：不给冒称能照抄的命令，改说在项目根下跑", () => {
+  for (const name of ["tab\there", "zero\u200bwidth"]) {
+    const { stderr } = failClaude(name);
+    assert.doesNotMatch(stderr, /todopi -C /, JSON.stringify(name));
+    assert.match(stderr, /run from the project root: todopi setup claude$/m, JSON.stringify(name));
+  }
 });
