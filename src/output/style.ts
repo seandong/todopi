@@ -1,5 +1,5 @@
 // src/output/style.ts
-// 人在终端里看时给输出上色（tp-rk6o8q）。渲染器收一个 Style，默认 PLAIN——同一份排版，PLAIN 下逐字节是纯文本。
+// 人在终端里看时给输出上色（tp-rk6o8q）。渲染器收一个 Style，默认 PLAIN——同一份排版（render/layout.ts），PLAIN 下逐字节是纯文本。
 // 上色与否只在 chooseStyle 里判定：这些输出也会进模型的上下文（钩子注入、agent 跑命令），那里一个转义字节都不能有（ARCH-027）。
 // 手写 SGR，不加依赖。
 //
@@ -12,13 +12,11 @@ export type Style = {
   yellow: (s: string) => string;
   cyan: (s: string) => string;
   red: (s: string) => string;
-  /** 成功那一行的前缀：上色时是一个对勾，纯文本时什么都没有 */
-  ok: string;
 };
 
 const same = (s: string) => s;
 
-export const PLAIN: Style = { bold: same, dim: same, green: same, yellow: same, cyan: same, red: same, ok: "" };
+export const PLAIN: Style = { bold: same, dim: same, green: same, yellow: same, cyan: same, red: same };
 
 // 每段只复位自己开的那一项（22 关粗体与暗淡、39 恢复前景色），嵌套时不会把外层的样式也关掉
 const sgr = (open: number, close: number) => (s: string) => (s === "" ? "" : `\x1b[${open}m${s}\x1b[${close}m`);
@@ -30,7 +28,6 @@ export const ANSI: Style = {
   yellow: sgr(33, 39),
   cyan: sgr(36, 39),
   red: sgr(31, 39),
-  ok: "\x1b[32m✓\x1b[39m ",
 };
 
 export type StyleFacts = {

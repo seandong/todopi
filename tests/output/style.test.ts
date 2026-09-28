@@ -32,7 +32,6 @@ test("FORCE_COLOR 只越过 isTTY；0 或空值不算", () => {
 
 test("PLAIN 原样返回，ANSI 包上转义并复位", () => {
   assert.equal(PLAIN.green("x"), "x");
-  assert.equal(PLAIN.ok, "");
   assert.match(ANSI.green("x"), /^\x1b\[32mx\x1b\[39m$/);
   assert.equal(ANSI.bold(""), "");
 });
