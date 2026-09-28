@@ -4,7 +4,7 @@ A durable task ledger for AI coding agents.
 
 Your agent's tasks, in your repo, in 12 fields. Survives compaction, sessions, and switching agents.
 
-Status: pre-alpha. The CLI works end to end; it has not been released yet.
+Status: 0.1.0, the first release. Expect rough edges in the CLI; the on-disk format is versioned (format version 1) and specified in [`spec/`](spec/todopi-format-v1.md). Changes are listed in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## What it is
 
@@ -18,13 +18,11 @@ Installing with npm adds about 2.3 MB of files: todopi's own JavaScript (about 4
 
 ## Install
 
-Once the first version is released:
-
 ```sh
 curl -fsSL https://raw.githubusercontent.com/seandong/todopi/main/install.sh | sh
 ```
 
-With Node.js 20 or newer and `npm` on your PATH, this installs the npm package; otherwise — no Node, no npm, or the npm install fails — it downloads the prebuilt binary and verifies its SHA-256 before installing. Binaries exist for macOS and Linux on x64 and arm64; anywhere else, install Node.js 20+ with npm first. Either way the command lands in `~/.local/bin` (set `TODOPI_INSTALL_DIR` for another directory; one not named `bin` always gets the binary). Set `TODOPI_VERSION` to install a specific version, or `TODOPI_FORCE_BINARY=1` to skip npm. With Node you can also run `npm install --global todopi`. With Homebrew (macOS or Linux): `brew install seandong/tap/todopi`.
+With Node.js 20 or newer and `npm` on your PATH, this installs the npm package; otherwise — no Node, no npm, or the npm install fails — it downloads the prebuilt binary and verifies its SHA-256 before installing. Binaries exist for macOS and Linux on x64 and arm64; anywhere else, install Node.js 20+ with npm first. Either way the command lands in `~/.local/bin` (set `TODOPI_INSTALL_DIR` for another directory; one not named `bin` always gets the binary). Set `TODOPI_VERSION` to install a specific version, or `TODOPI_FORCE_BINARY=1` to skip npm. With Node you can also run `npm install --global todopi`. With Homebrew (macOS or Linux), once the tap is live: `brew install seandong/tap/todopi`.
 
 **`todopi` must be on the PATH your coding agent sees.** Every hook below runs `todopi` by name. If `~/.local/bin` is not on your PATH, add it (for example `export PATH="$HOME/.local/bin:$PATH"` in your shell profile) and restart the agent.
 
@@ -132,6 +130,7 @@ for d in ~/code/*/; do todopi -C "$d" ls --ready 2>/dev/null | sed "s|^|$(basena
 | [`spec/fixtures/`](spec/fixtures/README.md) | The format as executable test data — sample files with expected parses. Run it against your own implementation. |
 | [`spec/IMPLEMENTING.md`](spec/IMPLEMENTING.md) | Advisory notes for implementing the format: what actually goes wrong, and in what order to build. |
 | [`docs/json.md`](docs/json.md) | The `--json` output of every command, and its compatibility promise. |
+| [`CHANGELOG.md`](CHANGELOG.md) | What changed in each release. |
 | [`docs/product/todopi-prd.md`](docs/product/todopi-prd.md) | Product requirements (Chinese; an internal design document) |
 | [`docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md`](docs/product/2026-09-14-todopi-agent-task-ledger-brainstorm.md) | Research, competitive landscape, and the 30-decision log (Chinese) |
 
