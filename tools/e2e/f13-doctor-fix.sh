@@ -30,7 +30,7 @@ upd_before="$(grep '^updated:' "$F")"
 cli -C "$W" doctor --fix >"$TMP/out" 2>&1; rc=$?
 [ "$rc" -eq 1 ] && ok "仍有问题（解析不了的 Log 行）：退出 1" || fail "退出 ${rc}：$(cat "$TMP/out")"
 grep -q '^title: "A hand-written task"$' "$F" && ok "标题修成加引号形态" || fail "标题没修：$(grep '^title' "$F")"
-grep -q '^fixed tasks/tp-a1b2c3.md: ' "$TMP/out" && ok "报告列出修了哪个文件" || fail "报告：$(cat "$TMP/out")"
+grep -q '^ *Fixed tasks/tp-a1b2c3.md: ' "$TMP/out" && ok "报告列出修了哪个文件" || fail "报告：$(cat "$TMP/out")"
 [ "$(sed -n '/^## Log$/,$p' "$F")" = "$log_before" ] && ok "Log 逐字节不变（含解析不了的那一行）" || fail "Log 被改了"
 [ "$(grep '^updated:' "$F" | tr -d '"')" = "$(printf '%s' "$upd_before" | tr -d '"')" ] && ok "updated 的值不变" || fail "updated 变了：$(grep '^updated:' "$F")"
 

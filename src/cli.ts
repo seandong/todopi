@@ -61,14 +61,14 @@ program
     if (cmdOpts.fix === true) {
       const { runDoctorFix } = await import("./commands/doctor-fix.ts");
       const fix = runDoctorFix({ directory: (opts["directory"] as string | undefined) ?? process.cwd() });
-      process.stdout.write(opts["json"] ? JSON.stringify(fix, null, 2) + "\n" : renderFixText(fix, { quiet: Boolean(opts["quiet"]) }));
+      process.stdout.write(opts["json"] ? JSON.stringify(fix, null, 2) + "\n" : renderFixText(fix, { quiet: Boolean(opts["quiet"]), style: await styleFor() }));
       // FR-Q1：修完仍有问题则退出 1。
       if (!fix.after.ok) throw new CliError(EXIT.usage, "");
       return;
     }
     const report = runDoctor({ directory: (opts["directory"] as string | undefined) ?? process.cwd() });
     process.stdout.write(
-      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),
+      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]), style: await styleFor() }),
     );
     if (!report.ok) throw new CliError(EXIT.usage, "");
   });
