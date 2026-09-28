@@ -49,7 +49,8 @@ jobs:
           # 重跑时（npm 已发、上次建 Release 失败）不再发：同一版本发第二次必然失败，会卡住后面建 Release 那一步
           if npm view "todopi@$VERSION" version >/dev/null 2>&1; then echo "todopi@$VERSION is already on npm; skipping publish"; exit 0; fi
           if [ -z "$NODE_AUTH_TOKEN" ]; then echo "NPM_TOKEN is not set: refusing to create a release that npm does not have"; exit 1; fi
-          npm publish out/todopi-$VERSION.tgz --access public
+          # 路径必须以 ./ 开头：out/x.tgz 这种「名字/名字」会被 npm 当成 GitHub 简写、去 ssh 拉 github.com/out/x.tgz（v0.1.0 首发时实测，tp-ornltg）
+          npm publish ./out/todopi-$VERSION.tgz --access public
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
