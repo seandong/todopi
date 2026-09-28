@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `1dc5e28` —— 终端输出 Cargo 式的评审二轮修复（tp-rk6o8q）。
+- Last commit: `f01d0e0` —— 修 main 的 CI：f21 的 Docker 用例还在断言旧 ls 的 [done] 标记。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -162,6 +162,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     唯一判定 chooseStyle）+ render/layout.ts（动作行、task、error/warning/note、Next）；有没有人在看（interactive）与上不上色分开——管道里只有数据行，
     ls | head -1、wc -l 照旧；--json、钩子、agent 在场一律纯文本。错误统一 error: 前缀、控制字符可见转义。ARCH-029：转义只在 style.ts。
     子进程测试逐条跑 23 个命令守住不上色。prime / handoff 排版不动。D059。Codex 三轮 → Go。另建 tp-0obw6s（board.test 偶发失败）。
+    合并后 CI 的 f21 红：只在有 Docker 时跑的容器用例还断言旧 ls 的 `[done] first`（本机无 Docker，文字断言清单漏了 [done] 一类），已改成新格式。
 66. ~~tp-ornltg 发布工作流修复，v0.1.0 发布~~ 已完成（2026-09-28）：首次推标签失败在 npm publish（`out/x.tgz` 被当成 GitHub 简写）；改 ./out/、加 tests/workflows.test.ts，
     按 Codex 三轮评审加固（npm 已有同版本只在 integrity 相同时跳过、发布前核对标签、`--verify-tag`、Release 已存在以已发布资产为准）。
     用 --force-with-lease 把 v0.1.0 移到新 main；第二次失败在 EOTP（令牌没勾 bypass 2FA），维护者换令牌后重跑成功。
