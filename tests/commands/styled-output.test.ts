@@ -12,10 +12,12 @@ import { AGENT_SIGNALS } from "../../src/domain/actor.ts";
  */
 const CLI = join(process.cwd(), "src", "cli.ts");
 const ESC = "\x1b";
+// 信任清单写进临时目录（done --yes 会记下这个仓库）：测试不碰、也不依赖使用者的 ~/.config/todopi/trust（评审二轮）
+const CONFIG = mkdtempSync(join(tmpdir(), "todopi-style-config-"));
 const clean = (): Record<string, string> => {
-  const env: Record<string, string> = {};
+  const env: Record<string, string> = { TODOPI_CONFIG_DIR: CONFIG };
   for (const [k, v] of Object.entries(process.env)) {
-    if (v === undefined || k === "TODOPI_AGENT" || k === "NO_COLOR" || k === "FORCE_COLOR" || k === "TERM") continue;
+    if (v === undefined || k === "TODOPI_AGENT" || k === "NO_COLOR" || k === "FORCE_COLOR" || k === "TERM" || k === "TODOPI_CONFIG_DIR") continue;
     if (AGENT_SIGNALS.some((s) => s.env === k)) continue;
     env[k] = v;
   }
@@ -117,6 +119,17 @@ test("错误消息里的控制字符（数据自带的 ESC）也被转义：agen
     assert.equal(r.status, 1);
     assert.ok(!r.stderr.includes(ESC), r.stderr);
     assert.match(r.stderr, /tp-abc\\x1b\[31m/, "转义成可见的 \\x1b");
+  }
+});
+
+test("错误消息里的 Tab 与换行：Tab 可见转义，夹带的换行伪造不出从行首开始的 error:", () => {
+  const { d } = ledgerWithTasks();
+  for (const [extra, pre] of [[{ FORCE_COLOR: "1", CLAUDECODE: "1" }, []], [{ FORCE_COLOR: "1" }, ["--json"]]] as const) {
+    const run2 = (id: string) => spawnSync(process.execPath, [CLI, "-C", d, ...pre, "show", id], { encoding: "utf8", env: { ...clean(), ...extra }, input: "" });
+    const tab = run2("tp-abc\terror");
+    assert.ok(!tab.stderr.includes("\t"), JSON.stringify(tab.stderr));
+    const forged = run2("tp-abc\nerror: forged");
+    assert.equal(forged.stderr.split("\n").filter((l) => l.startsWith("error:")).length, 1, JSON.stringify(forged.stderr));
   }
 });
 

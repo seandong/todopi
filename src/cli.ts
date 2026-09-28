@@ -49,13 +49,14 @@ async function styleFor(hook = false, stream: NodeJS.WriteStream = process.stdou
 }
 
 /**
- * 错误写到 stderr：第一行加 `error: `（Cargo 式，tp-rk6o8q），多行消息的其余行原样；上不上色看 stderr 是不是终端。
- * 消息里可能带着用户给的数据（任务 id、路径）：控制字符一律可见转义，换行保留——选了 PLAIN 也挡不住数据自己带的 ESC（评审 P1）。
+ * 错误写到 stderr：第一行加 `error: `（Cargo 式，tp-rk6o8q）；上不上色看 stderr 是不是终端。
+ * 消息里可能带着用户给的数据（任务 id、路径）：每一行的控制字符（ESC、Tab……）一律可见转义，第二行起缩进两格——
+ * 数据里夹带的换行因此伪造不出一行从行首开始的 `error:`（评审一、二轮）。选了 PLAIN 也挡不住数据自己带的控制字符。
  */
 async function writeError(raw: string): Promise<void> {
   const { diagnostic } = await import("./output/render/layout.ts");
-  const { visibleMultiline } = await import("./domain/visible.ts");
-  const message = visibleMultiline(raw);
+  const { visible } = await import("./domain/visible.ts");
+  const message = raw.split("\n").map((line, i) => (i === 0 ? visible(line) : `  ${visible(line)}`)).join("\n");
   let style;
   // 身份解析出错（未知的 --agent）也会走到这里：判定本身不能再抛
   try { style = await styleFor(false, process.stderr); } catch { style = (await import("./output/style.ts")).PLAIN; }
