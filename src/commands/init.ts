@@ -69,12 +69,17 @@ function partialFailure(root: string, init: { created: string[]; agents: InitRep
     ...(init.agents === "unchanged" ? [] : ["AGENTS.md"]),
     ...done.flatMap((r) => r.files.filter((f) => f.status !== "unchanged").map((f) => relative(root, f.path))),
   ];
-  const where = shellQuote(root);
+  // 路径里有控制字符（Tab、换行……）时，错误出口会把它们写成可见的 \t，引号里的路径就不再是原路径：不给一条冒称能照抄的命令，
+  // 改说「在项目根下跑」（评审三轮）
+  const copyable = !/[\u0000-\u001f\u007f]/.test(root);
+  const how = copyable
+    ? `run: ${remaining.map((a) => `todopi -C ${shellQuote(root)} setup ${a}`).join(" && ")}`
+    : `run from the project root: ${remaining.map((a) => `todopi setup ${a}`).join(" && ")}`;
   return [
     `setup ${failed} failed: ${why}`,
     ...(written.length === 0 ? [] : [`Already written: ${written.join(", ")}.`]),
     `setup ${failed} may have written some of its own files before it failed; running it again is safe.`,
-    `Not set up yet: ${remaining.join(", ")}. Fix the problem above, then run: ${remaining.map((a) => `todopi -C ${where} setup ${a}`).join(" && ")}`,
+    `Not set up yet: ${remaining.join(", ")}. Fix the problem above, then ${how}`,
   ].join("\n");
 }
 

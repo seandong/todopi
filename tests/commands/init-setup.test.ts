@@ -116,8 +116,16 @@ test("不是 CliError 的失败（悬空的符号链接）也带上已写的文�
   assert.match(r.stderr, /todopi -C \S+ setup claude/);
 });
 
-test("用 -C 从项目外跑：照抄提示里的恢复命令能跑通", () => {
-  const d = repo();
+// 让 shell 真的解析提示里的命令：PATH 上放一个叫 todopi 的小脚本，指向本仓库的 CLI
+const SHIM = mkdtempSync(join(tmpdir(), "todopi-init-setup-shim-"));
+writeFileSync(join(SHIM, "todopi"), `#!/bin/sh\nexec "${process.execPath}" "${CLI}" "$@"\n`, { mode: 0o755 });
+
+/** 在名字里带 `name` 的项目里让 claude 失败，返回错误里建议的恢复命令与项目目录 */
+function failClaude(name: string) {
+  const parent = mkdtempSync(join(tmpdir(), "todopi-init-setup-q-"));
+  const d = join(parent, name);
+  mkdirSync(d);
+  spawnSync("git", ["init", "-q"], { cwd: d });
   const outside = mkdtempSync(join(tmpdir(), "todopi-init-setup-outside-"));
   writeFileSync(join(outside, "settings.json"), "{}\n");
   mkdirSync(join(d, ".claude"));
@@ -125,12 +133,23 @@ test("用 -C 从项目外跑：照抄提示里的恢复命令能跑通", () => {
   const elsewhere = mkdtempSync(join(tmpdir(), "todopi-init-setup-cwd-"));
   const r = spawnSync(process.execPath, [CLI, "-C", d, "init", "--setup", "codex,claude"], { encoding: "utf8", env, cwd: elsewhere, input: "" });
   assert.equal(r.status, 1);
-  const cmd = /run: (todopi -C \S+ setup claude)$/m.exec(r.stderr)?.[1];
-  assert.ok(cmd, r.stderr);
-  // 修好问题（把链接换成普通文件），然后在项目外的 cwd 里照抄
   rmSync(join(d, ".claude", "settings.json"));
-  const args = cmd.split(" ").slice(1);
-  const again = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env, cwd: elsewhere, input: "" });
-  assert.equal(again.status, 0, again.stderr);
-  assert.ok(existsSync(join(d, ".claude", "settings.json")));
+  return { d, elsewhere, stderr: r.stderr };
+}
+
+test("用 -C 从项目外跑：提示里的恢复命令交给 /bin/sh 原样执行能跑通（路径含空格与单引号）", () => {
+  for (const name of ["plain", "with space", "it's quoted"]) {
+    const { d, elsewhere, stderr } = failClaude(name);
+    const cmd = /run: (todopi -C .+ setup claude)$/m.exec(stderr)?.[1];
+    assert.ok(cmd, stderr);
+    const again = spawnSync("/bin/sh", ["-c", cmd], { encoding: "utf8", env: { ...env, PATH: `${SHIM}:${process.env["PATH"] ?? ""}` }, cwd: elsewhere });
+    assert.equal(again.status, 0, `${name}: ${cmd}: ${again.stderr}`);
+    assert.ok(existsSync(join(d, ".claude", "settings.json")), name);
+  }
+});
+
+test("路径里有 Tab：不给冒称能照抄的命令，改说在项目根下跑", () => {
+  const { stderr } = failClaude("tab\there");
+  assert.doesNotMatch(stderr, /todopi -C /);
+  assert.match(stderr, /run from the project root: todopi setup claude$/m);
 });
