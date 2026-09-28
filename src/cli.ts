@@ -92,13 +92,16 @@ program
   .command("init")
   .description("create .todopi/ in this repository and write the todopi protocol into AGENTS.md")
   .option("--prefix <prefix>", "prefix for new task ids", "tp")
-  .action(async (cmdOpts: { prefix: string }) => {
+  .option("--setup <agent>", "also run `todopi setup <agent>` for the project (repeatable or comma-separated: claude, codex, opencode, pi, cursor, gemini)",
+    (value: string, previous: string[]) => [...previous, value], [] as string[])
+  .action(async (cmdOpts: { prefix: string; setup: string[] }) => {
     const { runInit } = await import("./commands/init.ts");
     const { renderText, renderJson } = await import("./output/render/init.ts");
     const opts = program.opts();
     const report = runInit({
       directory: (opts["directory"] as string | undefined) ?? process.cwd(),
       prefix: cmdOpts.prefix,
+      ...(cmdOpts.setup.length > 0 ? { setup: cmdOpts.setup } : {}),
     });
     process.stdout.write(
       opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]), style: await styleFor(), home: homedir() }),

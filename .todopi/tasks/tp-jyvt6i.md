@@ -1,11 +1,12 @@
 ---
 id: "tp-jyvt6i"
 title: "init --setup <agent>：初始化时一并接入 agent"
-status: "open"
+status: "in_progress"
+assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j06"
 verify: "make check && make test"
 created: "2026-09-28T06:07:17Z"
-updated: "2026-09-28T06:07:17Z"
+updated: "2026-09-28T08:28:59Z"
 ---
 
 ## Description
@@ -21,3 +22,4 @@ updated: "2026-09-28T06:07:17Z"
 ## Log
 
 - 2026-09-28T06:07:17Z claude-code@Seans-MacBook-Pro.local created
+- 2026-09-28T08:28:59Z claude-code@Seans-MacBook-Pro.local claimed

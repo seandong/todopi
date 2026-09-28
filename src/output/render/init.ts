@@ -4,6 +4,7 @@
 import type { InitReport } from "../dto/init.ts";
 import { PLAIN, type Style } from "../style.ts";
 import { action, next, shownPath, type Tone } from "./layout.ts";
+import { renderSetup } from "./setup.ts";
 
 export function renderJson(r: InitReport): string {
   return JSON.stringify(r, null, 2);
@@ -37,8 +38,12 @@ export function renderText(r: InitReport, opts: { quiet?: boolean; style?: Style
     ...r.created.map((f) => action(s, "Created", f)),
     ...r.kept.map((f) => action(s, "Unchanged", `${f} (already present)`, "noop")),
     action(s, ...AGENTS_LINE[r.agents]),
-    action(s, "Ready", `todopi ledger in ${shownPath(s, r.root, opts.home)}`),
   ];
-  if (!opts.quiet) lines.push("", ...next(s, NEXT, true));
+  // --setup：每家 setup 写的文件与提示紧跟在账本之后，排版与单独跑 setup 一样（tp-jyvt6i）
+  for (const setup of r.setup ?? []) lines.push(...renderSetup(setup, { ...opts, root: r.root }).trimEnd().split("\n"));
+  lines.push(action(s, "Ready", `todopi ledger in ${shownPath(s, r.root, opts.home)}`));
+  // 已经接入过 agent，下一步就只剩建任务
+  const steps = (r.setup ?? []).length > 0 ? NEXT.filter(([c]) => !c.startsWith("todopi setup")) : NEXT;
+  if (!opts.quiet) lines.push("", ...next(s, steps, steps.length > 1));
   return lines.join("\n") + "\n";
 }

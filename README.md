@@ -33,6 +33,8 @@ todopi init            # creates .todopi/ and adds the protocol to AGENTS.md
 todopi setup claude    # or codex, opencode, pi, cursor, gemini — one per agent you use
 ```
 
+Or both in one step: `todopi init --setup claude` (repeat `--setup`, or separate agents with commas: `--setup claude,codex`).
+
 `setup` writes project-level files by default, so a teammate who clones the repository gets the same hooks. Add `--user` to put the hooks (or the OpenCode plugin, or the pi extension) in your home directory instead, for every repository. Two pieces stay per project even with `--user`, because they belong to the repository: Claude Code's `CLAUDE.md` import and Cursor's rule file. Run from inside a repository, `setup claude --user` and `setup cursor --user` still write those there; Cursor's user-level rules are set in its settings, not in a file. Running `setup` again is safe: in a shared settings file it only updates its own entries; the files it owns outright (the OpenCode plugin, the pi extension, the Cursor rule) it regenerates. Commit what it writes.
 
 ## Setting up each agent
