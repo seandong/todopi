@@ -1,6 +1,6 @@
 {
   "name": "todopi",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "A durable task ledger for AI coding agents",
   "type": "module",
   "license": "MIT",
@@ -30,6 +30,7 @@
   },
   "files": [
     "dist/",
+    "CHANGELOG.md",
     "LICENSE",
     "README.md"
   ]
