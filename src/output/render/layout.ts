@@ -1,10 +1,10 @@
 // src/output/render/layout.ts
-// Cargo 式排版的共用记号（tp-rk6o8q，docs/plans/2026-09-28-cargo-style-output.md）。每个命令一份排版，Style 只决定上不上色：
-// PLAIN 下这里的每个函数都产出同一份纯文本。不用任何符号——东亚宽度里 ● ○ 是「模糊宽度」，会让列错位。
+// Cargo 式排版的共用记号（tp-rk6o8q，docs/plans/2026-09-28-cargo-style-output.md）。每个命令一份排版，Style 决定上不上色，
+// 以及有没有给人看的部分（表头、小结、~，见 Style.interactive）。不用任何符号——东亚宽度里 ● ○ 是「模糊宽度」，会让列错位。
 //
 // 本文件 MUST NOT import src/domain/（ARCH-008）。
 
-import { PLAIN, type Style } from "../style.ts";
+import type { Style } from "../style.ts";
 
 /** 动词列的宽度：动词右对齐到这一列，空一格接对象（Cargo 用 12） */
 export const VERB_WIDTH = 12;
@@ -55,8 +55,8 @@ export function next(s: Style, items: readonly (readonly [command: string, what:
   ];
 }
 
-/** 家目录缩成 ~：只在上色时（人在看）；纯文本照旧给绝对路径，读它的常是 agent */
+/** 家目录缩成 ~：只在有人在看时；被管道接走、agent 在场时照旧给绝对路径 */
 export function shownPath(s: Style, path: string, home: string | undefined): string {
-  if (s === PLAIN || home === undefined || home === "") return path;
+  if (!s.interactive || home === undefined || home === "") return path;
   return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
 }

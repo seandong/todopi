@@ -173,7 +173,7 @@ async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
   process.stdout.write(
     opts["json"] === true
       ? renderJson(report) + "\n"
-      : renderText(report, { quiet: opts["quiet"] === true }),
+      : renderText(report, { quiet: opts["quiet"] === true, style: await styleFor() }),
   );
   // 诊断走 stderr：stdout 在 --json 下必须是一个干净的数组
   process.stderr.write(renderDiagnostics(report));

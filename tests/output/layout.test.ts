@@ -47,3 +47,21 @@ test("setup：项目级给相对项目根的路径；用户级即使家目录在
   assert.equal(renderSetup({ agent: "pi", scope: "user", files: files("/p/h/.pi/x.ts"), notes: ["n"] }, { root: "/p", quiet: true }),
     "     Created /p/h/.pi/x.ts\n");
 });
+
+test("ls：表头与小结只给终端里的人（ANSI、MONO）；管道里（PLAIN）只有数据行，id 打头", async () => {
+  const { renderText } = await import("../../src/output/render/ls.ts");
+  const { MONO } = await import("../../src/output/style.ts");
+  const t = (id: string, extra: Record<string, unknown> = {}) => ({
+    id, title: `T ${id}`, status: "open", blocked_by: [], labels: [], created: "", updated: "",
+    ready: true, blocked: false, stale: false, mine: false, unverified: false, ...extra,
+  });
+  const r = { tasks: [t("tp-a"), t("tp-bb", { status: "in_progress" })], total: 2, invalid: [] };
+  assert.equal(renderText(r), "tp-a   ready        T tp-a\ntp-bb  in progress  T tp-bb\n");
+  const human = renderText(r, { style: MONO });
+  assert.match(human, /^ID +STATUS +TITLE\n/);
+  assert.match(human, /\n\n2 tasks · 1 ready · 1 in progress\n$/);
+  assert.equal(renderText(r, { style: MONO, quiet: true }), renderText(r), "--quiet 下也只有数据行");
+  // 截断：管道里照旧在最后说 Showing（原来的行为），人看到的并进小结
+  assert.match(renderText({ ...r, total: 5 }), /\n\nShowing 2 of 5 tasks\.\n$/);
+  assert.match(renderText({ ...r, total: 5 }, { style: MONO }), /Showing 2 of 5 tasks · /);
+});
