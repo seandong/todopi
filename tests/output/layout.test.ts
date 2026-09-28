@@ -36,3 +36,14 @@ test("家目录只在上色时缩成 ~；不是家目录下的路径原样", () 
   assert.equal(shownPath(ANSI, "/Users/me/x", "/Users/me"), "~/x");
   assert.equal(shownPath(ANSI, "/Users/meow/x", "/Users/me"), "/Users/meow/x");
 });
+
+test("setup：项目级给相对项目根的路径；用户级即使家目录在项目里也给绝对路径", async () => {
+  const { renderSetup } = await import("../../src/output/render/setup.ts");
+  const files = (p: string) => [{ path: p, status: "created" as const }];
+  assert.equal(renderSetup({ agent: "codex", scope: "project", files: files("/p/.codex/hooks.json"), notes: [] }, { root: "/p" }),
+    "     Created .codex/hooks.json\n");
+  assert.equal(renderSetup({ agent: "pi", scope: "user", files: files("/p/h/.pi/x.ts"), notes: ["n"] }, { root: "/p" }),
+    "     Created /p/h/.pi/x.ts\nnote: n\n");
+  assert.equal(renderSetup({ agent: "pi", scope: "user", files: files("/p/h/.pi/x.ts"), notes: ["n"] }, { root: "/p", quiet: true }),
+    "     Created /p/h/.pi/x.ts\n");
+});

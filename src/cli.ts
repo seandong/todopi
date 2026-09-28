@@ -305,8 +305,11 @@ program
     const { runSetup } = await import("./commands/setup.ts");
     const { renderSetup } = await import("./output/render/setup.ts");
     const opts = program.opts();
-    const report = runSetup({ directory: (opts["directory"] as string | undefined) ?? process.cwd(), agent, user: cmdOpts.user });
-    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderSetup(report, { quiet: opts["quiet"] === true, style: await styleFor(), home: homedir() }));
+    const directory = (opts["directory"] as string | undefined) ?? process.cwd();
+    const report = runSetup({ directory, agent, user: cmdOpts.user });
+    const { findLedger } = await import("./format/discover.ts");
+    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n"
+      : renderSetup(report, { quiet: opts["quiet"] === true, style: await styleFor(), home: homedir(), root: findLedger(directory)?.root }));
   });
 
 program

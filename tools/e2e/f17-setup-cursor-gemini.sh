@@ -27,9 +27,9 @@ todopi -C "$W" init >/dev/null 2>&1
 
 # ---- Cursor ----
 out="$(todopi -C "$W" setup cursor 2>&1)"; rc=$?
-[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^created .*/.cursor/hooks.json$" && printf '%s\n' "$out" | grep -q "^created .*/.cursor/rules/todopi.mdc$" \
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^ *Created .cursor/hooks.json$" && printf '%s\n' "$out" | grep -q "^ *Created .cursor/rules/todopi.mdc$" \
   && ok "setup cursor 写出 hooks.json 与规则文件" || fail "rc=${rc}：$out"
-[ "$(todopi -C "$W" setup cursor 2>&1 | grep -c '^unchanged')" = "2" ] && ok "setup cursor 幂等" || fail "setup cursor 不幂等"
+[ "$(todopi -C "$W" setup cursor 2>&1 | grep -c '^ *Unchanged ')" = "2" ] && ok "setup cursor 幂等" || fail "setup cursor 不幂等"
 
 out="$(cd "$W" && printf '{"conversation_id":"cur-1","hook_event_name":"sessionStart"}' | todopi prime --hook --hook-json cursor 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] && printf '%s' "$out" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));process.exit(/^No task in progress/.test(j.additional_context)?0:1)' \
@@ -47,8 +47,8 @@ printf '%s' "$out" | grep -q '"additional_context"' && ok "-C 优先于 workspac
 
 # ---- Gemini ----
 out="$(todopi -C "$W" setup gemini 2>&1)"; rc=$?
-[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^created .*/.gemini/settings.json$" && ok "setup gemini 写出 settings.json" || fail "rc=${rc}：$out"
-[ "$(todopi -C "$W" setup gemini 2>&1 | grep -c '^unchanged')" = "1" ] && ok "setup gemini 幂等" || fail "setup gemini 不幂等"
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^ *Created .gemini/settings.json$" && ok "setup gemini 写出 settings.json" || fail "rc=${rc}：$out"
+[ "$(todopi -C "$W" setup gemini 2>&1 | grep -c '^ *Unchanged ')" = "1" ] && ok "setup gemini 幂等" || fail "setup gemini 不幂等"
 
 P='{"session_id":"gem-1","hook_event_name":"BeforeAgent"}'
 hook() { (cd "$W" && printf '%s' "$P" | todopi prime --hook "$@" 2>&1); }
