@@ -51,9 +51,16 @@ export function parseSetupAgents(values: readonly string[]): string[] {
   return out;
 }
 
+/** 能直接复制进 shell 的路径：只含安全字符就原样，否则单引号包起来 */
+function shellQuote(p: string): string {
+  return /^[A-Za-z0-9_@%+=:,./-]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`;
+}
+
 /**
- * 某一家 setup 失败时的错误：账本与前面几家已经写好了，说清楚写了什么、哪一家失败、还差哪几家、修好之后跑什么（评审）。
+ * 某一家 setup 失败时的错误：账本与前面几家已经写好了，说清楚写了什么、哪一家失败、还差哪几家、修好之后跑什么（评审一、二轮）。
  * 出错时 stdout 为空（docs/json.md 的约定），所以这些都在错误消息里。
+ * 失败的那一家可能在抛错之前已经写了它的一部分文件（例如 settings.json 写了、CLAUDE.md 被拒）：这里不断言「别的都没动」，
+ * 只说它可能写了一部分、重跑是安全的（setup 幂等）。恢复命令带 `-C <root>`：用 -C 从项目外跑的人照抄也能跑。
  */
 function partialFailure(root: string, init: { created: string[]; agents: InitReport["agents"] }, done: SetupReport[],
   failed: string, remaining: string[], why: string): string {
@@ -62,10 +69,12 @@ function partialFailure(root: string, init: { created: string[]; agents: InitRep
     ...(init.agents === "unchanged" ? [] : ["AGENTS.md"]),
     ...done.flatMap((r) => r.files.filter((f) => f.status !== "unchanged").map((f) => relative(root, f.path))),
   ];
+  const where = shellQuote(root);
   return [
     `setup ${failed} failed: ${why}`,
-    written.length === 0 ? "Nothing else was changed." : `Already written: ${written.join(", ")}.`,
-    `Not set up yet: ${remaining.join(", ")}. Fix the problem above, then run: ${remaining.map((a) => `todopi setup ${a}`).join(" && ")}`,
+    ...(written.length === 0 ? [] : [`Already written: ${written.join(", ")}.`]),
+    `setup ${failed} may have written some of its own files before it failed; running it again is safe.`,
+    `Not set up yet: ${remaining.join(", ")}. Fix the problem above, then run: ${remaining.map((a) => `todopi -C ${where} setup ${a}`).join(" && ")}`,
   ].join("\n");
 }
 
@@ -96,8 +105,10 @@ export function runInit(opts: { directory: string; prefix: string; setup?: reado
     try {
       setup.push(runSetup({ directory: root, agent }));
     } catch (err) {
-      if (!(err instanceof CliError)) throw err;
-      throw new CliError(err.code, partialFailure(root, { created, agents }, setup, agent, setupAgents.slice(i), err.message));
+      // 不只是 CliError：文件系统的错误（悬空的符号链接 ENOENT 之类）同样发生在账本与前几家写好之后（评审二轮）
+      const code = err instanceof CliError ? err.code : EXIT.usage;
+      const why = err instanceof Error ? err.message : String(err);
+      throw new CliError(code, partialFailure(root, { created, agents }, setup, agent, setupAgents.slice(i), why));
     }
   }
   return { root, created, kept, agents, setup };

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -87,7 +87,50 @@ test("第二家失败：错误里说清已经写了什么、哪家失败、还�
     assert.equal(r.stdout, "", "出错时 stdout 为空");
     assert.match(r.stderr, /^error: setup claude failed: /m);
     assert.match(r.stderr, /Already written: \.todopi\/config\.yml, \.todopi\/\.gitignore, AGENTS\.md, \.codex\/hooks\.json\./);
-    assert.match(r.stderr, /Not set up yet: claude, gemini\. .*todopi setup claude && todopi setup gemini/);
+    assert.match(r.stderr, /Not set up yet: claude, gemini\. .*todopi -C \S+ setup claude && todopi -C \S+ setup gemini/);
     assert.ok(existsSync(join(d, ".codex", "hooks.json")) && !existsSync(join(d, ".gemini")));
   }
+});
+
+test("失败的那一家自己已写了一部分：不说「别的都没动」，说它可能写了一部分、重跑安全", () => {
+  const d = repo();
+  run(d, "init");
+  // CLAUDE.md 指向项目外：setup claude 先写好 .claude/settings.json，再在 CLAUDE.md 上被拒
+  const outside = mkdtempSync(join(tmpdir(), "todopi-init-setup-outside-"));
+  writeFileSync(join(outside, "CLAUDE.md"), "x\n");
+  symlinkSync(join(outside, "CLAUDE.md"), join(d, "CLAUDE.md"));
+  const r = run(d, "init", "--setup", "claude");
+  assert.equal(r.status, 1, r.stderr);
+  assert.doesNotMatch(r.stderr, /Nothing else was changed/);
+  assert.match(r.stderr, /setup claude may have written some of its own files before it failed; running it again is safe/);
+});
+
+test("不是 CliError 的失败（悬空的符号链接）也带上已写的文件与恢复命令", () => {
+  const d = repo();
+  mkdirSync(join(d, ".claude"));
+  symlinkSync(join(d, "nowhere", "settings.json"), join(d, ".claude", "settings.json"));
+  const r = run(d, "init", "--setup", "codex,claude");
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stderr, /^error: setup claude failed: /m);
+  assert.match(r.stderr, /Already written: .*\.codex\/hooks\.json\./);
+  assert.match(r.stderr, /todopi -C \S+ setup claude/);
+});
+
+test("用 -C 从项目外跑：照抄提示里的恢复命令能跑通", () => {
+  const d = repo();
+  const outside = mkdtempSync(join(tmpdir(), "todopi-init-setup-outside-"));
+  writeFileSync(join(outside, "settings.json"), "{}\n");
+  mkdirSync(join(d, ".claude"));
+  symlinkSync(join(outside, "settings.json"), join(d, ".claude", "settings.json"));
+  const elsewhere = mkdtempSync(join(tmpdir(), "todopi-init-setup-cwd-"));
+  const r = spawnSync(process.execPath, [CLI, "-C", d, "init", "--setup", "codex,claude"], { encoding: "utf8", env, cwd: elsewhere, input: "" });
+  assert.equal(r.status, 1);
+  const cmd = /run: (todopi -C \S+ setup claude)$/m.exec(r.stderr)?.[1];
+  assert.ok(cmd, r.stderr);
+  // 修好问题（把链接换成普通文件），然后在项目外的 cwd 里照抄
+  rmSync(join(d, ".claude", "settings.json"));
+  const args = cmd.split(" ").slice(1);
+  const again = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env, cwd: elsewhere, input: "" });
+  assert.equal(again.status, 0, again.stderr);
+  assert.ok(existsSync(join(d, ".claude", "settings.json")));
 });
