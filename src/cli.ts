@@ -492,12 +492,12 @@ async function transitionAction(
     process.stdout.write(
       opts["json"] === true
         ? renderTransitionJson(report) + "\n"
-        : renderTransition(report, { quiet: opts["quiet"] === true }),
+        : renderTransition(report, { quiet: opts["quiet"] === true, style: await styleFor() }),
     );
   } catch (err) {
     if (err instanceof GateRefused) {
       process.stdout.write(
-        opts["json"] === true ? renderGateJson(err.report) + "\n" : renderGateReport(err.report),
+        opts["json"] === true ? renderGateJson(err.report) + "\n" : renderGateReport(err.report, { style: await styleFor() }),
       );
       throw new CliError(err.code as 2 | 3, "");
     }

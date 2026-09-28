@@ -2,6 +2,8 @@
 // 渲染层只认 dto，不认领域对象（ARCH-008）。
 
 import type { GateAction, GateReport, TransitionReport } from "../dto/gate.ts";
+import { PLAIN, type Style } from "../style.ts";
+import { action, diagnostic, task } from "./layout.ts";
 
 export function renderGateJson(r: GateReport): string {
   return JSON.stringify(r, null, 2);
@@ -184,19 +186,22 @@ function headline(refusal: GateReport["refused"][number]): string[] {
  * **动作全部来自 `r.actions`，一条都不在这里手写**——那是文本与 `--json`
  * 不分叉的唯一保证。
  */
-export function renderGateReport(r: GateReport): string {
-  const out: string[] = [`Refused to ${r.transition} ${r.id}  ${r.title}`, ""];
+export function renderGateReport(r: GateReport, opts: { style?: Style } = {}): string {
+  const s = opts.style ?? PLAIN;
+  // 结构不变（agent 靠它据以行动），只把第一行写成 error: 并上色（tp-rk6o8q）
+  const out: string[] = [diagnostic(s, "error", `refused to ${r.transition} ${task(s, r.id, r.title)}`), ""];
 
   for (const refusal of r.refused) {
-    out.push(...headline(refusal));
+    const [head, ...rest] = headline(refusal);
+    out.push(s.bold(head!), ...rest);
     for (const a of r.actions) {
       if (a.for !== refusal.gate) continue;
       const line = a.command ?? a.template;
       if (line === undefined) {
         out.push(`  ${a.detail}`);
       } else {
-        out.push(`  ${line}`);
-        out.push(`    ${a.detail}`);
+        out.push(`  ${s.cyan(line)}`);
+        out.push(`    ${s.dim(a.detail)}`);
       }
     }
     out.push("");
@@ -204,24 +209,27 @@ export function renderGateReport(r: GateReport): string {
 
   const retry = r.actions.find((a) => a.for === "retry");
   const force = r.actions.find((a) => a.for === "force");
-  out.push(force === undefined ? "What you can do:" : "Two ways forward:");
+  out.push(s.bold(force === undefined ? "What you can do:" : "Two ways forward:"));
   if (retry !== undefined) {
     out.push(`  1. ${retry.detail}`);
     const line = retry.command ?? retry.template;
-    if (line !== undefined) out.push(`     ${line}`);
+    if (line !== undefined) out.push(`     ${s.cyan(line)}`);
   }
   if (force !== undefined) {
     out.push(`  2. ${force.detail}`);
     const line = force.command ?? force.template;
-    if (line !== undefined) out.push(`     ${line}`);
+    if (line !== undefined) out.push(`     ${s.cyan(line)}`);
   }
   return out.join("\n") + "\n";
 }
 
-/** 迁移成功之后的一行确认。 */
-export function renderTransition(r: TransitionReport, opts: { quiet?: boolean } = {}): string {
-  const what = r.resolution === undefined ? r.status : `${r.status} (${r.resolution})`;
-  const head = `${r.id}  ${r.title}  ->  ${what}\n`;
-  if (opts.quiet || !r.forced) return head;
-  return head + "Recorded as unverified: a gate was overridden. It shows up that way in every listing.\n";
+/** 迁移成功之后的一行确认：Cargo 式动作行（tp-rk6o8q）。越过门禁的那句是提示，--quiet 去掉（与之前一样）。 */
+export function renderTransition(r: TransitionReport, opts: { quiet?: boolean; style?: Style } = {}): string {
+  const s = opts.style ?? PLAIN;
+  const who = task(s, r.id, r.title);
+  const head = r.status !== "closed" ? action(s, "Reopened", who)
+    : r.resolution === "done" ? action(s, "Finished", who)
+    : action(s, "Closed", `${who} (${r.resolution ?? "closed"})`);
+  if (opts.quiet || !r.forced) return `${head}\n`;
+  return `${head}\n${diagnostic(s, "warning", "recorded as unverified: a gate was overridden. It shows up that way in every listing.")}\n`;
 }

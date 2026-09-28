@@ -14,6 +14,8 @@ import { visible } from "../domain/visible.ts";
 import type { VerifyOutcome } from "../domain/gates.ts";
 import type { Ledger } from "../format/discover.ts";
 import { EXIT, CliError } from "../exit.ts";
+import { PLAIN } from "../output/style.ts";
+import { action } from "../output/render/layout.ts";
 
 /** 报告里给人看的尾部长度。完整输出在 `.cache/verify/` 里。 */
 const TAIL_BYTES = 512;
@@ -96,7 +98,8 @@ export function runVerify(
   ensureTrusted(ledger, command, opts);
 
   // 显示用可见转义（控制字符不交给终端解释）；执行的是原文
-  process.stderr.write(`Running verify for ${id}:\n  ${visible(command)}\n`);
+  // Cargo 式动作行（tp-rk6o8q）；stderr 不上色——它在 agent 跑 done 时同样进上下文，判定不值得为一行多一套
+  process.stderr.write(`${action(PLAIN, "Verifying", `${id}  ${visible(command)}`)}\n`);
 
   // 路径先定下来再执行：日志是**边跑边写**的，不是跑完再写。于是 todopi 自己
   // 被杀、或者命令跑到一半炸掉时，已经产生的输出仍然留在盘上。
