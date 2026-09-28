@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `13246e3` —— 版本号改为 0.1.0，README 状态行与 CHANGELOG（tp-i3zabw）。
+- Last commit: `d4d64bb` —— 发布工作流修复（npm 路径、已发布版本核对、标签核对、Release 重跑以已发布为准；tp-ornltg）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -158,6 +158,9 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+66. tp-ornltg 发布工作流修复（进行中，2026-09-28）：v0.1.0 首次推标签，Release 失败在 npm publish——`out/x.tgz` 被 npm 当成 GitHub 简写。npm 未发、没建 Release。
+    改 ./out/，加 tests/workflows.test.ts；按 Codex 三轮评审加固：npm 已有同版本只在 integrity 相同时跳过，发布前核对标签仍指向本次提交，
+    `--verify-tag`，Release 已存在则以已发布资产为准。下一步：合并后用 --force-with-lease 把 v0.1.0 移到新 main，看发布跑完、实装验证后关任务。
 65. ~~tp-i3zabw 版本号改为 0.1.0~~ 已完成（2026-09-28）：package.json / lock / src/version.ts 与六家包清单；README 不再说未发布；CHANGELOG.md（进 npm 包）。
     npm pack 实装验证。NPM_TOKEN 已由维护者配好。Codex 一轮 → Go。下一步：维护者打 `v0.1.0` 标签，发布工作流发 npm、二进制与 Release。
 64. ~~tp-lv7y3h 六家市场 / 注册表的包与 awesome 条目~~ 已完成（2026-09-28）：tools/plugins/build.mjs 从 setup 的同一份源生成 plugins/ 与 packages/、三份市场文件，
