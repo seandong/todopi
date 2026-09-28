@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `27a3631` —— tp-lv7y3h 六家市场 / 注册表的包（生成器、本机逐家实测、docs/marketplaces.md）。
+- Last commit: `13246e3` —— 版本号改为 0.1.0，README 状态行与 CHANGELOG（tp-i3zabw）。
   HEAD，提交后它是新 HEAD 的父
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
@@ -19,7 +19,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 41 个任务，39 个 `closed/done`、2 个 `open`，都等维护者：tp-ujjc6y（brew：只差在 CLT 较新的机器上 brew install 实测一次）、tp-zagvp5（Cursor 实机验证）。
+- 账本: `.todopi/` 42 个任务，40 个 `closed/done`、2 个 `open`，都等维护者：tp-ujjc6y（brew：只差在 CLT 较新的机器上 brew install 实测一次）、tp-zagvp5（Cursor 实机验证）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -158,6 +158,8 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+65. ~~tp-i3zabw 版本号改为 0.1.0~~ 已完成（2026-09-28）：package.json / lock / src/version.ts 与六家包清单；README 不再说未发布；CHANGELOG.md（进 npm 包）。
+    npm pack 实装验证。NPM_TOKEN 已由维护者配好。Codex 一轮 → Go。下一步：维护者打 `v0.1.0` 标签，发布工作流发 npm、二进制与 Release。
 64. ~~tp-lv7y3h 六家市场 / 注册表的包与 awesome 条目~~ 已完成（2026-09-28）：tools/plugins/build.mjs 从 setup 的同一份源生成 plugins/ 与 packages/、三份市场文件，
     tests/plugins.test.ts 防漂移。本机沙箱逐家装过：Claude Code、Codex 真模型，Gemini、OpenCode、pi 走假 API——会话开始都收到 prime，叠上 setup 的钩子都只注入一次；
     Cursor 未登录，并入 tp-zagvp5。实测抓到 Codex 清单必须在 .codex-plugin/、Gemini 压缩标记并发被取走多次（APFS 并发 unlink 可都成功 → 锁内取）。
