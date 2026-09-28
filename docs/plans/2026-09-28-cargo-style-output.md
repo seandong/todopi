@@ -33,6 +33,15 @@
 - 依赖文字的断言清单（字面匹配 tests/ 与 tools/e2e/）：setup 的 `^created …`（f14–f17 共 5 处）、`^unchanged` 计数（f15–f17）、
   `Imported`（3）、`todopi board:`（4）、`No tasks match`（2）、`[unverified]`（保留，不动）、`doctor: `（1）。
 
+## 实现中的修订：「有没有人在看」与「上不上色」分开
+
+`ls` 第一版把表头与小结也给了纯文本，e2e 里 5 个脚本红了——它们用的正是 agent 与脚本的写法：`ls | head -1` 取第一条、`ls | wc -l` 数任务、
+`ls | tail -1 | cut -d' ' -f1` 取 id。照 `gh` 的做法：Style 多一个 `interactive`，表头、小结、~ 缩写只在有人看时出现；被管道接走、
+agent 在场、--json 时只有数据行。`NO_COLOR` / `TERM=dumb` 在终端里是 MONO（有排版、没颜色），管道里仍是 PLAIN。修订后这 5 个 e2e 一行没改就过了。
+原则 1 因此改成：**数据行一份排版**；表格类输出的表头与小结只给人。
+
+另外两处：错误统一走 `error:` 前缀（stderr 是终端才上色）；ARCH-029 规定终端转义只能出现在 `src/output/style.ts`，渲染器绕不过判定。
+
 ## 逐命令
 
 ### init

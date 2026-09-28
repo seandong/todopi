@@ -2504,3 +2504,17 @@ Node 用 spec reporter，整层被判 blocked。
 - 实测抓到两个问题：Codex 的清单放在插件根的 `plugin.json` 能装上，但钩子从不出现在 `/hooks` 里——必须放在 `.codex-plugin/plugin.json`。
   Gemini 的 BeforeAgent（`--if-compacted`）并发时标记会被取走不止一次：先查后删不是原子的，而 macOS（APFS）上几个进程同时 unlink 同一个文件
   可以都返回成功，所以取标记改在账本的写锁里做；拿不到锁照常注入（与 D057 同）。e2e 里压缩后四个并发的 BeforeAgent 恰好一个注入（八轮）。
+
+## D059 — 终端输出统一为 Cargo 式；只在有人看时上色
+
+- 日期：2026-09-28（tp-rk6o8q；dogfood 反馈「init 输出纯文本真丑」，用户在三种风格里选了 Cargo / uv 式动词列，所有命令统一）。
+- 不引入框架（Ink、@clack/prompts、lipgloss）：一次性退出的命令不需要 React 渲染器，clack 为交互式问答而生，lipgloss 是 Go。好看靠的是排版约定——
+  右对齐的动词列、少数语义颜色、清楚的 Next 区块——`src/output/style.ts`（PLAIN / MONO / ANSI 与唯一的判定 chooseStyle）加
+  `src/output/render/layout.ts`（动作行、task、error/warning/note、Next）就够，不加依赖，Bun 单二进制不受影响。
+- 上色的判定只有 chooseStyle 一处：--json、钩子、有 agent 在场（任何一家的环境信号、--agent、TODOPI_AGENT；嵌套时身份推断不猜，
+  上色更要保守）一律纯文本，FORCE_COLOR 也越不过——这些输出进 agent 的上下文（ARCH-027）。只看 isTTY 不够：有的 agent 在伪终端里跑命令。
+  ARCH-029 规定转义只在 style.ts 里出现。子进程测试逐个跑 23 条命令，FORCE_COLOR 下 agent 在场或 --json 时 stdout 与 stderr 都没有 ESC。
+- 「有没有人在看」与「上不上色」分开（Style.interactive）：表头、小结、~ 缩写只给人；管道里只有数据行、id 打头，`ls | head -1`、`wc -l`、
+  `tail -1 | cut` 照旧可用（gh 的做法；第一版把表头给了管道，5 个 e2e 红了）。NO_COLOR 在终端里是 MONO。
+- 不用任何符号（● ○ ✓）：东亚宽度里 ●、○ 是模糊宽度，中文环境的终端可能画成两格，列会错位；状态写成单词。`add` 的第一行仍以 id 打头。
+- `prime`、`handoff` 的排版不动：它们是写给 agent 上下文的（token 预算、`pointer` 是 prime 最后一行的原文）。
