@@ -85,6 +85,7 @@ Types are written in TypeScript notation. `A & B` means an object with the field
 | `created` | `string[]` | files created, relative to `root` |
 | `kept` | `string[]` | files that already existed and were left alone |
 | `agents` | `"created" \| "appended" \| "replaced" \| "unchanged"` | what happened to `AGENTS.md` |
+| `setup?` | `SetupReport[]` | only with `--setup`: one [`SetupReport`](#setupreport) per agent, in the order given |
 
 ### `AddReport`
 

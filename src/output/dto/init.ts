@@ -1,6 +1,8 @@
 // src/output/dto/init.ts
 // --json 的对外契约。改字段名是破坏性变更（FR-Q3）。
 
+import type { SetupReport } from "./setup.ts";
+
 export type InitReport = {
   /** 账本所在的目录（绝对路径） */
   root: string;
@@ -10,4 +12,6 @@ export type InitReport = {
   kept: string[];
   /** AGENTS.md 发生了什么 */
   agents: "created" | "appended" | "replaced" | "unchanged";
+  /** `--setup` 给了才有：每个 agent 一份，按给出的顺序（tp-jyvt6i） */
+  setup?: SetupReport[];
 };
