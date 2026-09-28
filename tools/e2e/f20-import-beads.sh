@@ -39,7 +39,7 @@ process.stdout.write(out.map((o) => JSON.stringify(o)).join("\n") + "\n");
 ' > "$W/.beads/issues.jsonl"
 
 out="$(cd "$W" && todopi import beads 2>&1)"; rc=$?
-[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^Imported 300 Beads issues from .beads/issues.jsonl (200 open, 100 closed).$" \
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^ *Imported 300 Beads issues from .beads/issues.jsonl (200 open, 100 closed)$" \
   && printf '%s\n' "$out" | grep -q "5 deleted (tombstone), 5 ephemeral" && ok "默认读 .beads/issues.jsonl：300 条，跳过 tombstone 与 ephemeral" || fail "rc=${rc}：$out"
 todopi -C "$W" doctor >/dev/null 2>&1 && ok "doctor 通过" || fail "$(todopi -C "$W" doctor 2>&1 | tail -5)"
 [ "$(todopi -C "$W" ls --all | wc -l | tr -d ' ')" = "300" ] && ok "账本里恰好 300 个" || fail "$(todopi -C "$W" ls --all | wc -l)"

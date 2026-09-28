@@ -42,7 +42,7 @@ cat > "$W/docs/plan.md" <<'PLAN'
 PLAN
 
 out="$(cd "$W" && todopi import docs/plan.md 2>&1)"; rc=$?
-[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^Imported 7 tasks from docs/plan.md.$" && ok "导入 7 个任务" || fail "rc=${rc}：$out"
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^ *Imported 7 tasks from docs/plan.md$" && ok "导入 7 个任务" || fail "rc=${rc}：$out"
 [ "$(todopi -C "$W" ls --all | wc -l | tr -d ' ')" = "7" ] && ok "账本里恰好 7 个" || fail "$(todopi -C "$W" ls --all)"
 [ "$(todopi -C "$W" ls --all | grep -c '\[unverified\]')" = "3" ] && ok "勾选的步骤与全勾的 Task 1 显示为未验证" || fail "$(todopi -C "$W" ls --all)"
 todopi -C "$W" doctor >/dev/null 2>&1 && ok "doctor 通过" || fail "$(todopi -C "$W" doctor 2>&1)"

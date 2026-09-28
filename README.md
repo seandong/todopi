@@ -107,6 +107,8 @@ Writes hooks to `.gemini/settings.json` and adds `AGENTS.md` to `context.fileNam
 
 `todopi --help` lists all 20 subcommands. Every command that reports something takes `--json`; its output is a documented contract ([`docs/json.md`](docs/json.md)) that only changes incompatibly with a major version.
 
+In a terminal the output is colored, and `ls` has a header and a summary line. Piped, run by a coding agent, or with `--json`, it is plain text with no escape codes and one line per result, so `todopi ls | wc -l` counts tasks; messages such as "No tasks match." go to stderr instead. `NO_COLOR` turns the colors off; `FORCE_COLOR=1` turns them on in a pipe without changing the lines (never for a coding agent or `--json`).
+
 Several repositories: todopi keeps one ledger per repository and has no cross-repository view yet. A shell loop covers it:
 
 ```sh

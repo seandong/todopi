@@ -29,11 +29,11 @@ todopi -C "$W" init >/dev/null 2>&1
 
 # 1. setup：两个文件，第二次什么都不改
 out="$(todopi -C "$W" setup claude 2>&1)"; rc=$?
-[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^created .*/.claude/settings.json$" && printf '%s\n' "$out" | grep -q "^created .*/CLAUDE.md$" \
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^ *Created .claude/settings.json$" && printf '%s\n' "$out" | grep -q "^ *Created CLAUDE.md$" \
   && ok "setup 写出 settings.json 与 CLAUDE.md" || fail "rc=${rc}：$out"
 snap="$(cat "$W/.claude/settings.json")"
 out="$(todopi -C "$W" setup claude 2>&1)"
-[ "$(cat "$W/.claude/settings.json")" = "$snap" ] && [ "$(printf '%s\n' "$out" | grep -c '^unchanged')" = "2" ] && ok "再跑一次：两个都 unchanged" || fail "不幂等：$out"
+[ "$(cat "$W/.claude/settings.json")" = "$snap" ] && [ "$(printf '%s\n' "$out" | grep -c '^ *Unchanged ')" = "2" ] && ok "再跑一次：两个都 unchanged" || fail "不幂等：$out"
 
 # 2. 照 settings.json 里写的命令，喂 Claude Code 形状的载荷去跑
 cmd="$(node -e 'const s=require(process.argv[1]);console.log(s.hooks.SessionStart[0].hooks[0].command)' "$W/.claude/settings.json")"

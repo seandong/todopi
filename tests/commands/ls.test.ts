@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { runLs, parseLimit } from "../../src/commands/ls.ts";
 import { runInit } from "../../src/commands/init.ts";
 import { runAdd } from "../../src/commands/add.ts";
-import { renderText, renderJson, renderDiagnostics } from "../../src/output/render/ls.ts";
+import { renderText, renderJson, renderDiagnostics, renderNotes } from "../../src/output/render/ls.ts";
+import { MONO } from "../../src/output/style.ts";
 import { EXIT } from "../../src/exit.ts";
 
 function repo(): string {
@@ -151,10 +152,15 @@ test("--json 经 DTO 映射，字段名跟格式规格走", () => {
 
 test("输出是英文，且空账本有明确提示", () => {
   const d = repo();
-  const out = renderText(runLs({ directory: d }));
+  // 有人在看：提示在 stdout；管道里 stdout 为空、提示走 stderr（renderNotes）——`ls | wc -l` 数得对（tp-rk6o8q 评审 P2）
+  const out = renderText(runLs({ directory: d }), { style: MONO });
   assert.doesNotMatch(out, /[一-鿿]/, "CLI 输出 MUST 是英文");
   assert.match(out, /No tasks/i);
-  assert.equal(renderText(runLs({ directory: d }), { quiet: true }), "", "--quiet 下空结果不出声");
+  assert.equal(renderText(runLs({ directory: d })), "", "管道里 stdout 没有提示行");
+  assert.match(renderNotes(runLs({ directory: d })), /^No tasks match\.\n$/);
+  assert.equal(renderNotes(runLs({ directory: d }), { style: MONO }), "", "有人在看时不重复写到 stderr");
+  assert.equal(renderText(runLs({ directory: d }), { quiet: true, style: MONO }), "", "--quiet 下空结果不出声");
+  assert.equal(renderNotes(runLs({ directory: d }), { quiet: true }), "");
 });
 
 test("stale 的 in_progress 任务在 ready 队列里且被标记（spec §7.5 末句）", () => {
@@ -267,9 +273,11 @@ test("--limit 0 说的是「一条都没显示」，不是「没有匹配」", (
   runAdd({ directory: d, title: "b" });
   const r = runLs({ directory: d, limit: 0 });
   assert.equal(r.total, 2);
-  assert.doesNotMatch(renderText(r), /No tasks match/, "有两条匹配，说没有匹配是错的");
-  assert.match(renderText(r), /0 of 2/);
-  assert.match(renderText(runLs({ directory: d, label: "nope" })), /No tasks match/, "真没匹配时照旧");
+  for (const say of [renderText(r, { style: MONO }), renderNotes(r)]) {
+    assert.doesNotMatch(say, /No tasks match/, "有两条匹配，说没有匹配是错的");
+    assert.match(say, /0 of 2/);
+  }
+  assert.match(renderNotes(runLs({ directory: d, label: "nope" })), /No tasks match/, "真没匹配时照旧");
 });
 
 test("引用字段的元素级非法值被挡下并报告，不会无声消失", () => {

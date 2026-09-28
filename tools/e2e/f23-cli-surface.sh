@@ -52,13 +52,13 @@ out="$(cli -C "$W" --quiet setup codex 2>&1)"
 [ -n "$out" ] && ! printf '%s' "$out" | grep -qi "trust" && printf '%s' "$out" | grep -q "hooks.json" && ok "setup --quiet：只有写了哪些文件，没有信任提示" || fail "$out"
 printf -- '- [ ] one\n' > "$W/plan.md"
 out="$(cli -C "$W" --quiet import "$W/plan.md" 2>&1)"
-printf '%s' "$out" | grep -q "^Imported 1 task" && ! printf '%s' "$out" | grep -q "Next:" && ok "import --quiet：没有 Next 提示" || fail "$out"
+printf '%s' "$out" | grep -q "^ *Imported 1 task" && ! printf '%s' "$out" | grep -q "Next" && ok "import --quiet：没有 Next 提示" || fail "$out"
 PORT="$(node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
 SERVE="$TMP/serve"
 if [ -n "${TODOPI_E2E_BIN:-}" ]; then printf '#!/bin/sh\nexec "%s" "$@"\n' "$TODOPI_E2E_BIN"; else printf '#!/bin/sh\nexec node "%s/src/cli.ts" "$@"\n' "$ROOT"; fi > "$SERVE"; chmod +x "$SERVE"
 "$SERVE" -C "$W" --quiet web --port "$PORT" > "$TMP/web.out" 2>&1 &
 PIDS="$PIDS $!"
-for _ in $(seq 1 50); do grep -q "todopi board:" "$TMP/web.out" 2>/dev/null && break; sleep 0.1; done
+for _ in $(seq 1 50); do grep -q "todopi board at" "$TMP/web.out" 2>/dev/null && break; sleep 0.1; done
 [ "$(wc -l < "$TMP/web.out" | tr -d ' ')" = "1" ] && ! grep -q "Ctrl+C" "$TMP/web.out" && ok "web --quiet：只有地址" || fail "$(cat "$TMP/web.out")"
 
 [ "$FAILED" -eq 0 ] && { echo "f23-cli-surface: pass"; exit 0; } || { echo "f23-cli-surface: fail"; exit 1; }

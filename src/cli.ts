@@ -2,6 +2,7 @@
 // 命令解析。入口是 src/main.ts（它先判断这次是不是 verify 的 runner）；开发时直接 `node src/cli.ts` 也行。
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { EXIT, CliError } from "./exit.ts";
 import { VERSION } from "./version.ts";
 
@@ -32,6 +33,36 @@ program.hook("preAction", async () => {
   }
 });
 
+/**
+ * 这次输出要不要上色（tp-rk6o8q）：判定只在 output/style.ts 的 chooseStyle 里，这里只收集事实。钩子路径由调用方说（hook）。
+ */
+async function styleFor(hook = false, stream: NodeJS.WriteStream = process.stdout) {
+  const { chooseStyle } = await import("./output/style.ts");
+  const { agentPresent } = await import("./commands/actor.ts");
+  return chooseStyle({
+    json: program.opts()["json"] === true,
+    hook,
+    agent: agentPresent(),
+    env: process.env,
+    isTTY: stream.isTTY === true,
+  });
+}
+
+/**
+ * 错误写到 stderr：第一行加 `error: `（Cargo 式，tp-rk6o8q）；上不上色看 stderr 是不是终端。
+ * 消息里可能带着用户给的数据（任务 id、路径）：每一行的控制字符（ESC、Tab……）一律可见转义，第二行起缩进两格——
+ * 数据里夹带的换行因此伪造不出一行从行首开始的 `error:`（评审一、二轮）。选了 PLAIN 也挡不住数据自己带的控制字符。
+ */
+async function writeError(raw: string): Promise<void> {
+  const { diagnostic } = await import("./output/render/layout.ts");
+  const { visible } = await import("./domain/visible.ts");
+  const message = raw.split("\n").map((line, i) => (i === 0 ? visible(line) : `  ${visible(line)}`)).join("\n");
+  let style;
+  // 身份解析出错（未知的 --agent）也会走到这里：判定本身不能再抛
+  try { style = await styleFor(false, process.stderr); } catch { style = (await import("./output/style.ts")).PLAIN; }
+  process.stderr.write(`${diagnostic(style, "error", message)}\n`);
+}
+
 program
   .command("doctor")
   .description("check the ledger against the format spec and report violated invariants")
@@ -45,14 +76,14 @@ program
     if (cmdOpts.fix === true) {
       const { runDoctorFix } = await import("./commands/doctor-fix.ts");
       const fix = runDoctorFix({ directory: (opts["directory"] as string | undefined) ?? process.cwd() });
-      process.stdout.write(opts["json"] ? JSON.stringify(fix, null, 2) + "\n" : renderFixText(fix, { quiet: Boolean(opts["quiet"]) }));
+      process.stdout.write(opts["json"] ? JSON.stringify(fix, null, 2) + "\n" : renderFixText(fix, { quiet: Boolean(opts["quiet"]), style: await styleFor() }));
       // FR-Q1：修完仍有问题则退出 1。
       if (!fix.after.ok) throw new CliError(EXIT.usage, "");
       return;
     }
     const report = runDoctor({ directory: (opts["directory"] as string | undefined) ?? process.cwd() });
     process.stdout.write(
-      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),
+      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]), style: await styleFor() }),
     );
     if (!report.ok) throw new CliError(EXIT.usage, "");
   });
@@ -70,7 +101,7 @@ program
       prefix: cmdOpts.prefix,
     });
     process.stdout.write(
-      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),
+      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]), style: await styleFor(), home: homedir() }),
     );
   });
 
@@ -114,7 +145,7 @@ program
       actor: opts["as"] as string | undefined,
     });
     process.stdout.write(
-      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),
+      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]), style: await styleFor() }),
     );
   });
 
@@ -145,7 +176,7 @@ function lsOptions(cmd: Command): Command {
 
 async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
   const { runLs, parseLimit } = await import("./commands/ls.ts");
-  const { renderText, renderJson, renderDiagnostics } = await import("./output/render/ls.ts");
+  const { renderText, renderJson, renderDiagnostics, renderNotes } = await import("./output/render/ls.ts");
   const opts = program.opts();
   const { limit, ...rest } = cmdOpts;
   const report = runLs({
@@ -154,11 +185,14 @@ async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
     ...(limit === undefined ? {} : { limit: parseLimit(limit) }),
     actor: opts["as"] as string | undefined,
   });
+  const style = await styleFor();
   process.stdout.write(
     opts["json"] === true
       ? renderJson(report) + "\n"
-      : renderText(report, { quiet: opts["quiet"] === true }),
+      : renderText(report, { quiet: opts["quiet"] === true, style }),
   );
+  // 没人在看时「没有匹配」「只显示了几条」走 stderr：stdout 只有数据行（--json 下 stdout 已经是干净的数组，不重复说）
+  if (opts["json"] !== true) process.stderr.write(renderNotes(report, { quiet: opts["quiet"] === true, style }));
   // 诊断走 stderr：stdout 在 --json 下必须是一个干净的数组
   process.stderr.write(renderDiagnostics(report));
 }
@@ -187,7 +221,7 @@ program
       tree: cmdOpts.tree,
       actor: opts["as"] as string | undefined,
     });
-    process.stdout.write(opts["json"] === true ? renderShowJson(report) + "\n" : renderShow(report));
+    process.stdout.write(opts["json"] === true ? renderShowJson(report) + "\n" : renderShow(report, { style: await styleFor() }));
   });
 
 /**
@@ -289,8 +323,11 @@ program
     const { runSetup } = await import("./commands/setup.ts");
     const { renderSetup } = await import("./output/render/setup.ts");
     const opts = program.opts();
-    const report = runSetup({ directory: (opts["directory"] as string | undefined) ?? process.cwd(), agent, user: cmdOpts.user });
-    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderSetup(report, { quiet: opts["quiet"] === true }));
+    const directory = (opts["directory"] as string | undefined) ?? process.cwd();
+    const report = runSetup({ directory, agent, user: cmdOpts.user });
+    const { findLedger } = await import("./format/discover.ts");
+    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n"
+      : renderSetup(report, { quiet: opts["quiet"] === true, style: await styleFor(), home: homedir(), root: findLedger(directory)?.root }));
   });
 
 program
@@ -307,7 +344,7 @@ program
       directory: (opts["directory"] as string | undefined) ?? process.cwd(),
       id, text, actor: opts["as"] as string | undefined,
     });
-    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderNote(report));
+    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderNote(report, { style: await styleFor() }));
   });
 
 program
@@ -324,7 +361,7 @@ program
       directory: (opts["directory"] as string | undefined) ?? process.cwd(),
       id, n: parseCriterionNumber(n), undo: cmdOpts.undo, actor: opts["as"] as string | undefined,
     });
-    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderCheck(report));
+    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderCheck(report, { style: await styleFor() }));
   });
 
 const dir = (): string => (program.opts()["directory"] as string | undefined) ?? process.cwd();
@@ -364,7 +401,7 @@ program
       labels: o.label.length > 0 ? o.label : undefined, parent: o.parent,
       plan: o.plan, criteria,
     });
-    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderEdit(report));
+    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderEdit(report, { style: await styleFor() }));
   });
 
 program
@@ -378,7 +415,7 @@ program
     const { runMove } = await import("./commands/move.ts");
     const { renderMove, renderPlanJson } = await import("./output/render/plan.ts");
     const report = runMove({ directory: dir(), id, actor: asActor(), top: o.top, before: o.before, after: o.after });
-    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderMove(report));
+    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderMove(report, { style: await styleFor() }));
   });
 
 const dep = program.command("dep").alias("block").description("add or remove a blocking dependency");
@@ -392,7 +429,7 @@ for (const op of ["add", "rm"] as const) {
       const { runDep } = await import("./commands/dep.ts");
       const { renderDep, renderPlanJson } = await import("./output/render/plan.ts");
       const report = runDep({ directory: dir(), op, id, on: o.on, actor: asActor() });
-      process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderDep(report));
+      process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderDep(report, { style: await styleFor() }));
     });
 }
 
@@ -414,7 +451,7 @@ program
     process.stdout.write(
       opts["json"] === true
         ? renderClaimJson(report) + "\n"
-        : renderClaim(report, { quiet: opts["quiet"] === true }),
+        : renderClaim(report, { quiet: opts["quiet"] === true, style: await styleFor() }),
     );
   });
 
@@ -434,7 +471,7 @@ program
     process.stdout.write(
       opts["json"] === true
         ? renderReleaseJson(report) + "\n"
-        : renderRelease(report, { quiet: opts["quiet"] === true }),
+        : renderRelease(report, { quiet: opts["quiet"] === true, style: await styleFor() }),
     );
   });
 
@@ -473,12 +510,12 @@ async function transitionAction(
     process.stdout.write(
       opts["json"] === true
         ? renderTransitionJson(report) + "\n"
-        : renderTransition(report, { quiet: opts["quiet"] === true }),
+        : renderTransition(report, { quiet: opts["quiet"] === true, style: await styleFor() }),
     );
   } catch (err) {
     if (err instanceof GateRefused) {
       process.stdout.write(
-        opts["json"] === true ? renderGateJson(err.report) + "\n" : renderGateReport(err.report),
+        opts["json"] === true ? renderGateJson(err.report) + "\n" : renderGateReport(err.report, { style: await styleFor() }),
       );
       throw new CliError(err.code as 2 | 3, "");
     }
@@ -524,14 +561,14 @@ program
       const { runImportBeads } = await import("./commands/import-beads.ts");
       const { renderImportBeads } = await import("./output/render/import-beads.ts");
       const report = runImportBeads({ directory, path, actor });
-      process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImportBeads(report, { quiet: opts["quiet"] === true }));
+      process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImportBeads(report, { quiet: opts["quiet"] === true, style: await styleFor() }));
       return;
     }
     if (path !== undefined) throw new CliError(EXIT.usage, `import takes one plan file; got an extra argument ${JSON.stringify(path)}.`);
     const { runImport } = await import("./commands/import.ts");
     const { renderImport } = await import("./output/render/import.ts");
     const report = runImport({ directory, file, actor });
-    process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImport(report, { quiet: opts["quiet"] === true }));
+    process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImport(report, { quiet: opts["quiet"] === true, style: await styleFor() }));
   });
 
 program
@@ -564,8 +601,10 @@ program
     });
     const url = `http://127.0.0.1:${server.port}/`;
     // 地址是结果；后面那句是提示，--quiet 去掉
-    process.stdout.write(`todopi board: ${url}\n`
-      + (opts["quiet"] === true ? "" : `Read-only; ${server.mode === "poll" ? "polling" : "watching"} ${ledger.dir} for changes. Press Ctrl+C to stop.\n`));
+    const { action, diagnostic } = await import("./output/render/layout.ts");
+    const style = await styleFor();
+    process.stdout.write(`${action(style, "Serving", `todopi board at ${url}`)}\n`
+      + (opts["quiet"] === true ? "" : `${diagnostic(style, "note", `read-only; ${server.mode === "poll" ? "polling" : "watching"} ${ledger.dir} for changes. Press Ctrl+C to stop.`)}\n`));
     if (cmdOpts.open === true && !(await openInBrowser(url))) {
       process.stderr.write(`Could not open a browser; open ${url} yourself.\n`);
     }
@@ -581,13 +620,13 @@ try {
   process.exitCode = EXIT.ok;
 } catch (err) {
   if (err instanceof CliError) {
-    if (err.message) process.stderr.write(err.message + "\n");
+    if (err.message) await writeError(err.message);
     process.exitCode = err.code;
   } else if (err && typeof err === "object" && "exitCode" in err) {
     // commander 自己的 help / version / 用法错误
     process.exitCode = (err as { exitCode: number }).exitCode;
   } else {
-    process.stderr.write(String(err) + "\n");
+    await writeError(String(err));
     process.exitCode = EXIT.usage;
   }
 }
