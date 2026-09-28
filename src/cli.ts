@@ -203,7 +203,7 @@ program
       tree: cmdOpts.tree,
       actor: opts["as"] as string | undefined,
     });
-    process.stdout.write(opts["json"] === true ? renderShowJson(report) + "\n" : renderShow(report));
+    process.stdout.write(opts["json"] === true ? renderShowJson(report) + "\n" : renderShow(report, { style: await styleFor() }));
   });
 
 /**

@@ -60,3 +60,12 @@ export function shownPath(s: Style, path: string, home: string | undefined): str
   if (!s.interactive || home === undefined || home === "") return path;
   return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
 }
+
+/** 状态词的颜色（ls、show 共用）：进行中黄、过期红、可做与完成绿、被挡与其余结局暗；unverified 的完成不算绿 */
+export function paintStatus(s: Style, word: string, unverified = false): string {
+  if (word === "in progress") return s.yellow(word);
+  if (word === "stale") return s.red(word);
+  if (word === "ready" || (word === "done" && !unverified)) return s.green(word);
+  if (word === "open") return word;
+  return s.dim(word);
+}

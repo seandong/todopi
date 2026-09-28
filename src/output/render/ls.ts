@@ -3,6 +3,7 @@
 
 import type { LsReport, TaskDto } from "../dto/ls.ts";
 import { PLAIN, type Style } from "../style.ts";
+import { paintStatus } from "./layout.ts";
 
 /**
  * FR-T2 明文：「`--json` 输出数组」。所以 stdout 就是一个 TaskDto 数组，
@@ -49,14 +50,10 @@ export function renderText(r: LsReport, opts: { quiet?: boolean; style?: Style }
 
 /** 派生态（spec §7）写成一个词：用户关心的是能不能做（ready / blocked），不是原始的 status 字段 */
 function state(t: TaskDto): { word: string; paint: (s: Style) => (x: string) => string } {
-  if (t.status === "closed") {
-    const word = t.resolution ?? "closed";
-    return { word, paint: (s) => (word === "done" && !t.unverified ? s.green : s.dim) };
-  }
-  if (t.status === "in_progress") return t.stale ? { word: "stale", paint: (s) => s.red } : { word: "in progress", paint: (s) => s.yellow };
-  if (t.blocked) return { word: "blocked", paint: (s) => s.dim };
-  if (t.ready) return { word: "ready", paint: (s) => s.green };
-  return { word: "open", paint: () => (x: string) => x };
+  const word = t.status === "closed" ? t.resolution ?? "closed"
+    : t.status === "in_progress" ? (t.stale ? "stale" : "in progress")
+    : t.blocked ? "blocked" : t.ready ? "ready" : "open";
+  return { word, paint: (s) => (x: string) => paintStatus(s, x, t.unverified) };
 }
 
 /** 小结：显示了几条（截断时说共几条），再按状态计数 */
