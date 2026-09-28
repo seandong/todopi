@@ -76,7 +76,7 @@ R="$TMP/repoA"; mkdir -p "$R"; git -C "$R" init -q
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   out="$(docker run --rm -v "$TGZ:/pkg.tgz:ro" node:20.0.0-slim sh -c 'npm i -g /pkg.tgz >/dev/null 2>&1 && cd /tmp && todopi init >/dev/null && todopi add first --verify "true" >/dev/null && ID=$(todopi ls | cut -d" " -f1) && todopi --as ci claim $ID >/dev/null && todopi --as ci done $ID --yes 2>/dev/null && todopi ls --all && node --version' 2>&1)"; rc=$?
-  [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "\[done\] first" && printf '%s' "$out" | grep -q "^v20.0.0$" \
+  [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -qE "^tp-[a-z0-9]+ +done +first$" && printf '%s' "$out" | grep -q "^v20.0.0$" \
     && ok "干净的 node:20.0.0 容器里 npm i -g 这个包、跑通第一条命令与 done（走 dist 里的 verify runner）" || fail "node:20.0.0 容器：rc=${rc}：$out"
 else
   note "没有 docker：Node 20.0.0 的干净容器测试跳过（.github/workflows/install.yml 里覆盖）"
