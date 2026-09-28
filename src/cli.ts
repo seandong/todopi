@@ -130,7 +130,7 @@ program
       actor: opts["as"] as string | undefined,
     });
     process.stdout.write(
-      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]) }),
+      opts["json"] ? renderJson(report) + "\n" : renderText(report, { quiet: Boolean(opts["quiet"]), style: await styleFor() }),
     );
   });
 
@@ -326,7 +326,7 @@ program
       directory: (opts["directory"] as string | undefined) ?? process.cwd(),
       id, text, actor: opts["as"] as string | undefined,
     });
-    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderNote(report));
+    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderNote(report, { style: await styleFor() }));
   });
 
 program
@@ -343,7 +343,7 @@ program
       directory: (opts["directory"] as string | undefined) ?? process.cwd(),
       id, n: parseCriterionNumber(n), undo: cmdOpts.undo, actor: opts["as"] as string | undefined,
     });
-    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderCheck(report));
+    process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderCheck(report, { style: await styleFor() }));
   });
 
 const dir = (): string => (program.opts()["directory"] as string | undefined) ?? process.cwd();
@@ -383,7 +383,7 @@ program
       labels: o.label.length > 0 ? o.label : undefined, parent: o.parent,
       plan: o.plan, criteria,
     });
-    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderEdit(report));
+    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderEdit(report, { style: await styleFor() }));
   });
 
 program
@@ -397,7 +397,7 @@ program
     const { runMove } = await import("./commands/move.ts");
     const { renderMove, renderPlanJson } = await import("./output/render/plan.ts");
     const report = runMove({ directory: dir(), id, actor: asActor(), top: o.top, before: o.before, after: o.after });
-    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderMove(report));
+    process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderMove(report, { style: await styleFor() }));
   });
 
 const dep = program.command("dep").alias("block").description("add or remove a blocking dependency");
@@ -411,7 +411,7 @@ for (const op of ["add", "rm"] as const) {
       const { runDep } = await import("./commands/dep.ts");
       const { renderDep, renderPlanJson } = await import("./output/render/plan.ts");
       const report = runDep({ directory: dir(), op, id, on: o.on, actor: asActor() });
-      process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderDep(report));
+      process.stdout.write(program.opts()["json"] === true ? renderPlanJson(report) + "\n" : renderDep(report, { style: await styleFor() }));
     });
 }
 
@@ -433,7 +433,7 @@ program
     process.stdout.write(
       opts["json"] === true
         ? renderClaimJson(report) + "\n"
-        : renderClaim(report, { quiet: opts["quiet"] === true }),
+        : renderClaim(report, { quiet: opts["quiet"] === true, style: await styleFor() }),
     );
   });
 
@@ -453,7 +453,7 @@ program
     process.stdout.write(
       opts["json"] === true
         ? renderReleaseJson(report) + "\n"
-        : renderRelease(report, { quiet: opts["quiet"] === true }),
+        : renderRelease(report, { quiet: opts["quiet"] === true, style: await styleFor() }),
     );
   });
 
