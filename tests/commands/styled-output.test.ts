@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AGENT_SIGNALS } from "../../src/domain/actor.ts";
@@ -68,4 +68,48 @@ test("NO_COLOR、TERM=dumb 压过 FORCE_COLOR", () => {
 
 test("什么都不给（stdout 是管道）：纯文本", () => {
   assert.ok(!run(["init"], {}).stdout.includes(ESC));
+});
+
+/**
+ * 每个命令都跑一遍（tp-rk6o8q 的发布前提）：FORCE_COLOR 在，有 agent 在场或给了 --json 时，stdout 与 stderr 都不许有一个转义字节——
+ * 这些输出会进 agent 的上下文（ARCH-027）。反过来只给 FORCE_COLOR 时要真的上色，证明这组测试分得出两种情形。
+ */
+function ledgerWithTasks(): { d: string; a: string; b: string } {
+  const d = mkdtempSync(join(tmpdir(), "todopi-style-all-"));
+  spawnSync("git", ["init", "-q"], { cwd: d });
+  const cli = (...args: string[]) => spawnSync(process.execPath, [CLI, "-C", d, ...args], { encoding: "utf8", env: clean(), input: "" });
+  cli("init");
+  const a = cli("add", "First", "--verify", "false", "--ac", "it works").stdout.split(/\s/)[0]!;
+  const b = cli("add", "Second").stdout.split(/\s/)[0]!;
+  writeFileSync(join(d, "plan.md"), "- [ ] one\n- [ ] two\n");
+  return { d, a, b };
+}
+
+const COMMANDS = (a: string, b: string): string[][] => [
+  ["ls"], ["ls", "--all"], ["show", a], ["show", a, "--tree"], ["claim", a], ["note", a, "hello"], ["check", a, "1"],
+  ["edit", a, "--label", "ui"], ["move", b, "--before", a], ["dep", "add", b, "--on", a], ["prime"], ["prime", "--full"],
+  ["handoff", "--check"], ["done", a, "--yes"], ["release", a], ["close", b, "--resolution", "wontfix"], ["reopen", b],
+  ["doctor"], ["doctor", "--fix"], ["import", "plan.md"], ["setup", "claude"], ["show", "tp-nope"], ["add", "Third"],
+];
+
+test("所有命令：FORCE_COLOR 下 agent 在场或 --json，stdout 与 stderr 都没有转义", () => {
+  const { d, a, b } = ledgerWithTasks();
+  for (const args of COMMANDS(a, b)) {
+    for (const [label, extra, pre] of [["agent", { FORCE_COLOR: "1", CLAUDECODE: "1" }, []], ["json", { FORCE_COLOR: "1" }, ["--json"]]] as const) {
+      const r = spawnSync(process.execPath, [CLI, "-C", d, ...pre, ...args], { encoding: "utf8", env: { ...clean(), ...extra }, input: "" });
+      assert.ok(!r.stdout.includes(ESC), `${label}: todopi ${args.join(" ")} stdout`);
+      assert.ok(!r.stderr.includes(ESC), `${label}: todopi ${args.join(" ")} stderr`);
+    }
+  }
+});
+
+test("反向对照：只给 FORCE_COLOR 时各命令真的上色，错误（stderr）也上色", () => {
+  const { d, a } = ledgerWithTasks();
+  const run1 = (...args: string[]) => spawnSync(process.execPath, [CLI, "-C", d, ...args], { encoding: "utf8", env: { ...clean(), FORCE_COLOR: "1" }, input: "" });
+  for (const args of [["ls"], ["show", a], ["claim", a], ["doctor"], ["done", a, "--yes"]]) {
+    assert.ok(run1(...args).stdout.includes(ESC), `todopi ${args.join(" ")}`);
+  }
+  const err = run1("show", "tp-nope");
+  assert.notEqual(err.status, 0);
+  assert.ok(err.stderr.includes(ESC) && /error:/.test(err.stderr.replace(/\x1b\[[0-9;]*m/g, "")));
 });

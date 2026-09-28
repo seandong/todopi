@@ -36,7 +36,7 @@ program.hook("preAction", async () => {
 /**
  * 这次输出要不要上色（tp-rk6o8q）：判定只在 output/style.ts 的 chooseStyle 里，这里只收集事实。钩子路径由调用方说（hook）。
  */
-async function styleFor(hook = false) {
+async function styleFor(hook = false, stream: NodeJS.WriteStream = process.stdout) {
   const { chooseStyle } = await import("./output/style.ts");
   const { agentPresent } = await import("./commands/actor.ts");
   return chooseStyle({
@@ -44,8 +44,17 @@ async function styleFor(hook = false) {
     hook,
     agent: agentPresent(),
     env: process.env,
-    isTTY: process.stdout.isTTY === true,
+    isTTY: stream.isTTY === true,
   });
+}
+
+/** 错误写到 stderr：第一行加 `error: `（Cargo 式，tp-rk6o8q），多行消息的其余行原样；上不上色看 stderr 是不是终端。 */
+async function writeError(message: string): Promise<void> {
+  const { diagnostic } = await import("./output/render/layout.ts");
+  let style;
+  // 身份解析出错（未知的 --agent）也会走到这里：判定本身不能再抛
+  try { style = await styleFor(false, process.stderr); } catch { style = (await import("./output/style.ts")).PLAIN; }
+  process.stderr.write(`${diagnostic(style, "error", message)}\n`);
 }
 
 program
@@ -602,13 +611,13 @@ try {
   process.exitCode = EXIT.ok;
 } catch (err) {
   if (err instanceof CliError) {
-    if (err.message) process.stderr.write(err.message + "\n");
+    if (err.message) await writeError(err.message);
     process.exitCode = err.code;
   } else if (err && typeof err === "object" && "exitCode" in err) {
     // commander 自己的 help / version / 用法错误
     process.exitCode = (err as { exitCode: number }).exitCode;
   } else {
-    process.stderr.write(String(err) + "\n");
+    await writeError(String(err));
     process.exitCode = EXIT.usage;
   }
 }
