@@ -2518,3 +2518,7 @@ Node 用 spec reporter，整层被判 blocked。
   `tail -1 | cut` 照旧可用（gh 的做法；第一版把表头给了管道，5 个 e2e 红了）。NO_COLOR 在终端里是 MONO。
 - 不用任何符号（● ○ ✓）：东亚宽度里 ●、○ 是模糊宽度，中文环境的终端可能画成两格，列会错位；状态写成单词。`add` 的第一行仍以 id 打头。
 - `prime`、`handoff` 的排版不动：它们是写给 agent 上下文的（token 预算、`pointer` 是 prime 最后一行的原文）。
+- Codex 评审一轮（No-Go，5 条，都已改）：错误出口对消息做可见转义（任务 id 之类的数据自带的 ESC，选了 PLAIN 也挡不住）；FORCE_COLOR 在管道里
+  只带回颜色、排版仍按没人在看（ANSI_PIPED）——FORCE_COLOR 本来就是为管道里要颜色而设，是「管道里没有转义」的唯一例外，agent 在场与 --json
+  仍然越不过；管道里「No tasks match.」「Showing N of M」改走 stderr，stdout 只有数据行；全命令保护测试改成每种情形一个新账本、逐条核对退出码
+  （旧测试里 `import plan.md` 一直走的是错误路径，没人发现）；ARCH-029 不分大小写、覆盖 fromCharCode(27) 之类，并写明只管字面写法。

@@ -61,7 +61,9 @@ test("ls：表头与小结只给终端里的人（ANSI、MONO）；管道里（P
   assert.match(human, /^ID +STATUS +TITLE\n/);
   assert.match(human, /\n\n2 tasks · 1 ready · 1 in progress\n$/);
   assert.equal(renderText(r, { style: MONO, quiet: true }), renderText(r), "--quiet 下也只有数据行");
-  // 截断：管道里照旧在最后说 Showing（原来的行为），人看到的并进小结
-  assert.match(renderText({ ...r, total: 5 }), /\n\nShowing 2 of 5 tasks\.\n$/);
+  // 截断：管道里 stdout 只有数据行，「只显示了几条」走 stderr（renderNotes）；人看到的并进小结
+  const { renderNotes } = await import("../../src/output/render/ls.ts");
+  assert.equal(renderText({ ...r, total: 5 }), renderText(r));
+  assert.equal(renderNotes({ ...r, total: 5 }), "Showing 2 of 5 tasks.\n");
   assert.match(renderText({ ...r, total: 5 }, { style: MONO }), /Showing 2 of 5 tasks · /);
 });

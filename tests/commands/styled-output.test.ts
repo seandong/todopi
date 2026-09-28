@@ -85,21 +85,53 @@ function ledgerWithTasks(): { d: string; a: string; b: string } {
   return { d, a, b };
 }
 
-const COMMANDS = (a: string, b: string): string[][] => [
-  ["ls"], ["ls", "--all"], ["show", a], ["show", a, "--tree"], ["claim", a], ["note", a, "hello"], ["check", a, "1"],
-  ["edit", a, "--label", "ui"], ["move", b, "--before", a], ["dep", "add", b, "--on", a], ["prime"], ["prime", "--full"],
-  ["handoff", "--check"], ["done", a, "--yes"], ["release", a], ["close", b, "--resolution", "wontfix"], ["reopen", b],
-  ["doctor"], ["doctor", "--fix"], ["import", "plan.md"], ["setup", "claude"], ["show", "tp-nope"], ["add", "Third"],
+// 每条命令与它在这个顺序下预期的退出码：done 的 verify 是 false，走门禁报告（退出 2）；show tp-nope 走错误出口（退出 1）
+const COMMANDS = (d: string, a: string, b: string): [args: string[], code: number][] => [
+  [["ls"], 0], [["ls", "--all"], 0], [["show", a], 0], [["show", a, "--tree"], 0], [["claim", a], 0], [["note", a, "hello"], 0],
+  [["check", a, "1"], 0], [["edit", a, "--label", "ui"], 0], [["move", b, "--before", a], 0], [["dep", "add", b, "--on", a], 0],
+  [["prime"], 0], [["prime", "--full"], 0], [["handoff", "--check"], 0], [["done", a, "--yes"], 2], [["release", a], 0],
+  [["close", b, "--resolution", "wontfix"], 0], [["reopen", b], 0], [["doctor"], 0], [["doctor", "--fix"], 0],
+  [["import", join(d, "plan.md")], 0], [["setup", "claude"], 0], [["add", "Third"], 0], [["show", "tp-nope"], 1],
 ];
 
-test("所有命令：FORCE_COLOR 下 agent 在场或 --json，stdout 与 stderr 都没有转义", () => {
-  const { d, a, b } = ledgerWithTasks();
-  for (const args of COMMANDS(a, b)) {
-    for (const [label, extra, pre] of [["agent", { FORCE_COLOR: "1", CLAUDECODE: "1" }, []], ["json", { FORCE_COLOR: "1" }, ["--json"]]] as const) {
+test("所有命令：FORCE_COLOR 下 agent 在场或 --json，stdout 与 stderr 都没有转义（每种情形一个新账本，逐条核对退出码）", () => {
+  for (const [label, extra, pre] of [["agent", { FORCE_COLOR: "1", CLAUDECODE: "1" }, []], ["json", { FORCE_COLOR: "1" }, ["--json"]]] as const) {
+    // 每种情形一个新账本：同一个账本连跑两轮，第二轮的 claim 之类会走错误路径，测试就证明不了渲染分支受保护（评审 P2）
+    const { d, a, b } = ledgerWithTasks();
+    for (const [args, code] of COMMANDS(d, a, b)) {
       const r = spawnSync(process.execPath, [CLI, "-C", d, ...pre, ...args], { encoding: "utf8", env: { ...clean(), ...extra }, input: "" });
-      assert.ok(!r.stdout.includes(ESC), `${label}: todopi ${args.join(" ")} stdout`);
-      assert.ok(!r.stderr.includes(ESC), `${label}: todopi ${args.join(" ")} stderr`);
+      const what = `${label}: todopi ${args.join(" ")}`;
+      assert.equal(r.status, code, `${what}: exit ${r.status}; stderr ${r.stderr}`);
+      if (code !== 1) assert.notEqual(r.stdout.trim(), "", `${what}: stdout 为空，渲染分支没跑到`);
+      else assert.match(r.stderr, /^error: /, `${what}: 错误出口`);
+      assert.ok(!r.stdout.includes(ESC), `${what} stdout`);
+      assert.ok(!r.stderr.includes(ESC), `${what} stderr`);
     }
+  }
+});
+
+test("错误消息里的控制字符（数据自带的 ESC）也被转义：agent 在场与 --json 的 stderr 都没有 ESC", () => {
+  const { d } = ledgerWithTasks();
+  for (const [extra, pre] of [[{ FORCE_COLOR: "1", CLAUDECODE: "1" }, []], [{ FORCE_COLOR: "1" }, ["--json"]]] as const) {
+    const r = spawnSync(process.execPath, [CLI, "-C", d, ...pre, "show", "tp-abc\x1b[31m"], { encoding: "utf8", env: { ...clean(), ...extra }, input: "" });
+    assert.equal(r.status, 1);
+    assert.ok(!r.stderr.includes(ESC), r.stderr);
+    assert.match(r.stderr, /tp-abc\\x1b\[31m/, "转义成可见的 \\x1b");
+  }
+});
+
+test("管道里的 ls：stdout 只有数据行——空结果、截断、FORCE_COLOR 都不多出一行", () => {
+  const { d } = ledgerWithTasks();
+  const lines = (extra: Record<string, string>, ...args: string[]) =>
+    spawnSync(process.execPath, [CLI, "-C", d, "ls", ...args], { encoding: "utf8", env: { ...clean(), ...extra }, input: "" });
+  for (const extra of [{}, { FORCE_COLOR: "1" }] as Record<string, string>[]) {
+    assert.equal(lines(extra).stdout.trimEnd().split("\n").length, 2, "两条任务就是两行");
+    const empty = lines(extra, "--label", "nope");
+    assert.equal(empty.stdout, "", "没有匹配：stdout 为空");
+    assert.match(empty.stderr, /No tasks match/, "提示在 stderr");
+    const cut = lines(extra, "--limit", "1");
+    assert.equal(cut.stdout.trimEnd().split("\n").length, 1, "截断：只有显示的那一行");
+    assert.match(cut.stderr, /Showing 1 of 2 tasks/);
   }
 });
 

@@ -284,12 +284,12 @@
     },
     {
       "id": "ARCH-029",
-      "description": "终端转义只在 src/output/style.ts 里出现",
+      "description": "终端转义的字面写法只在 src/output/style.ts 里出现",
       "applies_when": "test -d src/output",
-      "check": "grep -rnE '\\\\x1b|\\\\u001b|\\\\u\\{1b\\}|\\\\033' src --include='*.ts' | grep -v '^src/output/style.ts:' || true",
+      "check": "grep -rniE '\\\\x1b|\\\\u001b|\\\\u\\{0*1b\\}|\\\\033|from(char|code)(code|point)\\((27|0x1b)\\)' src --include='*.ts' | grep -v '^src/output/style.ts:' || true",
       "expect": "empty",
-      "what": "src/ 里 style.ts 以外的地方写了终端转义（\\x1b、\\u001b、\\033）。",
-      "why": "上不上色只在 chooseStyle 里判定：--json、钩子、有 agent 在场、NO_COLOR、TERM=dumb 一律不上色，因为这些输出会进 agent 的上下文（ARCH-027）。渲染器绕过 Style 自己写转义，就绕过了这个判定——一个转义字节就进了模型的上下文（tp-rk6o8q）。",
+      "what": "src/ 里 style.ts 以外的地方写了终端转义：\\x1b / \\x1B、\\u001b、\\u{1b}、\\033，或 String.fromCharCode(27) / fromCodePoint(0x1b)（不分大小写）。",
+      "why": "上不上色只在 chooseStyle 里判定：--json、钩子、有 agent 在场、NO_COLOR、TERM=dumb 一律不上色，因为这些输出会进 agent 的上下文（ARCH-027）。渲染器绕过 Style 自己写转义，就绕过了这个判定（tp-rk6o8q）。本规则只管字面写法——任意动态拼出来的 ESC 查不到；运行时的保证由 tests/commands/styled-output.test.ts 逐个命令跑子进程守住（agent 在场与 --json 时 stdout、stderr 都不许有 ESC），两者合起来才是完整的防线。",
       "fix": "用渲染器收到的 Style（s.green、s.bold……）或 render/layout.ts 的记号，不要直接写转义；需要新的样式就加到 style.ts 的 Style 与 PLAIN / ANSI 里。"
     }
   ]

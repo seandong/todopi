@@ -39,6 +39,9 @@ export const ANSI: Style = {
   interactive: true,
 };
 
+/** FORCE_COLOR 让管道里也有颜色（`| less -R` 之类），但排版仍是「没人在看」：数据行的形状不变，没有表头与小结（评审 P2） */
+export const ANSI_PIPED: Style = { ...ANSI, interactive: false };
+
 export type StyleFacts = {
   /** --json：输出是给程序读的 */
   json: boolean;
@@ -52,13 +55,14 @@ export type StyleFacts = {
 
 /**
  * 前三条是硬性的，FORCE_COLOR 也越不过；NO_COLOR / TERM=dumb 只去掉颜色（终端里的人仍看到表头，MONO）；
- * FORCE_COLOR 只越过「stdout 不是终端」这一条。
+ * FORCE_COLOR 只越过「stdout 不是终端」这一条，而且只带回颜色：管道里的排版照旧（ANSI_PIPED）。
  * 有 agent 在场就不上色，不管 isTTY：有的 agent 在伪终端里跑命令，转义会原样进它的上下文。
  */
 export function chooseStyle(f: StyleFacts): Style {
   if (f.json || f.hook || f.agent) return PLAIN;
   if (f.env["NO_COLOR"] !== undefined || f.env["TERM"] === "dumb") return f.isTTY ? MONO : PLAIN;
   const force = f.env["FORCE_COLOR"];
-  if (force !== undefined && force !== "" && force !== "0") return ANSI;
-  return f.isTTY ? ANSI : PLAIN;
+  if (f.isTTY) return ANSI;
+  if (force !== undefined && force !== "" && force !== "0") return ANSI_PIPED;
+  return PLAIN;
 }

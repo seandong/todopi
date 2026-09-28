@@ -25,12 +25,9 @@ export function renderJson(r: LsReport): string {
 export function renderText(r: LsReport, opts: { quiet?: boolean; style?: Style } = {}): string {
   const s = opts.style ?? PLAIN;
   const lines: string[] = [];
-  if (r.total === 0) {
-    // 判据是 total 而不是 tasks.length：--limit 0 截出空列表时，
-    // 说「没有匹配」是错的——匹配有两条，只是一条都没显示
-    if (!opts.quiet) lines.push("No tasks match.");
-  } else if (r.tasks.length === 0) {
-    if (!opts.quiet) lines.push(`Showing 0 of ${r.total} tasks.`);
+  // 没人在看时（管道、agent）stdout 只有数据行：「没有匹配」「只显示了几条」走 stderr（renderNotes），`ls | wc -l` 才数得对（评审 P2）
+  if (r.tasks.length === 0) {
+    if (!opts.quiet && s.interactive) lines.push(emptyNote(r));
   } else {
     const width = idWidth(r.tasks);
     const states = r.tasks.map(state);
@@ -43,9 +40,24 @@ export function renderText(r: LsReport, opts: { quiet?: boolean; style?: Style }
     if (human) lines.push(s.dim(row("ID".padEnd(width), "STATUS", "TITLE").trimEnd()));
     r.tasks.forEach((t, i) => lines.push(row(t.id, states[i]!.word, `${t.title}${marks(t)}`, s.cyan(t.id), states[i]!.paint(s)(states[i]!.word))));
     if (human) lines.push("", s.dim(summary(r, states)));
-    else if (!opts.quiet && r.tasks.length < r.total) lines.push("", `Showing ${r.tasks.length} of ${r.total} tasks.`);
   }
   return lines.length === 0 ? "" : lines.join("\n") + "\n";
+}
+
+// 判据是 total 而不是 tasks.length：--limit 0 截出空列表时，说「没有匹配」是错的——匹配有两条，只是一条都没显示
+function emptyNote(r: LsReport): string {
+  return r.total === 0 ? "No tasks match." : `Showing 0 of ${r.total} tasks.`;
+}
+
+/**
+ * 没人在看时写到 stderr 的提示：没有匹配、或者截断了（只显示了几条）。有人在看时这些在 stdout 里（renderText）。
+ * --quiet 照旧去掉。空字符串表示没什么要说的。
+ */
+export function renderNotes(r: LsReport, opts: { quiet?: boolean; style?: Style } = {}): string {
+  const s = opts.style ?? PLAIN;
+  if (opts.quiet || s.interactive) return "";
+  if (r.tasks.length === 0) return `${emptyNote(r)}\n`;
+  return r.tasks.length < r.total ? `Showing ${r.tasks.length} of ${r.total} tasks.\n` : "";
 }
 
 /** 派生态（spec §7）写成一个词：用户关心的是能不能做（ready / blocked），不是原始的 status 字段 */

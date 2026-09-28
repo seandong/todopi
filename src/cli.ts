@@ -48,9 +48,14 @@ async function styleFor(hook = false, stream: NodeJS.WriteStream = process.stdou
   });
 }
 
-/** 错误写到 stderr：第一行加 `error: `（Cargo 式，tp-rk6o8q），多行消息的其余行原样；上不上色看 stderr 是不是终端。 */
-async function writeError(message: string): Promise<void> {
+/**
+ * 错误写到 stderr：第一行加 `error: `（Cargo 式，tp-rk6o8q），多行消息的其余行原样；上不上色看 stderr 是不是终端。
+ * 消息里可能带着用户给的数据（任务 id、路径）：控制字符一律可见转义，换行保留——选了 PLAIN 也挡不住数据自己带的 ESC（评审 P1）。
+ */
+async function writeError(raw: string): Promise<void> {
   const { diagnostic } = await import("./output/render/layout.ts");
+  const { visibleMultiline } = await import("./domain/visible.ts");
+  const message = visibleMultiline(raw);
   let style;
   // 身份解析出错（未知的 --agent）也会走到这里：判定本身不能再抛
   try { style = await styleFor(false, process.stderr); } catch { style = (await import("./output/style.ts")).PLAIN; }
@@ -170,7 +175,7 @@ function lsOptions(cmd: Command): Command {
 
 async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
   const { runLs, parseLimit } = await import("./commands/ls.ts");
-  const { renderText, renderJson, renderDiagnostics } = await import("./output/render/ls.ts");
+  const { renderText, renderJson, renderDiagnostics, renderNotes } = await import("./output/render/ls.ts");
   const opts = program.opts();
   const { limit, ...rest } = cmdOpts;
   const report = runLs({
@@ -179,11 +184,14 @@ async function lsAction(cmdOpts: LsCmdOptions): Promise<void> {
     ...(limit === undefined ? {} : { limit: parseLimit(limit) }),
     actor: opts["as"] as string | undefined,
   });
+  const style = await styleFor();
   process.stdout.write(
     opts["json"] === true
       ? renderJson(report) + "\n"
-      : renderText(report, { quiet: opts["quiet"] === true, style: await styleFor() }),
+      : renderText(report, { quiet: opts["quiet"] === true, style }),
   );
+  // 没人在看时「没有匹配」「只显示了几条」走 stderr：stdout 只有数据行（--json 下 stdout 已经是干净的数组，不重复说）
+  if (opts["json"] !== true) process.stderr.write(renderNotes(report, { quiet: opts["quiet"] === true, style }));
   // 诊断走 stderr：stdout 在 --json 下必须是一个干净的数组
   process.stderr.write(renderDiagnostics(report));
 }

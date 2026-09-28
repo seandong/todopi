@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { ANSI, MONO, PLAIN, chooseStyle, type StyleFacts } from "../../src/output/style.ts";
+import { ANSI, ANSI_PIPED, MONO, PLAIN, chooseStyle, type StyleFacts } from "../../src/output/style.ts";
 
 /** 上色的判定只有这一处（tp-rk6o8q）：进模型上下文的输出不能有转义（ARCH-027）。 */
 const base: StyleFacts = { json: false, hook: false, agent: false, env: {}, isTTY: true };
@@ -28,8 +28,10 @@ test("NO_COLOR（空值也算）、TERM=dumb：终端里去掉颜色但仍是给
   assert.equal(PLAIN.interactive, false);
 });
 
-test("FORCE_COLOR 只越过 isTTY；0 或空值不算", () => {
-  assert.equal(pick({ isTTY: false, env: { FORCE_COLOR: "1" } }), ANSI);
+test("FORCE_COLOR 只越过 isTTY，而且只带回颜色：管道里排版照旧（interactive=false）；0 或空值不算", () => {
+  assert.equal(pick({ isTTY: false, env: { FORCE_COLOR: "1" } }), ANSI_PIPED);
+  assert.equal(ANSI_PIPED.interactive, false);
+  assert.equal(ANSI_PIPED.green("x"), ANSI.green("x"));
   assert.equal(pick({ isTTY: false, env: { FORCE_COLOR: "0" } }), PLAIN);
   assert.equal(pick({ isTTY: false, env: { FORCE_COLOR: "" } }), PLAIN);
 });
