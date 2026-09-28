@@ -40,7 +40,7 @@ PORT="$(free_port)"
 "$SERVE" -C "$W" web --port "$PORT" > "$TMP/web.out" 2>&1 &
 WEB=$!
 PIDS="$PIDS $WEB"
-wait_for "$TMP/web.out" "todopi board: http://127.0.0.1:${PORT}/" 50 && ok "web 起来并打印地址" || fail "$(cat "$TMP/web.out")"
+wait_for "$TMP/web.out" "todopi board at http://127.0.0.1:${PORT}/" 50 && ok "web 起来并打印地址" || fail "$(cat "$TMP/web.out")"
 
 page="$(curl -s "http://127.0.0.1:${PORT}/")"
 printf '%s' "$page" | grep -q "new EventSource" && ok "GET / 给页面" || fail "页面不对"
@@ -60,14 +60,14 @@ todopi -C "$W" add "Second board task" >/dev/null 2>&1
 wait_for "$TMP/sse.out" "Second board task" 50 && ok "文件变化后经 SSE 推送" || fail "改了账本没推送"
 
 out="$(todopi -C "$W" web --port "$PORT" 2>&1)"; rc=$?
-[ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q -- "--port" && ! printf '%s' "$out" | grep -q "todopi board:" \
+[ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q -- "--port" && ! printf '%s' "$out" | grep -q "todopi board at" \
   && ok "端口被占用：退出 1、提示 --port、不换端口" || fail "rc=${rc}：$out"
 
 out="$(todopi -C "$W" web --port 0x10 2>&1)"; rc=$?
 [ "$rc" -eq 1 ] && ok "非法 --port 退出 1" || fail "rc=${rc}：$out"
 mkdir -p "$TMP/none"
 out="$(todopi -C "$TMP/none" web --port "$(free_port)" 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] && ! printf '%s' "$out" | grep -q "todopi board:" && ok "没有账本：不起服务、非零退出" || fail "rc=${rc}：$out"
+[ "$rc" -ne 0 ] && ! printf '%s' "$out" | grep -q "todopi board at" && ok "没有账本：不起服务、非零退出" || fail "rc=${rc}：$out"
 
 # 轮询模式同样推送
 P2="$(free_port)"

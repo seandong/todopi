@@ -543,14 +543,14 @@ program
       const { runImportBeads } = await import("./commands/import-beads.ts");
       const { renderImportBeads } = await import("./output/render/import-beads.ts");
       const report = runImportBeads({ directory, path, actor });
-      process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImportBeads(report, { quiet: opts["quiet"] === true }));
+      process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImportBeads(report, { quiet: opts["quiet"] === true, style: await styleFor() }));
       return;
     }
     if (path !== undefined) throw new CliError(EXIT.usage, `import takes one plan file; got an extra argument ${JSON.stringify(path)}.`);
     const { runImport } = await import("./commands/import.ts");
     const { renderImport } = await import("./output/render/import.ts");
     const report = runImport({ directory, file, actor });
-    process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImport(report, { quiet: opts["quiet"] === true }));
+    process.stdout.write(opts["json"] ? JSON.stringify(report, null, 2) + "\n" : renderImport(report, { quiet: opts["quiet"] === true, style: await styleFor() }));
   });
 
 program
@@ -583,8 +583,10 @@ program
     });
     const url = `http://127.0.0.1:${server.port}/`;
     // 地址是结果；后面那句是提示，--quiet 去掉
-    process.stdout.write(`todopi board: ${url}\n`
-      + (opts["quiet"] === true ? "" : `Read-only; ${server.mode === "poll" ? "polling" : "watching"} ${ledger.dir} for changes. Press Ctrl+C to stop.\n`));
+    const { action, diagnostic } = await import("./output/render/layout.ts");
+    const style = await styleFor();
+    process.stdout.write(`${action(style, "Serving", `todopi board at ${url}`)}\n`
+      + (opts["quiet"] === true ? "" : `${diagnostic(style, "note", `read-only; ${server.mode === "poll" ? "polling" : "watching"} ${ledger.dir} for changes. Press Ctrl+C to stop.`)}\n`));
     if (cmdOpts.open === true && !(await openInBrowser(url))) {
       process.stderr.write(`Could not open a browser; open ${url} yourself.\n`);
     }
