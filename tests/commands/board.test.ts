@@ -160,6 +160,28 @@ async function keepWriting<T>(path: string, wait: () => Promise<T>): Promise<T> 
   try { return await wait(); } finally { clearInterval(timer); }
 }
 
+/** 等待真实回调，避免测试进程繁忙时固定 sleep 比轮询先醒。 */
+function callbacks() {
+  let count = 0;
+  const waiters: Array<{ n: number; done: () => void }> = [];
+  const called = () => {
+    count++;
+    for (const waiter of [...waiters]) {
+      if (count >= waiter.n) waiter.done();
+    }
+  };
+  const next = (n: number, ms = 3000) => new Promise<void>((resolve, reject) => {
+    if (count >= n) { resolve(); return; }
+    const timer = setTimeout(() => {
+      waiters.splice(waiters.indexOf(waiter), 1);
+      reject(new Error(`timed out waiting for callback ${n}; got ${count}`));
+    }, ms);
+    const waiter = { n, done: () => { clearTimeout(timer); waiters.splice(waiters.indexOf(waiter), 1); resolve(); } };
+    waiters.push(waiter);
+  });
+  return { called, next, get count() { return count; } };
+}
+
 async function withServer(opts: { poll?: boolean; build?: () => string; dir?: string }, f: (s: BoardServer, d: string) => Promise<void>) {
   const d = opts.dir ?? repo();
   let n = 0;
@@ -307,18 +329,17 @@ test("监听运行中报错：改为轮询，之后的变化照样回调（F18 �
   const fake = new EventEmitter() as EventEmitter & { close: () => void };
   let closed = false;
   fake.close = () => { closed = true; };
-  let calls = 0;
-  const w = watchTree(dir, () => { calls += 1; }, { pollMs: 30, watchFn: () => fake as unknown as FSWatcher });
+  const cb = callbacks();
+  const w = watchTree(dir, cb.called, { pollMs: 30, watchFn: () => fake as unknown as FSWatcher });
   try {
     assert.equal(w.mode, "watch");
     fake.emit("error", new Error("inotify gone"));
     assert.equal(w.mode, "poll");
     assert.ok(closed, "旧的监听关掉");
-    await new Promise((r) => setTimeout(r, 200));
-    const before = calls;
+    await cb.next(1);
+    const before = cb.count;
     writeFileSync(join(dir, "tasks", "after-error.md"), "x");
-    await new Promise((r) => setTimeout(r, 300));
-    assert.ok(calls > before, "改为轮询后变化照样回调");
+    await cb.next(before + 1);
   } finally { w.close(); }
 });
 
@@ -363,18 +384,17 @@ test("回调到达时目录已被改名并重建（inode 换了）：同样改�
   let listener: () => void = () => undefined;
   const fake = new EventEmitter() as EventEmitter & { close: () => void };
   fake.close = () => undefined;
-  let calls = 0;
-  const w = watchTree(dir, () => { calls += 1; }, { pollMs: 30, watchFn: (_d, _o, l) => { listener = l; return fake as unknown as FSWatcher; } });
+  const cb = callbacks();
+  const w = watchTree(dir, cb.called, { pollMs: 30, watchFn: (_d, _o, l) => { listener = l; return fake as unknown as FSWatcher; } });
   try {
     renameSync(dir, join(d, ".todopi-old"));
     mkdirSync(join(dir, "tasks"), { recursive: true });
     listener();
     assert.equal(w.mode, "poll");
-    await new Promise((r) => setTimeout(r, 200));
-    const before = calls;
+    await cb.next(1);
+    const before = cb.count;
     writeFileSync(join(dir, "tasks", "x.md"), "1");
-    await new Promise((r) => setTimeout(r, 300));
-    assert.ok(calls > before, "重建后的目录上的变化照样回调");
+    await cb.next(before + 1);
   } finally { w.close(); }
 });
 
@@ -383,13 +403,12 @@ test("watch 模式下的兜底轮询：监听丢了事件（从不触发），�
   const dir = join(d, ".todopi");
   const fake = new EventEmitter() as EventEmitter & { close: () => void };
   fake.close = () => undefined;
-  let calls = 0;
-  const w = watchTree(dir, () => { calls += 1; }, { pollMs: 20, watchFn: () => fake as unknown as FSWatcher });
+  const cb = callbacks();
+  const w = watchTree(dir, cb.called, { pollMs: 20, watchFn: () => fake as unknown as FSWatcher });
   try {
     assert.equal(w.mode, "watch");
     writeFileSync(join(dir, "tasks", "silent.md"), "x");
-    await new Promise((r) => setTimeout(r, 400));
-    assert.ok(calls >= 1, "兜底轮询发现了变化");
+    await cb.next(1, 400);
     assert.equal(w.mode, "watch", "仍是 watch 模式");
   } finally { w.close(); }
 });
