@@ -5,12 +5,11 @@
 
 ## Current State
 
-- Last commit: `2801d0a` —— init --setup 评审四轮修复（tp-jyvt6i）；main 上另有 f21 的 CI 修复（f01d0e0）。
-  HEAD，提交后它是新 HEAD 的父
+- Last commit: `03c679b` —— 错误与警告整句强调（tp-hxa6yp）；`done` 记录 `verify=pass dirty=false`，本行随完成记录提交。
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
-  arch-rules（**22 条全部通过**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
+  arch-rules（**28/29 条通过、1 条不适用**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **607 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
+  **608 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
   锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
 - `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
   `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 66 项 + `f07-verify` 38 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
@@ -19,7 +18,7 @@
 - `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
 - `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
   CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 46 个任务，43 个 `closed/done`、3 个 `open`：tp-0obw6s（board.test 偶发失败，下一个做），加两个等维护者的：tp-ujjc6y（brew 实测）、tp-zagvp5（Cursor 实机验证）。
+- 账本: `.todopi/` 47 个任务，44 个 `closed/done`、3 个 `open`：tp-0obw6s（board.test 偶发失败，下一个做），加两个等维护者的：tp-ujjc6y（brew 实测）、tp-zagvp5（Cursor 实机验证）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -54,8 +53,7 @@ todopi ls --ready → todopi claim <id> → 干活 → todopi check 逐条勾验
 → git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
 
-**remote 状态**：`origin` 是 `github.com/seandong/todopi`。2026-09-24 已把 `main` 推到
-`92edf6d`（F08 合并之后）。此后合回 `main` 即推送，只在快进时推、不 force。
+**remote 状态**：`origin` 是 `github.com/seandong/todopi`。2026-10-02 的 `24bcbc4`（init --setup）已推送，远端 Harness / Install 均成功。此后合回 `main` 即推送，只在快进时推、不 force。
 
 ## 里程碑
 
@@ -158,6 +156,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
+69. ~~tp-hxa6yp 错误与警告整句强调~~ 已完成（2026-10-02）：Cargo 式 `error:` 与 `warning:` 标签保留红/黄色，正文整句加粗，门禁任务 id 仍青色；PLAIN / MONO 无转义，FORCE_COLOR 管道仍仅上色。右下 Herdr pane 的独立新项目实测 done 门禁拒绝和强制完成警告，三层验证全绿，独立只读评审 Go。`done`: verify=pass commit=03c679b dirty=false。e2e 曾报临时目录清理 Permission denied，但整体通过；tp-0obw6s 待查。
 68. ~~tp-jyvt6i `init --setup <agent>`~~ 已完成（2026-09-28）：dogfood 反馈，初始化时一并接入 agent（可重复、可逗号分隔）；未知 agent 与空 --setup 写之前报错；
     某一家失败时错误里说清已写文件、失败的一家（可能已写一部分，重跑安全）、还差哪几家与恢复命令（带 -C <root>；路径含会被转义的字符时改说在项目根下跑）。
     InitReport 新增可选 setup: SetupReport[]。Codex 五轮 → Go。真终端（herdr pane）里跑过。
