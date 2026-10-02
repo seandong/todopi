@@ -337,8 +337,9 @@ test("监听运行中报错：改为轮询，之后的变化照样回调（F18 �
     assert.equal(w.mode, "poll");
     assert.ok(closed, "旧的监听关掉");
     await cb.next(1);
+    const before = cb.count;
     writeFileSync(join(dir, "tasks", "after-error.md"), "x");
-    await cb.next(2);
+    await cb.next(before + 1);
   } finally { w.close(); }
 });
 
@@ -391,8 +392,9 @@ test("回调到达时目录已被改名并重建（inode 换了）：同样改�
     listener();
     assert.equal(w.mode, "poll");
     await cb.next(1);
+    const before = cb.count;
     writeFileSync(join(dir, "tasks", "x.md"), "1");
-    await cb.next(2);
+    await cb.next(before + 1);
   } finally { w.close(); }
 });
 
@@ -406,7 +408,7 @@ test("watch 模式下的兜底轮询：监听丢了事件（从不触发），�
   try {
     assert.equal(w.mode, "watch");
     writeFileSync(join(dir, "tasks", "silent.md"), "x");
-    await cb.next(1);
+    await cb.next(1, 400);
     assert.equal(w.mode, "watch", "仍是 watch 模式");
   } finally { w.close(); }
 });
