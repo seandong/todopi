@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { ANSI, PLAIN } from "../../src/output/style.ts";
+import { ANSI, ANSI_PIPED, MONO, PLAIN } from "../../src/output/style.ts";
 import { action, diagnostic, next, shownPath, task, VERB_WIDTH } from "../../src/output/render/layout.ts";
 
 /** Cargo 式记号（tp-rk6o8q）：PLAIN 下是同一份排版、没有转义；动词右对齐到第 12 列。 */
@@ -24,6 +24,22 @@ test("上色只加转义，去掉转义后与 PLAIN 逐字节相同", () => {
     assert.ok(!plain.includes("\x1b"));
     assert.equal(strip(styled), plain);
   }
+});
+
+test("终端诊断：错误与警告的消息整句加粗，门禁 id 保持青色；纯文本仍原样", () => {
+  const message = `refused to done ${task(ANSI, "tp-1", "Write hello.sh")}`;
+  const error = diagnostic(ANSI, "error", message);
+  assert.match(error, /^\x1b\[1m\x1b\[31merror:\x1b\[39m\x1b\[22m \x1b\[1mrefused to done \x1b\[36mtp-1\x1b\[39m  Write hello\.sh\x1b\[22m$/);
+  assert.equal(diagnostic(ANSI, "warning", "recorded as unverified"),
+    "\x1b[1m\x1b[33mwarning:\x1b[39m\x1b[22m \x1b[1mrecorded as unverified\x1b[22m");
+  assert.equal(diagnostic(ANSI, "note", "next step"), "\x1b[1mnote:\x1b[22m next step");
+  for (const s of [PLAIN, MONO]) {
+    assert.equal(diagnostic(s, "error", `refused to done ${task(s, "tp-1", "Write hello.sh")}`),
+      "error: refused to done tp-1  Write hello.sh");
+    assert.equal(diagnostic(s, "warning", "recorded as unverified"), "warning: recorded as unverified");
+  }
+  assert.equal(diagnostic(ANSI_PIPED, "warning", "recorded as unverified"),
+    diagnostic(ANSI, "warning", "recorded as unverified"));
 });
 
 test("Next：命令对齐；编号只在要求时出现", () => {

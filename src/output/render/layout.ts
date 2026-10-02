@@ -36,7 +36,7 @@ export function task(s: Style, id: string, title: string): string {
 /** `error: …` / `warning: …` / `note: …` */
 export function diagnostic(s: Style, kind: "error" | "warning" | "note", message: string): string {
   const label = kind === "error" ? s.bold(s.red("error:")) : kind === "warning" ? s.bold(s.yellow("warning:")) : s.bold("note:");
-  return `${label} ${message}`;
+  return `${label} ${kind === "note" ? message : s.bold(message)}`;
 }
 
 /**
