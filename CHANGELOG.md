@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- **Cargo-style terminal output** across CLI commands: aligned action labels, status colors, readable task listings, and emphasized error and warning messages. Agent, hook, JSON, and ordinary piped output stay plain; `NO_COLOR` is honored.
+- **One-step agent setup**: `todopi init --setup claude` initializes a ledger and connects an agent. Repeat `--setup` or pass comma-separated agents to connect several; invalid names fail before writing. If setup stops partway through, the error lists what completed and how to resume.
+- **Board test reliability**: polling tests wait for observed callbacks instead of fixed positive sleeps. The earlier intermittent full-suite failure could not be traced to a specific assertion because its detailed output was not retained.
+
 ## 0.1.0 — first release
 
 todopi keeps a dependency-aware task graph for AI coding agents as plain Markdown files under `.todopi/`, in the format specified in [`spec/todopi-format-v1.md`](spec/todopi-format-v1.md) (format version 1).

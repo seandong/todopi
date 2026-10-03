@@ -4,7 +4,7 @@ A durable task ledger for AI coding agents.
 
 Your agent's tasks, in your repo, in 12 fields. Survives compaction, sessions, and switching agents.
 
-Status: 0.1.0, the first release. Expect rough edges in the CLI; the on-disk format is versioned (format version 1) and specified in [`spec/`](spec/todopi-format-v1.md). Changes are listed in [`CHANGELOG.md`](CHANGELOG.md).
+Status: 0.2.0. Expect rough edges in the CLI; the on-disk format is versioned (format version 1) and specified in [`spec/`](spec/todopi-format-v1.md). Changes are listed in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## What it is
 
@@ -18,13 +18,15 @@ Installing with npm adds about 2.3 MB of files: todopi's own JavaScript (about 4
 
 ## Install
 
+With Node.js 20 or newer, install the public npm package:
+
 ```sh
-curl -fsSL https://raw.githubusercontent.com/seandong/todopi/main/install.sh | sh
+npm install --global todopi
 ```
 
-With Node.js 20 or newer and `npm` on your PATH, this installs the npm package; otherwise — no Node, no npm, or the npm install fails — it downloads the prebuilt binary and verifies its SHA-256 before installing. Binaries exist for macOS and Linux on x64 and arm64; anywhere else, install Node.js 20+ with npm first. Either way the command lands in `~/.local/bin` (set `TODOPI_INSTALL_DIR` for another directory; one not named `bin` always gets the binary). Set `TODOPI_VERSION` to install a specific version, or `TODOPI_FORCE_BINARY=1` to skip npm. With Node you can also run `npm install --global todopi`. With Homebrew (macOS or Linux), once the tap is live: `brew install seandong/tap/todopi`.
+The GitHub repository is currently private. Its raw `install.sh` URL and GitHub Release binary assets return 404 without authenticated access; ordinary `curl` does not use your browser or git credentials. The npm command above is the public installation path. Binaries exist for macOS and Linux on x64 and arm64 and are attached to each GitHub Release, but require authenticated access while the repository is private. The installer script and its binary fallback will become available through the public raw URL if the repository is made public. Homebrew (`brew install seandong/tap/todopi`) also needs a live tap **and publicly downloadable Release assets**; the private repository currently prevents an unauthenticated brew install.
 
-**`todopi` must be on the PATH your coding agent sees.** Every hook below runs `todopi` by name. If `~/.local/bin` is not on your PATH, add it (for example `export PATH="$HOME/.local/bin:$PATH"` in your shell profile) and restart the agent.
+**`todopi` must be on the PATH your coding agent sees.** Every hook below runs `todopi` by name. After installing with npm, run `command -v todopi` and `todopi --version` in the environment your agent uses. If you previously installed a binary in `~/.local/bin`, make sure that older copy does not appear ahead of the npm installation on PATH. Restart the agent after changing PATH.
 
 Then, in a repository:
 
