@@ -156,7 +156,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
-71. tp-nxy1hu v0.2.0 发布（2026-10-03 进行中）：主包、锁文件、运行时 VERSION、六家插件清单升为 0.2.0；README / CHANGELOG 更新。`make check`、完整 `make test`（1013/1013）、`make e2e` 通过；本地 npm pack 装入隔离前缀，在全新 git 仓库实跑 `init --setup claude`、doctor 和 done 门禁。下一步等独立评审，通过后合并 main、复验主线、推 main 并确认 Harness / Install，再从最终 main 提交打 `v0.2.0` 标签；观察 Release 工作流、npm 包和 GitHub Release 资产。仓库仍私有，匿名 raw 和 Release 下载仍受限。
+71. tp-nxy1hu v0.2.0 发布（2026-10-03 进行中）：主包、锁文件、运行时 VERSION、六家插件清单升为 0.2.0；README / CHANGELOG 更新。`make check`、完整 `make test`（1013/1013）、`make e2e` 通过；本地 npm pack 装入隔离前缀，在全新 git 仓库实跑 `init --setup claude`、doctor 和 done 门禁。评审指出私有仓库的匿名安装入口不能作为默认用法，README 已改为 npm 默认、GitHub 路径说明需有仓库权限；发布成功的验收项只在 tag 后验证并勾。下一步合并 main、复验主线、推 main 并确认 Harness / Install，再从最终 main 提交打 `v0.2.0` 标签；观察 Release 工作流、npm 包和 GitHub Release 资产。仓库仍私有，匿名 raw 和 Release 下载仍受限。
 70. tp-0obw6s 看板测试偶发失败（2026-10-02 阶段性加固）：原 2026-09-28 失败仅留 `not ok 5 - tests/commands/board.test.ts` 文件级摘要，具体断言 / 堆栈已被 grep 过滤且未保存；无法确认根因。将三处固定 sleep 的正向轮询断言改为等待实际回调，写后以写前回调数为基线，兜底轮询保留原 400ms 界；三层验证通过，子代理评审两轮 → Go。三次修改前及两次修改后整套测试都通过，不能据此宣称原 flake 消失。任务 note 留了原证据边界和下次复现的捕获要求，已 release 为 open，待抓到完整失败堆栈后继续。
 69. ~~tp-hxa6yp 错误与警告整句强调~~ 已完成（2026-10-02）：Cargo 式 `error:` 与 `warning:` 标签保留红/黄色，正文整句加粗，门禁任务 id 仍青色；PLAIN / MONO 无转义，FORCE_COLOR 管道仍仅上色。右下 Herdr pane 的独立新项目实测 done 门禁拒绝和强制完成警告，三层验证全绿，独立只读评审 Go。`done`: verify=pass commit=03c679b dirty=false。e2e 曾报临时目录清理 Permission denied，但整体通过；tp-0obw6s 待查。
 68. ~~tp-jyvt6i `init --setup <agent>`~~ 已完成（2026-09-28）：dogfood 反馈，初始化时一并接入 agent（可重复、可逗号分隔）；未知 agent 与空 --setup 写之前报错；
