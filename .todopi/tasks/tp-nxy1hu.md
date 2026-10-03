@@ -6,7 +6,7 @@ assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j09"
 verify: "make check && make test && make e2e"
 created: "2026-10-03T04:07:23Z"
-updated: "2026-10-03T04:41:01Z"
+updated: "2026-10-03T04:54:07Z"
 ---
 
 ## Description
@@ -25,3 +25,4 @@ Ship the Cargo-style CLI output and init --setup improvements published since 0.
 - 2026-10-03T04:09:56Z claude-code@Seans-MacBook-Pro.local claimed
 - 2026-10-03T04:33:15Z claude-code@Seans-MacBook-Pro.local note: Release review No-Go addressed by making npm the README default while the repository remains private. The final acceptance criterion is post-tag evidence and will be checked only after npm, GitHub Release and remote CI succeed. Tag will be created only on the exact validated main commit after main Harness/Install pass; no visibility change.
 - 2026-10-03T04:41:01Z claude-code@Seans-MacBook-Pro.local note: Second subagent review found private raw curl command still could not authenticate even for someone with repository access; removed it. README now states npm is public, GitHub raw/Release assets require authenticated access while private, and no unsupported shell command is offered.
+- 2026-10-03T04:54:07Z claude-code@Seans-MacBook-Pro.local note: Third subagent review found brew tap alone cannot install private Release binaries, and an old ~/.local/bin copy can shadow the new npm global CLI. README now requires publicly downloadable Release assets for brew and directs users to verify command -v todopi and --version on the agent PATH.
