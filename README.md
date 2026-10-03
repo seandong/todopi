@@ -4,7 +4,7 @@ A durable task ledger for AI coding agents.
 
 Your agent's tasks, in your repo, in 12 fields. Survives compaction, sessions, and switching agents.
 
-Status: 0.1.0, the first release. Expect rough edges in the CLI; the on-disk format is versioned (format version 1) and specified in [`spec/`](spec/todopi-format-v1.md). Changes are listed in [`CHANGELOG.md`](CHANGELOG.md).
+Status: 0.2.0. Expect rough edges in the CLI; the on-disk format is versioned (format version 1) and specified in [`spec/`](spec/todopi-format-v1.md). Changes are listed in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## What it is
 
