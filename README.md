@@ -18,11 +18,19 @@ Installing with npm adds about 2.3 MB of files: todopi's own JavaScript (about 4
 
 ## Install
 
+With Node.js 20 or newer, install the public npm package:
+
+```sh
+npm install --global todopi
+```
+
+The GitHub repository is currently private. Its raw `install.sh` URL and GitHub Release binary assets return 404 to visitors without repository access. If you have access to the repository, you can also use:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/seandong/todopi/main/install.sh | sh
 ```
 
-With Node.js 20 or newer and `npm` on your PATH, this installs the npm package; otherwise — no Node, no npm, or the npm install fails — it downloads the prebuilt binary and verifies its SHA-256 before installing. Binaries exist for macOS and Linux on x64 and arm64; anywhere else, install Node.js 20+ with npm first. Either way the command lands in `~/.local/bin` (set `TODOPI_INSTALL_DIR` for another directory; one not named `bin` always gets the binary). Set `TODOPI_VERSION` to install a specific version, or `TODOPI_FORCE_BINARY=1` to skip npm. With Node you can also run `npm install --global todopi`. With Homebrew (macOS or Linux), once the tap is live: `brew install seandong/tap/todopi`.
+With Node.js 20 or newer and `npm` on your PATH, the script installs the npm package; otherwise — no Node, no npm, or the npm install fails — it downloads the prebuilt binary and verifies its SHA-256 before installing. Binaries exist for macOS and Linux on x64 and arm64; anywhere else, install Node.js 20+ with npm first. The script installs to `~/.local/bin` (set `TODOPI_INSTALL_DIR` for another directory; one not named `bin` always gets the binary). Set `TODOPI_VERSION` to install a specific version, or `TODOPI_FORCE_BINARY=1` to skip npm. With Homebrew (macOS or Linux), once the tap is live: `brew install seandong/tap/todopi`.
 
 **`todopi` must be on the PATH your coding agent sees.** Every hook below runs `todopi` by name. If `~/.local/bin` is not on your PATH, add it (for example `export PATH="$HOME/.local/bin:$PATH"` in your shell profile) and restart the agent.
 
