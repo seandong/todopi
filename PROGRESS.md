@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `c7e2e53` —— 中文产品文章已写入 `docs/product/todopi-introduction.md`（tp-df5064）；独立事实评审 Go，`done` verify=pass、dirty=false。v0.2.0 标签仍指向 `6fa0d4b`；公开 npm 包、Release 和标签 CI 已核实。
+- Last commit: `edc3d03` —— 产品文章及完成账本已合回 main；Cursor CLI 隔离实测（tp-zagvp5）已记录阶段性证据，任务释放为 open，未完成的验收项保持未勾。v0.2.0 标签仍指向 `6fa0d4b`。
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**28/29 条通过、1 条不适用**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
@@ -26,7 +26,7 @@
 
 ## In Progress
 
-**无。** 产品介绍任务 `tp-df5064` 已完成并通过 verify；下一步在隔离项目验证 Cursor CLI 接入，当前没有 `in_progress` 任务。
+**无。** 产品介绍任务 `tp-df5064` 已完成并通过 verify；Cursor CLI 阶段性实测已记入 `tp-zagvp5`，未完成的验收项等待后续接手。当前没有 `in_progress` 任务。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -62,7 +62,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：先在右侧 pane 的独立项目验证 tp-zagvp5（Cursor CLI），其余 tp-0obw6s（保留下一次失败的完整堆栈）、tp-ujjc6y（brew 实装）待后续接手。
+按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 CLI sessionStart 注入和 alwaysApply 规则已有隔离实测，sessionEnd、真实压缩、IDE 和 --user 仍待验证；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。

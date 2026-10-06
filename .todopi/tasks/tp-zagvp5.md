@@ -6,7 +6,7 @@ rank: "im"
 verify: "make check && bash tools/e2e/f17-setup-cursor-gemini.sh"
 labels: ["m3"]
 created: "2026-09-26T11:44:21Z"
-updated: "2026-09-27T16:12:52Z"
+updated: "2026-10-06T05:33:07Z"
 ---
 
 ## Description
@@ -25,3 +25,7 @@ updated: "2026-09-27T16:12:52Z"
 
 - 2026-09-26T11:44:21Z seandong created from=tp-yuka3e
 - 2026-09-27T16:12:52Z claude-code@Seans-MacBook-Pro.local note: tp-lv7y3h：Cursor 插件（plugins/cursor/）本机没法测——cursor-agent 未登录。实机验证时一并跑：在有进行中任务的仓库里 cursor-agent --plugin-dir <todopi>/plugins/cursor，问它进行中的任务；再叠上 todopi setup cursor 看是否只注入一次。
+- 2026-10-06T05:17:58Z claude-code@Seans-MacBook-Pro.local claimed
+- 2026-10-06T05:29:49Z claude-code@Seans-MacBook-Pro.local note: Cursor CLI dogfood in isolated /tmp/todopi-cursor-cli.Ocwp0Z: setup cursor created project hooks.json and alwaysApply rule; doctor passed. Herdr right pane interactive cursor-agent initially 2026.09.26-dd393fe, then auto-updated to 2026.10.01-e373342. Without invoking tools, agent named in-progress tp-6iy2qk and quoted compaction rule; repeat under TODOPI_ACTOR=cursor@Seans-MacBook-Pro.local also named the held task and rule. A headless -p --mode ask attempt failed on Cursor network reconnect (RetriableError: WritableIterable is closed). sessionEnd hook is read-only handoff --check; no persistent log, so exit alone does not prove execution. IDE, actual compaction and --user workspace_roots remain untested.
+- 2026-10-06T05:32:47Z claude-code@Seans-MacBook-Pro.local note: Second CLI pass with TODOPI_ACTOR=cursor@Seans-MacBook-Pro.local on Cursor Agent 2026.10.01-e373342: interactive sessionStart context named held tp-6iy2qk and alwaysApply compaction rule without tools; normal Ctrl-D returned to shell. Cannot claim actual compaction survived: no verified manual compaction occurred. Existing sessionEnd command is handoff --check and has no persistent side effect; exit shows no hook output, so it remains unproven. A temporary hook-events.log instrumentation in the isolated project was blocked by Claude Code automatic approval as an unauthorized persistent hook command; no workaround attempted. Cursor IDE and user-level hooks remain untested.
+- 2026-10-06T05:33:07Z claude-code@Seans-MacBook-Pro.local released
