@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `e02febc` —— v0.2.0 发布证据已提交（tp-nxy1hu）；`done` 在这棵干净树上完成，verify=pass、dirty=false。标签指向 `6fa0d4b`；公开 npm 包、GitHub Release 和标签 CI 均已核实。
+- Last commit: `c7e2e53` —— 中文产品文章已写入 `docs/product/todopi-introduction.md`（tp-df5064）；独立事实评审 Go，`done` verify=pass、dirty=false。v0.2.0 标签仍指向 `6fa0d4b`；公开 npm 包、Release 和标签 CI 已核实。
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**28/29 条通过、1 条不适用**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
@@ -13,7 +13,7 @@
 - `make e2e`: `pass` —— `done` 于 2026-10-06 重新运行并通过；此前隔离 npm pack 安装在新仓库实跑 `init --setup claude`、`doctor` 和 `done` 门禁，发布后公开 registry 安装实跑 `--version`、`init --setup claude`、`doctor`。
 - `make clean-check`: `pass` —— 收尾提交 `04014c6` 后和快进合回 main 后各通过一次；第 5 维 diff 聚焦度人工核对，只涉及任务账本和 PROGRESS。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
-- 账本: `.todopi/` 48 个任务，45 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、0 个 `in_progress`。
+- 账本: `.todopi/` 49 个任务，46 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -26,7 +26,7 @@
 
 ## In Progress
 
-**无。** v0.2.0 发布任务 `tp-nxy1hu` 已完成并通过 verify；当前没有 `in_progress` 任务。
+**无。** 产品介绍任务 `tp-df5064` 已完成并通过 verify；下一步在隔离项目验证 Cursor CLI 接入，当前没有 `in_progress` 任务。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -62,7 +62,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-0obw6s（保留下一次失败的完整堆栈）、tp-ujjc6y（brew 实装）、tp-zagvp5（Cursor 实机验证）。
+按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：先在右侧 pane 的独立项目验证 tp-zagvp5（Cursor CLI），其余 tp-0obw6s（保留下一次失败的完整堆栈）、tp-ujjc6y（brew 实装）待后续接手。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。
