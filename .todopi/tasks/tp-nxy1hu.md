@@ -1,12 +1,13 @@
 ---
 id: "tp-nxy1hu"
 title: "Release todopi 0.2.0"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j09"
 verify: "make check && make test && make e2e"
 created: "2026-10-03T04:07:23Z"
-updated: "2026-10-06T03:22:43Z"
+updated: "2026-10-06T03:32:33Z"
 ---
 
 ## Description
@@ -30,3 +31,4 @@ Ship the Cargo-style CLI output and init --setup improvements published since 0.
 - 2026-10-06T03:22:42Z claude-code@Seans-MacBook-Pro.local check ac=1: Version, lockfile, generated agent manifests and changelog match 0.2.0.
 - 2026-10-06T03:22:43Z claude-code@Seans-MacBook-Pro.local check ac=2: All local checks and a packed npm install in an isolated new repository pass, in
 - 2026-10-06T03:22:43Z claude-code@Seans-MacBook-Pro.local check ac=3: The v0.2.0 tag points at the validated main commit; npm and Release artifacts pu
+- 2026-10-06T03:32:33Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=e02febc dirty=false

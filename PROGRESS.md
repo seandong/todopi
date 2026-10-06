@@ -5,20 +5,15 @@
 
 ## Current State
 
-- Last commit: `a1eddc1` —— v0.2.0 发布准备（tp-nxy1hu）：版本、锁文件、六家插件清单与 changelog 已同步；npm tarball 在全新项目实装通过。发布任务仍在进行，标签及远端发布待验证。
+- Last commit: `e02febc` —— v0.2.0 发布证据已提交（tp-nxy1hu）；`done` 在这棵干净树上完成，verify=pass、dirty=false。标签指向 `6fa0d4b`；公开 npm 包、GitHub Release 和标签 CI 均已核实。
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**28/29 条通过、1 条不适用**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
-  **608 个用例**）。其中 53 个是语料库驱动的一致性断言，已用变异测试确认它们会咬。
-  锁有一条多进程用例——10 个单进程用例在锁存在致命竞态时全部通过，只有它会红
-- `make e2e`: `pass` —— `f01-doctor` 11 项 + `f02-init` 19 项 + `f03-add` 13 项 +
-  `f04-ls` 24 项 + `f05-claim` 47 项 + `f06-gates` 66 项 + `f07-verify` 38 项。f03 的并发压测（20 个 add 产出 20 个不同 id 与 rank）
-  是单元测试抓不到的那类；Codex 第二轮评审另补了跨 worktree 锁测试
-  （30 进程计数 30、无残留），确认 `leasePaths` 重构没有回归
-- `make clean-check`: `pass`（第 5 维 diff 聚焦度需人工判断）
-- `make audit`（课程校验器）: 58/73，CRITICAL 6/7，RECOMMENDED 52/66。唯一的
-  CRITICAL FAIL 是「缺依赖 lockfile」——当前没有任何依赖，属有意缺省
-- 账本: `.todopi/` 48 个任务，44 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、1 个 `in_progress`（tp-nxy1hu v0.2.0 发布）。
+  **1013/1013 个用例**）；`done` 于 2026-10-06 重新运行并通过。看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
+- `make e2e`: `pass` —— `done` 于 2026-10-06 重新运行并通过；此前隔离 npm pack 安装在新仓库实跑 `init --setup claude`、`doctor` 和 `done` 门禁，发布后公开 registry 安装实跑 `--version`、`init --setup claude`、`doctor`。
+- `make clean-check`: 收尾提交后执行；第 5 维 diff 聚焦度还需人工判断。
+- `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
+- 账本: `.todopi/` 48 个任务，45 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -31,7 +26,7 @@
 
 ## In Progress
 
-**无。** F01–F07 全部 `passing` 且都在 `main` 上。
+**无。** v0.2.0 发布任务 `tp-nxy1hu` 已完成并通过 verify；当前没有 `in_progress` 任务。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -53,7 +48,7 @@ todopi ls --ready → todopi claim <id> → 干活 → todopi check 逐条勾验
 → git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
 
-**remote 状态**：`origin` 是私有的 `github.com/seandong/todopi`。`db0b491` 已推送，远端 Harness / Install 均成功。合回 `main` 后只快进推送、不 force；发布需用 `v0.2.0` 标签触发 Release 工作流。
+**remote 状态**：`origin` 是私有的 `github.com/seandong/todopi`。`v0.2.0` 已推送，标签 peeled SHA 为 `6fa0d4b`。主线 Harness `37098785798` / Install `37098785838`，标签 Release `37406508070` / Harness `37406508071` / Install `37406508057` 全部成功。Release 为正式版，共 7 项资产；四个平台归档通过 SHA256SUMS，npm tarball SHA512 与公开 registry 的 `dist.integrity` 一致。Homebrew tap 更新因无 token 跳过，私有仓库的 Release 资产仍不支持匿名安装。
 
 ## 里程碑
 
@@ -67,7 +62,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按顺序，每条都是可立即执行的动作：
+按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-0obw6s（保留下一次失败的完整堆栈）、tp-ujjc6y（brew 实装）、tp-zagvp5（Cursor 实机验证）。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。
@@ -156,7 +151,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
     清（FR-Q1 改写，评审接受）。四轮评审：updated 的写法、非法 UTF-8、rank 回填的前提与两阶段、用 YAML 解析器
     定位 updated 原文。`todopi done`：verify=pass dirty=false。
     下一步：F14 `setup claude`（M3 的第一个）。
-71. tp-nxy1hu v0.2.0 发布（2026-10-03 进行中）：主包、锁文件、运行时 VERSION、六家插件清单升为 0.2.0；README / CHANGELOG 更新。`make check`、完整 `make test`（1013/1013）、`make e2e` 通过；本地 npm pack 装入隔离前缀，在全新 git 仓库实跑 `init --setup claude`、doctor 和 done 门禁。评审指出私有仓库的匿名安装入口不能作为默认用法，进一步发现有仓库权限也不能让普通 curl 自动认证；README 已改为 npm 默认并删掉不可执行的 raw URL 安装命令；另说明 brew 需要公开资产，以及检查 agent PATH 不被旧版 CLI 遮蔽。发布成功的验收项只在 tag 后验证并勾。下一步合并 main、复验主线、推 main 并确认 Harness / Install，再从最终 main 提交打 `v0.2.0` 标签；观察 Release 工作流、npm 包和 GitHub Release 资产。仓库仍私有，匿名 raw 和 Release 下载仍受限。
+71. ~~tp-nxy1hu v0.2.0 发布~~ 已完成（2026-10-06）：主包、锁文件、运行时 VERSION、六家插件清单升为 0.2.0；README / CHANGELOG 更新。`make check`、完整 `make test`（1013/1013）、`make e2e` 通过；本地 npm pack 装入隔离前缀，在全新 git 仓库实跑 `init --setup claude`、doctor 和 done 门禁。私有仓库的匿名 raw URL 和 Release 资产不可直接下载，README 改以公开 npm 为默认安装入口，并说明 brew 需公开资产、旧 PATH 二进制可能遮蔽新版。`v0.2.0` 标签指向已验证的 main `6fa0d4b`；发布工作流、主线与标签 Harness / Install 均成功。公开 registry 安装实跑 `--version`、`init --setup claude`、doctor；Release 7 项资产中四个平台归档通过 SHA256SUMS，npm tarball SHA512 与 registry `dist.integrity` 一致。独立子代理对发布后证据评审 Go；`done`: verify=pass commit=e02febc dirty=false。仓库仍私有，brew tap 更新因缺 token 跳过；tp-ujjc6y、tp-zagvp5 继续独立待办。
 70. tp-0obw6s 看板测试偶发失败（2026-10-02 阶段性加固）：原 2026-09-28 失败仅留 `not ok 5 - tests/commands/board.test.ts` 文件级摘要，具体断言 / 堆栈已被 grep 过滤且未保存；无法确认根因。将三处固定 sleep 的正向轮询断言改为等待实际回调，写后以写前回调数为基线，兜底轮询保留原 400ms 界；三层验证通过，子代理评审两轮 → Go。三次修改前及两次修改后整套测试都通过，不能据此宣称原 flake 消失。任务 note 留了原证据边界和下次复现的捕获要求，已 release 为 open，待抓到完整失败堆栈后继续。
 69. ~~tp-hxa6yp 错误与警告整句强调~~ 已完成（2026-10-02）：Cargo 式 `error:` 与 `warning:` 标签保留红/黄色，正文整句加粗，门禁任务 id 仍青色；PLAIN / MONO 无转义，FORCE_COLOR 管道仍仅上色。右下 Herdr pane 的独立新项目实测 done 门禁拒绝和强制完成警告，三层验证全绿，独立只读评审 Go。`done`: verify=pass commit=03c679b dirty=false。e2e 曾报临时目录清理 Permission denied，但整体通过；tp-0obw6s 待查。
 68. ~~tp-jyvt6i `init --setup <agent>`~~ 已完成（2026-09-28）：dogfood 反馈，初始化时一并接入 agent（可重复、可逗号分隔）；未知 agent 与空 --setup 写之前报错；
