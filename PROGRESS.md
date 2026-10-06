@@ -11,7 +11,7 @@
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
   **1013/1013 个用例**）；`done` 于 2026-10-06 重新运行并通过。看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
 - `make e2e`: `pass` —— `done` 于 2026-10-06 重新运行并通过；此前隔离 npm pack 安装在新仓库实跑 `init --setup claude`、`doctor` 和 `done` 门禁，发布后公开 registry 安装实跑 `--version`、`init --setup claude`、`doctor`。
-- `make clean-check`: 收尾提交后执行；第 5 维 diff 聚焦度还需人工判断。
+- `make clean-check`: `pass` —— 收尾提交 `04014c6` 后和快进合回 main 后各通过一次；第 5 维 diff 聚焦度人工核对，只涉及任务账本和 PROGRESS。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
 - 账本: `.todopi/` 48 个任务，45 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
