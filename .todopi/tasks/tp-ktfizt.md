@@ -1,12 +1,13 @@
 ---
 id: "tp-ktfizt"
 title: "Colorize interactive help output"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0e"
 verify: "make check"
 created: "2026-10-08T13:29:38Z"
-updated: "2026-10-08T13:52:46Z"
+updated: "2026-10-08T13:53:53Z"
 ---
 
 ## Acceptance Criteria
@@ -22,3 +23,4 @@ updated: "2026-10-08T13:52:46Z"
 - 2026-10-08T13:45:46Z claude-code@Seans-MacBook-Pro.local check ac=1: Interactive terminal help uses restrained color while retaining text and command
 - 2026-10-08T13:45:46Z claude-code@Seans-MacBook-Pro.local check ac=2: Agent, pipe, NO_COLOR, JSON, and TERM=dumb help remain plain text; prime remains
 - 2026-10-08T13:52:46Z claude-code@Seans-MacBook-Pro.local check ac=3: Layer 1-3 pass and review finds no blocking issues
+- 2026-10-08T13:53:53Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=1f874a2 dirty=false
