@@ -2,9 +2,9 @@
 
 给 AI 编程 Agent 用的任务账本。每个任务都是仓库中的 Markdown 文件，换一个会话或 Agent 也能接着做。
 
-[官网](https://todopi.com/)（产品页待上线）· [English README](README.md) · [更新记录](CHANGELOG.md)
+[官网](https://todopi.com/) · [English README](README.md) · [更新记录](CHANGELOG.md)
 
-**当前版本 0.2.0。** CLI 仍在早期；磁盘格式版本为 1，见当前私有仓库中的[格式规格](spec/todopi-format-v1.md)。
+**当前版本 0.2.0。** 磁盘格式版本为 1：[格式规格](spec/todopi-format-v1.md)。
 
 ## 安装
 
@@ -16,7 +16,7 @@ command -v todopi
 todopi --version
 ```
 
-GitHub 源码仓库目前是私有的。匿名访问 `install.sh` 和 Release 二进制会返回 404，因此当前公开可用的安装渠道是 npm。没有 Node.js 时，先从 [Node.js 官网](https://nodejs.org/en/download)安装 20 或更新版本；独立安装器及二进制回退路径尚不能作为公开安装命令。Homebrew 也要等 tap 和 Release 资产真正可匿名获取后才能推荐。
+需要 Node.js 20 或更新版本；如尚未安装，可从 [Node.js 官网](https://nodejs.org/en/download)获取。
 
 请在 Agent 实际使用的环境里核对 `command -v todopi`。如果旧二进制排在 npm 安装路径前面，可能会运行旧版；调整 `PATH` 后重启 Agent。
 
@@ -43,4 +43,4 @@ todopi prime
 
 todopi 自身不上传任务、不发送遥测，也不会替你提交或推送 Git。可选的 `todopi web` 只在运行时监听本机回环地址；任务自定义的 `verify` 命令可能访问网络。六种 Agent 的接入已实现；Cursor CLI 的会话启动和规则做过隔离实测，IDE、真实上下文压缩和会话结束场景仍待验证。
 
-[任务格式](spec/todopi-format-v1.md) · [命令 JSON 输出](docs/json.md) · [开发指引](AGENTS.md) · [MIT 许可证](LICENSE)
+[Agent 接入与命令详情](docs/getting-started.md) · [任务格式](spec/todopi-format-v1.md) · [命令 JSON 输出](docs/json.md) · [开发指引](AGENTS.md) · [MIT 许可证](LICENSE)

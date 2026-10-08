@@ -2,9 +2,9 @@
 
 A task ledger for AI coding agents. Each task is a Markdown file in your repository, so another session or agent can pick up where work stopped.
 
-[Website](https://todopi.com/) (product page pending deployment) · [简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md)
+[Website](https://todopi.com/) · [简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
-**Version 0.2.0.** The CLI is still early; the on-disk format is version 1 and has a [format specification](spec/todopi-format-v1.md) in this currently private repository.
+**Version 0.2.0.** The on-disk format is version 1: [format specification](spec/todopi-format-v1.md).
 
 ## Install
 
@@ -16,7 +16,7 @@ command -v todopi
 todopi --version
 ```
 
-The GitHub repository is currently private. Its raw `install.sh` and Release binaries return 404 to visitors without access, so npm is the public installation path for now. If you do not have Node.js, [install Node.js 20+](https://nodejs.org/en/download) first. The standalone installer and binary fallback cannot yet be offered as a public command. Homebrew also needs an accessible tap and Release assets before it can be recommended.
+Requires Node.js 20 or newer. [Get Node.js](https://nodejs.org/en/download) if you need it.
 
 Check `command -v todopi` in the environment your coding agent uses. An older binary earlier on `PATH` can hide the new npm installation; restart the agent after changing `PATH`.
 
@@ -45,4 +45,4 @@ todopi itself does not upload tasks or send telemetry. It does not commit or pus
 
 Integrations for six agents are implemented. Cursor CLI session start and its rule have been tested in isolation; Cursor IDE, actual context compaction, and session end still need real-world verification.
 
-[Task format](spec/todopi-format-v1.md) · [Command JSON output](docs/json.md) · [Agent development guide](AGENTS.md) · [MIT license](LICENSE)
+[Agent setup and CLI details](docs/getting-started.md) · [Task format](spec/todopi-format-v1.md) · [Command JSON output](docs/json.md) · [Agent development guide](AGENTS.md) · [MIT license](LICENSE)
