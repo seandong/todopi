@@ -5,14 +5,14 @@
 
 ## Current State
 
-- Last commit: `337bb04` —— `install.sh` 在启动目录已删除时切到可用目录，避免 Node `uv_cwd` 与二进制启动检查误报（tp-o8lpht）；`done` 验证为 `pass`，记录 `commit=337bb04 dirty=false`。`v0.2.0` 标签仍指向 `6fa0d4b`，当前版本的脚本需推送到公开主线才会经由 `todopi.com/install.sh` 生效。
+- Last commit: `d93b239` —— Linux shell 内建 `pwd` 可能返回已删除 cwd 的缓存路径；改用外部 `/bin/pwd -P` 并加强 npm / 二进制回归断言（tp-kbfc4u）。第一轮修复 `337bb04` 已推送，但远端 Harness `37793859039` 的 Linux 安装回归失败（npm `uv_cwd`）；该轮 Install `37793859103` 通过。第二轮 Linux CI 尚未运行。`v0.2.0` 标签仍指向 `6fa0d4b`，官网 `/install.sh` 302 到产品仓 `main` 的原始脚本。
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**28/29 条通过、1 条不适用**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: 本地 `pass`（2026-10-08）；帮助输出子进程与完整单元/集成测试均通过。看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
-- `make e2e`: 本地 `pass`（2026-10-08）；新增已删除 cwd 的 npm 与二进制安装回归用例通过，并从该状态用真实 npm 包/Release 资产实跑。测试末尾仍有 c14 临时目录 ACL 清理权限提示，门禁退出 0。
-- `make clean-check`: 待安装器修复收尾提交后运行；上一轮帮助高亮提交后为 `pass`。
+- `make e2e`: 本地 `pass`（2026-10-08）；已删除 cwd 的 npm 与二进制回归明确断言安装器切换到了可用目录；第一轮已从该状态用真实 npm 包 / Release 资产实跑，第二轮待线上复验。测试末尾仍有 c14 临时目录 ACL 清理权限提示，门禁退出 0。
+- `make clean-check`: 待安装器修复远端验证及收尾提交后运行；上一轮帮助高亮提交后为 `pass`。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
-- 账本: `.todopi/` 54 个任务，51 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、0 个 `in_progress`。
+- 账本: `.todopi/` 55 个任务，51 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、1 个 `in_progress`（tp-kbfc4u 等待远端 Linux CI 与官网安装复验）。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -25,7 +25,7 @@
 
 ## In Progress
 
-**无。** tp-o8lpht 修复安装器从已删除目录启动时的 `uv_cwd` 错误；本地三层验证通过，等待合并推送并从线上 `todopi.com/install.sh` 回读实测。产品仓库已公开，GitHub、raw 脚本、Release、校验文件和四平台归档均经匿名回读；先前 help 高亮提交 `da9049f` 的远端 Harness / Install 均通过。
+**tp-kbfc4u。** 第一轮 tp-o8lpht 的修复在 macOS 通过，但远端 Linux Harness 发现内建 `pwd` 缓存造成 `uv_cwd`，故本轮改为 `/bin/pwd -P`。本地三层验证通过，等待合并推送、远端 Harness / Install 及线上 `todopi.com/install.sh` 从已删除 cwd 实跑；验收项 2、3 尚未勾选。之前曾提前 `done`，日志记录 `dirty=true`，现已重开任务并如实撤回勾选。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -47,7 +47,7 @@ todopi ls --ready → todopi claim <id> → 干活 → todopi check 逐条勾验
 → git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
 
-**remote 状态**：`origin` 是公开的 `github.com/seandong/todopi`。`v0.2.0` 已推送，标签 peeled SHA 为 `6fa0d4b`。主线 `da9049f` 的 Harness `37791194396` / Install `37791194385` 均成功；标签 Release `37406508070` / Harness `37406508071` / Install `37406508057` 均成功。Release 共 7 项资产，匿名可下载四个平台归档与 SHA256SUMS；npm tarball SHA512 与 registry 的 `dist.integrity` 一致。Homebrew tap 更新因无 token 跳过，待单独核实。
+**remote 状态**：`origin` 是公开的 `github.com/seandong/todopi`。`v0.2.0` 已推送，标签 peeled SHA 为 `6fa0d4b`。主线第一轮修复 `2c359f3` 的 Harness `37793859039` 失败于 Linux 已删除 cwd 的 npm 回归，Install `37793859103` 成功；第二轮提交 `d93b239` 尚未推送。标签 Release `37406508070` / Harness `37406508071` / Install `37406508057` 均成功。Release 共 7 项资产，匿名可下载四个平台归档与 SHA256SUMS；npm tarball SHA512 与 registry 的 `dist.integrity` 一致。Homebrew tap 更新因无 token 跳过，待单独核实。
 
 ## 里程碑
 
@@ -61,7 +61,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 Cursor sessionEnd、真实压缩、IDE 和 --user 仍待验证；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。安装器修复 `337bb04` 在独立分支，需合回 main 并推送，再从公开的 `todopi.com/install.sh` 在已删除 cwd 下复验。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
+按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 Cursor sessionEnd、真实压缩、IDE 和 --user 仍待验证；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。先把安装器第二轮修复 `d93b239` 与本次状态记录快进合回 main 并推送，确认远端 Harness / Install 通过，再从公开的 `todopi.com/install.sh` 在已删除 cwd 下用隔离安装目录复验 npm 与强制二进制两条路径，随后勾选验收、`done` 并收尾。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。
