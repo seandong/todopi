@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last code commit: `1f874a2` —— 交互终端 `--help` 用现有样式策略高亮标题、命令与选项（tp-ktfizt）；`done` 的 `make check` 为 `pass`，记录 `commit=1f874a2 dirty=false`。`prime` 仍是无 ANSI 的 Agent 上下文文本。GitHub 主页为 `https://todopi.com/`，仓库仍 private；v0.2.0 标签仍指向 `6fa0d4b`。
+- Last commit: `1f874a2` —— 交互终端 `--help` 用现有样式策略高亮标题、命令与选项（tp-ktfizt）；`done` 的 `make check` 为 `pass`，记录 `commit=1f874a2 dirty=false`。`prime` 仍是无 ANSI 的 Agent 上下文文本。GitHub 主页为 `https://todopi.com/`，仓库仍 private；v0.2.0 标签仍指向 `6fa0d4b`。
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**28/29 条通过、1 条不适用**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: 本地 `pass`（2026-10-08），帮助输出新增真实 CLI 测试：彩色帮助去转义后与纯文本逐字一致；Agent、管道、JSON、钩子、NO_COLOR、TERM=dumb 均无 ANSI。看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
