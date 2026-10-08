@@ -77,8 +77,8 @@ R="$TMP/repoA"; mkdir -p "$R"; git -C "$R" init -q
 # 从已删除的目录启动时，npm/Node 会因 uv_cwd 失败。安装器必须先恢复可用的 cwd。
 mkdir -p "$TMP/gone-npm"
 out="$(cd "$TMP/gone-npm" && rmdir "$TMP/gone-npm" && HOME="$TMP/gone-home" TODOPI_VERSION="$VERSION" TODOPI_NPM_SPEC="$TGZ" sh "$ROOT/install.sh" 2>&1)"; rc=$?
-[ "$rc" -eq 0 ] && [ -x "$TMP/gone-home/.local/bin/todopi" ] && printf '%s' "$out" | grep -q 'installing the npm package' \
-  && ! printf '%s' "$out" | grep -q 'WARNING: npm could not install' \
+[ "$rc" -eq 0 ] && [ -x "$TMP/gone-home/.local/bin/todopi" ] && printf '%s' "$out" | grep -q 'current directory was removed' \
+  && printf '%s' "$out" | grep -q 'installing the npm package' && ! printf '%s' "$out" | grep -q 'WARNING: npm could not install' \
   && ok "当前目录已删除：npm 路径仍可安装" || fail "失效 cwd 的 npm 路径：rc=${rc}：$out"
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
@@ -112,7 +112,8 @@ out="$(binstall "$TMP/b1" TODOPI_FORCE_BINARY=1)"; rc=$?
   && ok "二进制路径：下载、SHA-256 校验通过、装到 ~/.local/bin" || fail "rc=${rc}：$out"
 mkdir -p "$TMP/gone-binary"
 out="$(cd "$TMP/gone-binary" && rmdir "$TMP/gone-binary" && HOME="$TMP/gone-binary-home" TODOPI_VERSION="$FV" TODOPI_DOWNLOAD_BASE="file://$REL" TODOPI_FORCE_BINARY=1 sh "$ROOT/install.sh" 2>&1)"; rc=$?
-[ "$rc" -eq 0 ] && [ "$("$TMP/gone-binary-home/.local/bin/todopi")" = "$FV-fake" ] && printf '%s' "$out" | grep -q 'checksum verified' \
+[ "$rc" -eq 0 ] && [ "$("$TMP/gone-binary-home/.local/bin/todopi")" = "$FV-fake" ] && printf '%s' "$out" | grep -q 'current directory was removed' \
+  && printf '%s' "$out" | grep -q 'checksum verified' \
   && ok "当前目录已删除：二进制路径仍可校验并安装" || fail "失效 cwd 的二进制路径：rc=${rc}：$out"
 
 # 没有 Node 的 PATH：只放安装器要用的工具

@@ -31,7 +31,7 @@ say() { printf 'todopi-install: %s\n' "$*"; }
 die() { printf 'todopi-install: error: %s\n' "$*" >&2; exit 1; }
 
 # Node.js and the downloaded binary both need a live cwd, even when all paths are absolute.
-if ! pwd -P >/dev/null 2>&1; then
+if ! /bin/pwd -P >/dev/null 2>&1; then
   cd / || die "the current directory was removed and no usable directory is available"
   say "current directory was removed; continuing from /"
 fi
