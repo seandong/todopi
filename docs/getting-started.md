@@ -70,4 +70,4 @@ The `--user` option installs shared hooks or extensions in your home directory. 
 
 A task may set `verify` to a project command. Before the first run, inspect that command and confirm repository trust. In a non-interactive agent session, the user can approve it explicitly with `todopi done TASK_ID --yes`. A command allowlist for todopi does not sandbox `verify`; use an OS-level sandbox if the command needs isolation.
 
-Binaries exist for macOS and Linux on x64 and arm64; distribution availability depends on the release assets being accessible. The installer checks SHA-256 against the release's `SHA256SUMS` before installing a binary.
+Binaries exist for macOS and Linux on x64 and arm64. The installer checks SHA-256 against the release's `SHA256SUMS` before installing a binary.

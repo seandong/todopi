@@ -20,7 +20,7 @@ todopi 可以接入 Claude Code、Codex CLI、OpenCode、pi、Cursor 和 Gemini 
 
 ## 从已有项目开始
 
-有 Node.js 20 或更新版本时，当前公开安装入口是 npm：
+有 Node.js 20 或更新版本时，可以通过 npm 安装：
 
 ```sh
 npm install --global todopi@0.2.0
@@ -39,4 +39,4 @@ todopi doctor
 
 todopi 不需要数据库、API key、常驻进程或遥测；它自身不向外部服务发请求。可选的本地看板 `todopi web` 是前台进程，只绑定 `127.0.0.1`；任务的 `verify` 命令由项目指定，可能执行自己的网络操作。任务仍属于你的项目，如何审阅、合并和发布仍由项目自己的流程决定。
 
-0.2.0 提供了更清晰的 Cargo 风格终端输出，以及 `todopi init --setup <agent>` 一步接入。产品仍在早期，使用中可能遇到粗糙之处。目前项目源码仓库为私有：GitHub Release 二进制资产需要认证才能下载，Homebrew 的匿名安装也受此限制；公开 npm 包是可直接使用的安装渠道。
+0.2.0 提供了更清晰的终端输出，以及 `todopi init --setup <agent>` 一步接入。产品仍在早期；上面的 npm 命令是当前已验证的安装方式。
