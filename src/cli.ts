@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { EXIT, CliError } from "./exit.ts";
 import { VERSION } from "./version.ts";
+import { chooseStyle } from "./output/style.ts";
+import { agentPresent } from "./commands/actor.ts";
 
 const program = new Command();
 program
@@ -18,6 +20,24 @@ program
   .option("--agent <name>", "the coding agent running this command (claude-code, codex, gemini, opencode, pi, cursor); "
     + "sets the actor to <name>@<host>. Hooks installed by `todopi setup` pass it; agents are also recognized from their environment")
   .exitOverride();
+
+// Commander 的帮助格式化是同步的；沿用 chooseStyle 的判定，不改变帮助文本的内容和换行。
+// argv 要在 preAction 前读取：--help 与 `help <command>` 不会执行命令 action。
+const helpStyle = () => chooseStyle({
+  json: program.opts()["json"] === true || process.argv.includes("--json"),
+  hook: process.argv.some((arg) => ["--hook", "--hook-json", "--if-compacted", "--mark-compacted"].some((flag) => arg === flag || arg.startsWith(`${flag}=`))),
+  agent: agentPresent() || process.argv.includes("--agent") || process.argv.some((arg) => arg.startsWith("--agent=")),
+  env: process.env,
+  isTTY: process.stdout.isTTY === true,
+});
+program.configureOutput({ getOutHasColors: () => helpStyle().bold("x") !== "x" });
+program.configureHelp({
+  styleTitle: (text) => helpStyle().bold(text),
+  styleCommandText: (text) => helpStyle().bold(text),
+  styleOptionText: (text) => helpStyle().cyan(text),
+  styleSubcommandText: (text) => helpStyle().cyan(text),
+  styleArgumentText: (text) => helpStyle().dim(text),
+});
 
 // --agent 交给身份解析（只在本进程里，不放进环境——见 setAgentOption）。F22
 program.hook("preAction", async () => {

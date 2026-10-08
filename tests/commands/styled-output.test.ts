@@ -72,6 +72,37 @@ test("什么都不给（stdout 是管道）：纯文本", () => {
   assert.ok(!run(["init"], {}).stdout.includes(ESC));
 });
 
+// 直接调真实 CLI 的帮助路径：已有命令的 styleFor 判定必须同样约束 Commander 的格式化。
+test("终端帮助上色，去掉 ANSI 后与纯文本帮助完全一致", () => {
+  for (const args of [["--help"], ["prime", "--help"], ["help", "prime"]]) {
+    const plain = run(args, {});
+    const colored = run(args, { FORCE_COLOR: "1" });
+    assert.equal(plain.status, 0, plain.stderr);
+    assert.equal(colored.status, 0, colored.stderr);
+    assert.match(colored.stdout, /\x1b\[1mUsage:\x1b\[22m/);
+    assert.match(colored.stdout, /\x1b\[36m(?:prime|--full|--help)/);
+    assert.equal(colored.stdout.replace(/\x1b\[[0-9;]*m/g, ""), plain.stdout);
+  }
+});
+
+test("Agent、JSON、NO_COLOR 和 dumb 终端下帮助保持纯文本", () => {
+  const cases: [string[], Record<string, string>][] = [
+    [["--help"], { FORCE_COLOR: "1", CLAUDECODE: "1" }],
+    [["prime", "--help"], { FORCE_COLOR: "1", TODOPI_AGENT: "codex" }],
+    [["--agent=codex", "--help"], { FORCE_COLOR: "1" }],
+    [["prime", "--hook-json=cursor", "--help"], { FORCE_COLOR: "1" }],
+    [["--json", "--help"], { FORCE_COLOR: "1" }],
+    [["--help"], { FORCE_COLOR: "1", NO_COLOR: "" }],
+    [["prime", "--help"], { FORCE_COLOR: "1", TERM: "dumb" }],
+    [["--help"], {}],
+  ];
+  for (const [args, env] of cases) {
+    const r = run(args, env);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(!r.stdout.includes(ESC), `${args.join(" ")} ${JSON.stringify(env)}`);
+  }
+});
+
 /**
  * 每个命令都跑一遍（tp-rk6o8q 的发布前提）：FORCE_COLOR 在，有 agent 在场或给了 --json 时，stdout 与 stderr 都不许有一个转义字节——
  * 这些输出会进 agent 的上下文（ARCH-027）。反过来只给 FORCE_COLOR 时要真的上色，证明这组测试分得出两种情形。
