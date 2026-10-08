@@ -6,14 +6,14 @@ assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0g"
 verify: "make check"
 created: "2026-10-08T14:43:41Z"
-updated: "2026-10-08T14:57:47Z"
+updated: "2026-10-08T15:07:05Z"
 ---
 
 ## Acceptance Criteria
 
 - [x] The installer does not trust a shell cached pwd when the OS cwd is gone
-- [ ] Removed-cwd npm and binary regressions pass on Linux CI and macOS
-- [ ] Published raw and site installer continue to work without editing personal configuration
+- [x] Removed-cwd npm and binary regressions pass on Linux CI and macOS
+- [x] Published raw and site installer continue to work without editing personal configuration
 
 ## Log
 
@@ -28,3 +28,6 @@ updated: "2026-10-08T14:57:47Z"
 - 2026-10-08T14:57:25Z claude-code@Seans-MacBook-Pro.local uncheck ac=3: Published raw and site installer continue to work without editing personal confi
 - 2026-10-08T14:57:32Z claude-code@Seans-MacBook-Pro.local claimed
 - 2026-10-08T14:57:47Z claude-code@Seans-MacBook-Pro.local note: Previous done ran with dirty=true after AC2 was checked before the new Linux CI. Reopened and unticked AC2/AC3; close only after pushed main passes Harness/Install and the published site installer succeeds from a removed cwd.
+- 2026-10-08T15:02:04Z claude-code@Seans-MacBook-Pro.local check ac=3: Published raw and site installer continue to work without editing personal confi
+- 2026-10-08T15:06:55Z claude-code@Seans-MacBook-Pro.local check ac=2: Removed-cwd npm and binary regressions pass on Linux CI and macOS
+- 2026-10-08T15:07:05Z claude-code@Seans-MacBook-Pro.local note: Linux Harness 37797035128 passed check/test/e2e; f21-install logged both removed-cwd npm and binary pass. Install 37797034995 passed artifacts/without-node/with-node. Published https://todopi.com/install.sh matched main and installed npm and checksum-verified binary from removed cwd into temporary directories on macOS (both 0.2.0); no personal config edited. Earlier pipeline shell-init/getcwd warning remains external to installer.
