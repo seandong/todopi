@@ -1,12 +1,13 @@
 ---
 id: "tp-cipkwu"
 title: "Streamline public getting-started READMEs"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0b"
 verify: "make check"
 created: "2026-10-08T10:55:55Z"
-updated: "2026-10-08T11:07:32Z"
+updated: "2026-10-08T11:09:11Z"
 ---
 
 ## Acceptance Criteria
@@ -22,3 +23,4 @@ updated: "2026-10-08T11:07:32Z"
 - 2026-10-08T11:07:00Z claude-code@Seans-MacBook-Pro.local check ac=1: English README is concise, accurate for private repository, and links to todopi.
 - 2026-10-08T11:07:17Z claude-code@Seans-MacBook-Pro.local check ac=2: Chinese guide covers current installation, first use, availability limits, and l
 - 2026-10-08T11:07:32Z claude-code@Seans-MacBook-Pro.local check ac=3: Documentation checks and review pass; task closure records committed tree
+- 2026-10-08T11:09:11Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=dcd9505 dirty=false

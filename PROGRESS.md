@@ -5,7 +5,7 @@
 
 ## Current State
 
-- Last commit: `edc3d03` —— 产品文章及完成账本已合回 main；Cursor CLI 隔离实测（tp-zagvp5）已记录阶段性证据，任务释放为 open，未完成的验收项保持未勾。v0.2.0 标签仍指向 `6fa0d4b`。
+- Last commit: `dcd9505` —— 精简英文 README 并新增中文上手文档（tp-cipkwu），`done` 验证 `make check` 为 `pass`，记录 `commit=dcd9505 dirty=false`；仓库仍 private，GitHub 主页已设置为 `https://todopi.com/`，产品页目前尚未公开部署。v0.2.0 标签仍指向 `6fa0d4b`。
 - `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
   arch-rules（**28/29 条通过、1 条不适用**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
 - `make test`: `pass` —— `fixtures`（语料质量）+ `unit-test`（`node --test`，
@@ -13,7 +13,7 @@
 - `make e2e`: `pass` —— `done` 于 2026-10-06 重新运行并通过；此前隔离 npm pack 安装在新仓库实跑 `init --setup claude`、`doctor` 和 `done` 门禁，发布后公开 registry 安装实跑 `--version`、`init --setup claude`、`doctor`。
 - `make clean-check`: `pass` —— 收尾提交 `04014c6` 后和快进合回 main 后各通过一次；第 5 维 diff 聚焦度人工核对，只涉及任务账本和 PROGRESS。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
-- 账本: `.todopi/` 49 个任务，46 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、0 个 `in_progress`。
+- 账本: `.todopi/` 50 个任务，47 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -26,7 +26,7 @@
 
 ## In Progress
 
-**无。** 产品介绍任务 `tp-df5064` 已完成并通过 verify；Cursor CLI 阶段性实测已记入 `tp-zagvp5`，未完成的验收项等待后续接手。当前没有 `in_progress` 任务。
+**无。** 双语 README 精简任务 `tp-cipkwu` 已完成并通过 `make check`；Cursor CLI 阶段性实测已记入 `tp-zagvp5`，未完成的验收项等待后续接手。当前没有 `in_progress` 任务。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -62,7 +62,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 CLI sessionStart 注入和 alwaysApply 规则已有隔离实测，sessionEnd、真实压缩、IDE 和 --user 仍待验证；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。
+按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 CLI sessionStart 注入和 alwaysApply 规则已有隔离实测，sessionEnd、真实压缩、IDE 和 --user 仍待验证；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。公开仓库前需由所有者决定是否接受完整 Git 历史中的个人邮箱、本机身份和已删除 swap 文件元数据披露，或先制定历史清理/公开快照方案；当前 README 准确标记 private，公开后需同步更新并匿名验证原始安装脚本与 Release 下载。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。
