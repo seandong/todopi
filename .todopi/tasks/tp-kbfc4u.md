@@ -1,12 +1,13 @@
 ---
 id: "tp-kbfc4u"
 title: "Detect missing cwd on Linux shells"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0g"
 verify: "make check"
 created: "2026-10-08T14:43:41Z"
-updated: "2026-10-08T15:07:05Z"
+updated: "2026-10-08T15:07:30Z"
 ---
 
 ## Acceptance Criteria
@@ -31,3 +32,4 @@ updated: "2026-10-08T15:07:05Z"
 - 2026-10-08T15:02:04Z claude-code@Seans-MacBook-Pro.local check ac=3: Published raw and site installer continue to work without editing personal confi
 - 2026-10-08T15:06:55Z claude-code@Seans-MacBook-Pro.local check ac=2: Removed-cwd npm and binary regressions pass on Linux CI and macOS
 - 2026-10-08T15:07:05Z claude-code@Seans-MacBook-Pro.local note: Linux Harness 37797035128 passed check/test/e2e; f21-install logged both removed-cwd npm and binary pass. Install 37797034995 passed artifacts/without-node/with-node. Published https://todopi.com/install.sh matched main and installed npm and checksum-verified binary from removed cwd into temporary directories on macOS (both 0.2.0); no personal config edited. Earlier pipeline shell-init/getcwd warning remains external to installer.
+- 2026-10-08T15:07:30Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=7869f13 dirty=false
