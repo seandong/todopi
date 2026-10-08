@@ -74,6 +74,13 @@ R="$TMP/repoA"; mkdir -p "$R"; git -C "$R" init -q
 (cd "$R" && "$A/.local/bin/todopi" init >/dev/null 2>&1 && "$A/.local/bin/todopi" add "first" >/dev/null 2>&1 && "$A/.local/bin/todopi" ls | grep -q first) \
   && ok "装好的命令跑通第一条命令（init / add / ls）" || fail "装好的 todopi 跑不通"
 
+# 从已删除的目录启动时，npm/Node 会因 uv_cwd 失败。安装器必须先恢复可用的 cwd。
+mkdir -p "$TMP/gone-npm"
+out="$(cd "$TMP/gone-npm" && rmdir "$TMP/gone-npm" && HOME="$TMP/gone-home" TODOPI_VERSION="$VERSION" TODOPI_NPM_SPEC="$TGZ" sh "$ROOT/install.sh" 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && [ -x "$TMP/gone-home/.local/bin/todopi" ] && printf '%s' "$out" | grep -q 'installing the npm package' \
+  && ! printf '%s' "$out" | grep -q 'WARNING: npm could not install' \
+  && ok "当前目录已删除：npm 路径仍可安装" || fail "失效 cwd 的 npm 路径：rc=${rc}：$out"
+
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   out="$(docker run --rm -v "$TGZ:/pkg.tgz:ro" node:20.0.0-slim sh -c 'npm i -g /pkg.tgz >/dev/null 2>&1 && cd /tmp && todopi init >/dev/null && todopi add first --verify "true" >/dev/null && ID=$(todopi ls | cut -d" " -f1) && todopi --as ci claim $ID >/dev/null && todopi --as ci done $ID --yes 2>/dev/null && todopi ls --all && node --version' 2>&1)"; rc=$?
   [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -qE "^tp-[a-z0-9]+ +done +first$" && printf '%s' "$out" | grep -q "^v20.0.0$" \
@@ -103,6 +110,10 @@ binstall() { # binstall <home> [env...]：离线装二进制；输出与退出�
 out="$(binstall "$TMP/b1" TODOPI_FORCE_BINARY=1)"; rc=$?
 [ "$rc" -eq 0 ] && [ "$("$TMP/b1/.local/bin/todopi")" = "$FV-fake" ] && printf '%s' "$out" | grep -q "checksum verified" \
   && ok "二进制路径：下载、SHA-256 校验通过、装到 ~/.local/bin" || fail "rc=${rc}：$out"
+mkdir -p "$TMP/gone-binary"
+out="$(cd "$TMP/gone-binary" && rmdir "$TMP/gone-binary" && HOME="$TMP/gone-binary-home" TODOPI_VERSION="$FV" TODOPI_DOWNLOAD_BASE="file://$REL" TODOPI_FORCE_BINARY=1 sh "$ROOT/install.sh" 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$("$TMP/gone-binary-home/.local/bin/todopi")" = "$FV-fake" ] && printf '%s' "$out" | grep -q 'checksum verified' \
+  && ok "当前目录已删除：二进制路径仍可校验并安装" || fail "失效 cwd 的二进制路径：rc=${rc}：$out"
 
 # 没有 Node 的 PATH：只放安装器要用的工具
 NB="$TMP/nonode"; mkdir -p "$NB"
