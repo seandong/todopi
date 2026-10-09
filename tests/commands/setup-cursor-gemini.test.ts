@@ -106,7 +106,7 @@ test("cursor：写 .cursor/hooks.json（version 1，sessionStart 注入 + sessio
   assert.deepEqual(r.files.map((f) => [f.path, f.status]), [[hooks, "created"], [rule, "created"]]);
   assert.deepEqual(json(hooks), { version: 1, hooks: {
     sessionStart: [{ command: "todopi --agent cursor prime --hook --hook-json cursor" }],
-    sessionEnd: [{ command: "todopi --agent cursor handoff --check --hook" }] } });
+    sessionEnd: [{ command: "todopi --agent cursor handoff --check --hook --hook-json cursor" }] } });
   const text = readFileSync(rule, "utf8");
   assert.equal(text, CURSOR_RULE);
   assert.deepEqual(text.split("\n").slice(0, 4), ["---", CURSOR_RULE_MARKER, "alwaysApply: true", "---"]);
@@ -127,7 +127,7 @@ test("cursor hooks.json：别的钩子与键原样保留，只往末尾补；带
   assert.deepEqual(s.extra, { a: 1 });
   assert.deepEqual(s.hooks.stop, [{ command: "./stop.sh" }]);
   assert.equal(s.hooks.sessionStart.length, 2, "带正数 timeout 的算装好");
-  assert.deepEqual(s.hooks.sessionEnd.at(-1), { command: "todopi --agent cursor handoff --check --hook" });
+  assert.deepEqual(s.hooks.sessionEnd.at(-1), { command: "todopi --agent cursor handoff --check --hook --hook-json cursor" });
   assert.equal(s.hooks.sessionEnd.length, 2);
   assert.equal(statSync(p).mode & 0o777, 0o600, "权限位不变");
 });
@@ -162,6 +162,29 @@ test("cursor 规则文件：第二行是我们的标记才替换；用户自己�
   writeFileSync(rule, `${CURSOR_RULE_MARKER}\n---\nmine\n`);
   assert.throws(() => runSetup({ directory: d, agent: "cursor" }), code(EXIT.usage), "标记在第一行不算");
   assert.equal(readFileSync(rule, "utf8"), `${CURSOR_RULE_MARKER}\n---\nmine\n`);
+});
+
+test("cursor：旧 sessionEnd 标准命令原位升级为 JSON 输出，不生成重复钩子", () => {
+  const d = tmp(), p = join(d, "hooks.json");
+  writeFileSync(p, JSON.stringify({ version: 1, hooks: {
+    sessionEnd: [{ command: "todopi --agent cursor handoff --check --hook" }],
+  } }));
+  assert.equal(ensureCursorHooks(p).status, "updated");
+  assert.deepEqual(json(p).hooks.sessionEnd, [{ command: "todopi --agent cursor handoff --check --hook --hook-json cursor" }]);
+  assert.equal(ensureCursorHooks(p).status, "unchanged");
+});
+
+test("cursor：旧 sessionEnd 钩子自定义了设置时保留并警告，不能偷偷覆盖", () => {
+  const d = tmp(), p = join(d, "hooks.json");
+  writeFileSync(p, JSON.stringify({ version: 1, hooks: {
+    sessionEnd: [{ command: "todopi --agent cursor handoff --check --hook", matcher: "custom" }],
+  } }));
+  const r = ensureCursorHooks(p);
+  assert.deepEqual(json(p).hooks.sessionEnd, [
+    { command: "todopi --agent cursor handoff --check --hook", matcher: "custom" },
+    { command: "todopi --agent cursor handoff --check --hook --hook-json cursor" },
+  ]);
+  assert.match(r.notes.join("\n"), /old.*alongside|old.*settings/);
 });
 
 test("cursor --user：钩子写 ~/.cursor/hooks.json；规则文件只在项目里写，不在项目里说明", () => {

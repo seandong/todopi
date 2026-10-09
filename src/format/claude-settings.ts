@@ -217,7 +217,7 @@ export function ensureGeminiSettings(path: string): SettingsResult {
  */
 export const CURSOR_HOOKS: HookList = withAgent("cursor", [
   ["sessionStart", "todopi prime --hook --hook-json cursor"],
-  ["sessionEnd", "todopi handoff --check --hook"],
+  ["sessionEnd", "todopi handoff --check --hook --hook-json cursor"],
 ]);
 
 export function ensureCursorHooks(path: string): SettingsResult {
@@ -246,18 +246,20 @@ export function ensureCursorHooks(path: string): SettingsResult {
   for (const [event, command, , legacy] of CURSOR_HOOKS) {
     if (event in hooks && !Array.isArray(hooks[event])) refuse(path, `hooks.${event} is not a list`);
     const entries: unknown[] = Array.isArray(hooks[event]) ? hooks[event] : [];
+    const previous = event === "sessionEnd" ? "todopi --agent cursor handoff --check --hook" : undefined;
     if (entries.some((h) => standard(h, command))) {
-      if (legacy !== undefined && entries.some((h) => isObject(h) && h["command"] === legacy)) {
-        notes.push(`${path}: hooks.${event} still runs the old \`${legacy}\` alongside the current one; if both run, prime runs twice — remove the old one.`);
+      if ([legacy, previous].some((c) => c !== undefined && entries.some((h) => isObject(h) && h["command"] === c))) {
+        notes.push(`${path}: hooks.${event} still runs the old todopi command alongside the current one; if both run, the hook runs twice — remove the old one.`);
       }
       continue;
     }
-    // 旧版 setup 写的那一项：就地改成新命令（F22）
-    const old = entries.find((h) => standard(h, legacy));
+    // 旧版 setup 写的标准命令就地升级；保留用户自己加过设置的处理器。
+    const old = entries.find((h) => standard(h, previous) || standard(h, legacy));
     if (isObject(old)) { old["command"] = command; changed = true; continue; }
-    if (legacy !== undefined && entries.some((h) => isObject(h) && h["command"] === legacy)) {
-      notes.push(`${path}: hooks.${event} has the old \`${legacy}\` with settings of your own; left as is and added the current one. `
-        + "If both run, prime runs twice — remove one.");
+    const customized = [legacy, previous].find((c) => c !== undefined && entries.some((h) => isObject(h) && h["command"] === c));
+    if (customized !== undefined) {
+      notes.push(`${path}: hooks.${event} has the old \`${customized}\` with settings of your own; left as is and added the current one. `
+        + "If both run, the hook runs twice — remove one.");
     }
     hooks[event] = [...entries, { command }];
     changed = true;

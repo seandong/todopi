@@ -6,7 +6,7 @@ rank: "im"
 verify: "make check && bash tools/e2e/f17-setup-cursor-gemini.sh"
 labels: ["m3"]
 created: "2026-09-26T11:44:21Z"
-updated: "2026-10-06T05:33:07Z"
+updated: "2026-10-08T23:56:14Z"
 ---
 
 ## Description
@@ -15,10 +15,10 @@ updated: "2026-10-06T05:33:07Z"
 
 ## Acceptance Criteria
 
-- [ ] Cursor 在没有压缩后事件的情况下，账本指针活过压缩（原 tp-yuka3e #3）：压缩/摘要之后，模型仍能说出指针（todopi prime）与「察觉到被压缩就跑 todopi prime」
+- [x] Cursor 在没有压缩后事件的情况下，账本指针活过压缩（原 tp-yuka3e #3）：压缩/摘要之后，模型仍能说出指针（todopi prime）与「察觉到被压缩就跑 todopi prime」
 - [ ] Cursor 在 CLI 形态下手工验证一次（原 tp-yuka3e #10）：sessionStart 注入进上下文、规则文件生效、sessionEnd 触发
 - [ ] Cursor 在 IDE 形态下手工验证一次（原 tp-yuka3e #11）
-- [ ] 用户级钩子（setup cursor --user）在项目里按 workspace_roots 找到账本
+- [x] 用户级钩子（setup cursor --user）在项目里按 workspace_roots 找到账本
 - [ ] 实测结果与 Cursor 版本写进 PRD §17
 
 ## Log
@@ -29,3 +29,9 @@ updated: "2026-10-06T05:33:07Z"
 - 2026-10-06T05:29:49Z claude-code@Seans-MacBook-Pro.local note: Cursor CLI dogfood in isolated /tmp/todopi-cursor-cli.Ocwp0Z: setup cursor created project hooks.json and alwaysApply rule; doctor passed. Herdr right pane interactive cursor-agent initially 2026.09.26-dd393fe, then auto-updated to 2026.10.01-e373342. Without invoking tools, agent named in-progress tp-6iy2qk and quoted compaction rule; repeat under TODOPI_ACTOR=cursor@Seans-MacBook-Pro.local also named the held task and rule. A headless -p --mode ask attempt failed on Cursor network reconnect (RetriableError: WritableIterable is closed). sessionEnd hook is read-only handoff --check; no persistent log, so exit alone does not prove execution. IDE, actual compaction and --user workspace_roots remain untested.
 - 2026-10-06T05:32:47Z claude-code@Seans-MacBook-Pro.local note: Second CLI pass with TODOPI_ACTOR=cursor@Seans-MacBook-Pro.local on Cursor Agent 2026.10.01-e373342: interactive sessionStart context named held tp-6iy2qk and alwaysApply compaction rule without tools; normal Ctrl-D returned to shell. Cannot claim actual compaction survived: no verified manual compaction occurred. Existing sessionEnd command is handoff --check and has no persistent side effect; exit shows no hook output, so it remains unproven. A temporary hook-events.log instrumentation in the isolated project was blocked by Claude Code automatic approval as an unauthorized persistent hook command; no workaround attempted. Cursor IDE and user-level hooks remain untested.
 - 2026-10-06T05:33:07Z claude-code@Seans-MacBook-Pro.local released
+- 2026-10-08T23:38:10Z claude-code@Seans-MacBook-Pro.local claimed
+- 2026-10-08T23:49:30Z claude-code@Seans-MacBook-Pro.local check ac=1: Cursor 在没有压缩后事件的情况下，账本指针活过压缩（原 tp-yuka3e #3）：压缩/摘要之后，模型仍能说出指针（todopi prime）与「察觉到
+- 2026-10-08T23:49:30Z claude-code@Seans-MacBook-Pro.local check ac=4: 用户级钩子（setup cursor --user）在项目里按 workspace_roots 找到账本
+- 2026-10-08T23:49:47Z claude-code@Seans-MacBook-Pro.local note: 2026-10-09 CLI Cursor Agent 2026.10.01-e373342 in isolated /tmp/todopi-cursor-verify.4vKlk1: session answered held tp-49ufgg and todopi prime without tools; actual /summarize displayed summary, next prompt identified compaction, task, and command. CLI emitted WritableIterable is closed during reconnect; Ctrl-D exited but sessionEnd still lacks observable success. setup cursor --user under isolated HOME /tmp/todopi-cursor-home.W2aZht wrote only fake ~/.cursor/hooks.json; from that directory both prime --hook --hook-json cursor and handoff --check --hook resolved workspace_roots and returned task/report. Cursor IDE 3.22.7 launched with isolated user-data-dir and project hook logs showed both project hooks loaded, but no chat sent: GUI automation denied by macOS assistive-access permission. IDE window-close hook log showed MainThreadShellExec not initialized, so IDE execution remains unverified. No personal configuration edited.
+- 2026-10-08T23:56:14Z claude-code@Seans-MacBook-Pro.local note: CLI debug log for real session 794690e0: sessionStart project status=success and additional_context received; sessionEnd project status=failed errorClass=invalid_json despite exitCode=0 (current hook prints human-readable handoff). Follow-up tp-ocwx91 created for JSON output fix; IDE sessionEnd requires separate GUI evidence. Not counting AC2/AC3 as passed yet.
+- 2026-10-08T23:56:14Z claude-code@Seans-MacBook-Pro.local released

@@ -39,8 +39,9 @@ grep -q '"key":"session:cur-1"' "$W"/.git/todopi/leases/sessions/*.json 2>/dev/n
 # Cursor 的用户级钩子在 ~/.cursor/ 里运行：按载荷的 workspace_roots 找到项目
 out="$(cd "$TMP" && printf '{"conversation_id":"cur-2","workspace_roots":["%s"]}' "$W" | todopi prime --hook --hook-json cursor 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"additional_context"' && ok "不在项目里运行时按 workspace_roots 找到账本" || fail "rc=${rc}：$out"
-out="$(cd "$TMP" && printf '{"conversation_id":"cur-2","workspace_roots":["%s"]}' "$W" | todopi handoff --check --hook 2>&1)"; rc=$?
-[ "$rc" -eq 0 ] && [ -n "$out" ] && ok "handoff --check --hook 同样按 workspace_roots" || fail "rc=${rc}：$out"
+out="$(cd "$TMP" && printf '{"conversation_id":"cur-2","workspace_roots":["%s"]}' "$W" | todopi handoff --check --hook --hook-json cursor 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && printf '%s' "$out" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));process.exit(j&&typeof j==="object"&&!Array.isArray(j)?0:1)' \
+  && ok "cursor 的 sessionEnd：按 workspace_roots 找到账本并输出有效 JSON" || fail "rc=${rc}：$out"
 
 out="$(cd "$TMP" && printf '{"workspace_roots":["/nonexistent"]}' | todopi -C "$W" prime --hook --hook-json cursor 2>&1)"
 printf '%s' "$out" | grep -q '"additional_context"' && ok "-C 优先于 workspace_roots" || fail "$out"

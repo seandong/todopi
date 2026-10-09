@@ -318,7 +318,8 @@ program
   .option("--check", "only print the report; write nothing and exit 0")
   .option("--session <id>", "the agent session to compare against (its last prime); defaults to the actor")
   .option("--hook", "called from an agent hook: read the session id from the JSON on stdin; stay silent without a ledger")
-  .action(async (cmdOpts: { check?: boolean; session?: string; hook?: boolean }) => {
+  .option("--hook-json <shape>", "return the hook JSON an agent expects: cursor")
+  .action(async (cmdOpts: { check?: boolean; session?: string; hook?: boolean; hookJson?: string }) => {
     const { runHandoff } = await import("./commands/handoff.ts");
     const { renderHandoff } = await import("./output/render/handoff.ts");
     const opts = program.opts();
@@ -332,7 +333,12 @@ program
       actor: opts["as"] as string | undefined,
       check: cmdOpts.check,
     });
-    process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderHandoff(report));
+    if (cmdOpts.hookJson !== undefined) {
+      if (cmdOpts.hookJson !== "cursor") throw new CliError(EXIT.usage, `Unknown --hook-json shape ${JSON.stringify(cmdOpts.hookJson)}; expected cursor.`);
+      process.stdout.write("{}\n");
+    } else {
+      process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderHandoff(report));
+    }
     // 有任务没写成：以第一个失败的退出码退出（报告已经打印了哪些成功、哪些没有）。
     if (report.failed.length > 0) process.exitCode = report.failed[0]!.code;
   });
