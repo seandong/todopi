@@ -103,12 +103,15 @@ test("handoff --hook-json 的非法形状在写交接日志前拒绝", () => {
   const t = runAdd({ directory: d, title: "t", actor: ME }).id;
   runClaim({ directory: d, id: t, actor: ME });
   const before = snapshot(d);
+  const leasePath = join(leaseDirFor(discoverLedger(d)), `${t}.json`);
+  const beforeLease = readFileSync(leasePath, "utf8");
   const r = spawnSync(process.execPath, [join(process.cwd(), "src", "cli.ts"), "-C", d, "--as", ME,
     "handoff", "--hook-json", "typo"], { encoding: "utf8" });
   assert.equal(r.status, EXIT.usage, r.stderr);
   assert.match(r.stderr, /Unknown --hook-json shape/);
   assert.equal(r.stdout, "");
   assert.deepEqual(snapshot(d), before);
+  assert.equal(readFileSync(leasePath, "utf8"), beforeLease, "非法参数不得刷新运行时租约");
 });
 
 test("--check：报告照出，账本与运行时目录逐字节不变", () => {
