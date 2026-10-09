@@ -5,13 +5,13 @@
 
 ## Current State
 
-- Last commit: `68049a0` —— v0.2.1 发版准备已评审 Go：版本、六份生成清单、文档和任务认领已提交；本地三层门禁、npm tarball 隔离安装和 darwin-arm64 二进制启动通过。`main` 已推送至 `1803567`，远端 Harness `37875658883`、Install `37875658845` 均成功。自动审批拒绝推送会触发公开 npm 发布的 `v0.2.1` 标签，故本地与远端均无此标签，npm 和 GitHub Release 仍为 `0.2.0`，公开安装验收待做。真实用户配置未改。
-- `make check`: `pass`（2026-10-09，v0.2.1 发版准备）—— docs-links / spec-version / prd-present / arch-rules（30/31 通过、1 不适用）/ typecheck。
-- `make test`: 本地 `pass`（2026-10-09，v0.2.1 发版准备）—— 全量单元/集成测试通过；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
-- `make e2e`: 本地与远端 Linux `pass`（2026-10-09，v0.2.1 发版准备）—— 完整端到端含 Cursor 的 JSON 输出回归；macOS c14 临时目录 ACL 清理仍提示 Permission denied，门禁退出 0。远端 Harness `37875658883` 的 Layer 1–3 通过。
-- `make clean-check`: 上次合回 `main` 后 `pass`（2026-10-09）；本次发版准备的状态证据提交后再运行。
+- Last commit: `29f63dd` —— 已发布 `v0.2.1`（标签 peeled SHA `130881b`）：Release `37880446442`、Harness `37880446440`、Install `37880446471` 全部成功。npm `todopi@0.2.1` 已是 `latest`，其 `dist.integrity` 与 Release 中的 npm tarball 相符；四平台二进制通过 `SHA256SUMS`。公开 npm 包与 GitHub 二进制均在隔离 HOME 实装，旧 Cursor 标准结束钩子升级后输出有效 JSON，从已删除工作目录执行安装器也通过。tp-zapxfh 已关闭（`verify=pass commit=29f63dd dirty=false`），真实用户配置未改。
+- `make check`: `pass`（2026-10-09，v0.2.1 发布后 `todopi done` 的 verify）—— docs-links / spec-version / prd-present / arch-rules（30/31 通过、1 不适用）/ typecheck。
+- `make test`: 本地 `pass`（2026-10-09，发布后 verify）—— 全量单元/集成测试通过；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
+- `make e2e`: 本地与标签远端 Linux `pass`（2026-10-09，发布后 verify）—— 完整端到端含 Cursor JSON 输出回归；macOS c14 临时目录 ACL 清理仍可能提示 Permission denied，门禁退出 0。标签 Harness `37880446440` 的 Layer 1–3 通过。
+- `make clean-check`: 发版准备检查点 `pass`（2026-10-09）；发布后账本与状态提交完成后再运行。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
-- 账本: `.todopi/` 57 个任务，53 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、1 个 `in_progress`（tp-zapxfh 发版，等待标签发布权限与公开安装验收）。
+- 账本: `.todopi/` 57 个任务，54 个 `closed/done`（含 tp-zapxfh）、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -24,7 +24,7 @@
 
 ## In Progress
 
-**tp-zapxfh v0.2.1 发版**：版本与文档准备、三层本地验证、本地 npm tarball 和 darwin-arm64 二进制、独立评审、主线推送与 Harness/Install CI 均已完成。尚未推送 `v0.2.1` 标签：Claude Code 自动审批认为标签会触发公开 npm 发布且缺少可识别的直接确认，拒绝了这次操作；没有绕过。验收 #3（标签、npm、Release）与 #4（公开安装）保持未勾。下一步是解除此发布权限阻断，确认 `main` 的最新提交，再由获准操作推送标签；随后查 Release、npm 完整性并用隔离 HOME 安装公开版本。Cursor IDE 的真实对话验证仍是独立 open 任务 tp-zagvp5。
+**无。** tp-zapxfh v0.2.1 发版已完成：先前自动审批阻断在维护者明确授权后解除；标签、npm、Release、三条标签 CI 与公开安装验收均通过。Cursor IDE 真实对话验证仍是独立 open 任务 tp-zagvp5。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -46,7 +46,7 @@ todopi ls --ready → todopi claim <id> → 干活 → todopi check 逐条勾验
 → git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
 
-**remote 状态**：`origin` 是公开的 `github.com/seandong/todopi`。`main` 发版准备提交 `1803567` 的 Harness `37875658883` 成功（Layer 1–3），Install `37875658845` 成功（构建、有 Node npm 与无 Node 二进制安装）。`v0.2.1` 标签、npm 包与 GitHub Release 均不存在，不能把本地包的验证当作公开发行物验收。上一公开版仍是 `v0.2.0`，标签 peeled SHA `6fa0d4b`，标签 Release `37406508070` / Harness `37406508071` / Install `37406508057` 均成功；该版 Release 的 7 项资产和 npm integrity 已核实。Homebrew tap 更新曾因无 token 跳过，待单独核实。
+**remote 状态**：`origin` 是公开的 `github.com/seandong/todopi`。最新公开版 `v0.2.1` 标签 peeled SHA `130881b`；标签 Release `37880446442` / Harness `37880446440` / Install `37880446471` 均成功。Release 7 项资产中四个平台归档经 `SHA256SUMS` 校验；npm `todopi@0.2.1` 的 tarball SHA512 与 registry `dist.integrity` 一致，`latest` 已指向 0.2.1。公开 npm 和二进制安装均隔离实测。Homebrew tap 更新因无 token 跳过，tp-ujjc6y 的 brew 实装仍未验收。
 
 ## 里程碑
 
@@ -60,7 +60,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按编号保留已完成工作的记录；当前优先继续 tp-zapxfh：解决自动审批对公开标签发布的阻断，发布 `v0.2.1` 后核对 npm、Release 资产与校验和，再隔离安装、核对 Cursor 标准旧钩子迁移和已删除 cwd 的安装路径。tp-zagvp5 的 Cursor CLI/压缩/模拟 --user 已有证据，**仅 IDE 真实会话未验收**；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。真实用户配置未改。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
+按编号保留已完成工作的记录；`v0.2.1` 已公开发布并验收。tp-zagvp5 的 Cursor CLI/压缩/模拟 --user 已有证据，**仅 IDE 真实会话未验收**；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装与 tap 配置。真实用户配置未改。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。

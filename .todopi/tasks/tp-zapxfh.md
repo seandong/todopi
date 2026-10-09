@@ -1,12 +1,13 @@
 ---
 id: "tp-zapxfh"
 title: "Release v0.2.1 with Cursor hook and installer fixes"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0i"
 verify: "make check && make test && make e2e"
 created: "2026-10-09T02:25:59Z"
-updated: "2026-10-09T03:48:50Z"
+updated: "2026-10-09T03:53:10Z"
 ---
 
 ## Description
@@ -33,3 +34,4 @@ Publish the already merged Cursor sessionEnd JSON fix and removed-working-direct
 - 2026-10-09T03:48:50Z claude-code@Seans-MacBook-Pro.local note: Tag Harness run 37880446440 completed success, alongside Release 37880446442 and Install 37880446471. Public npm 0.2.1 is latest; Release tarball matches registry dist.integrity. Isolated public npm and binary installs, Cursor sessionEnd migration/JSON, and removed-cwd installation all passed. Cursor IDE real chat remains unverified under tp-zagvp5; Homebrew tap update was skipped because the token is absent.
 - 2026-10-09T03:48:50Z claude-code@Seans-MacBook-Pro.local check ac=3: Push tested main and v0.2.1 tag; Release workflow publishes npm and GitHub asset
 - 2026-10-09T03:48:50Z claude-code@Seans-MacBook-Pro.local check ac=4: Install the published version in an isolated environment and verify Cursor sessi
+- 2026-10-09T03:53:10Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=29f63dd dirty=false
