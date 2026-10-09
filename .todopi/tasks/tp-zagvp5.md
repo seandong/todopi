@@ -7,7 +7,7 @@ rank: "im"
 verify: "make check && bash tools/e2e/f17-setup-cursor-gemini.sh"
 labels: ["m3"]
 created: "2026-09-26T11:44:21Z"
-updated: "2026-10-09T00:33:40Z"
+updated: "2026-10-09T00:38:04Z"
 ---
 
 ## Description
@@ -40,3 +40,4 @@ updated: "2026-10-09T00:33:40Z"
 - 2026-10-09T00:33:16Z claude-code@Seans-MacBook-Pro.local check ac=2: Cursor 在 CLI 形态下手工验证一次（原 tp-yuka3e #10）：sessionStart 注入进上下文、规则文件生效、sessionEnd 触发
 - 2026-10-09T00:33:30Z claude-code@Seans-MacBook-Pro.local check ac=5: 实测结果与 Cursor 版本写进 PRD §17
 - 2026-10-09T00:33:40Z claude-code@Seans-MacBook-Pro.local note: 2026-10-09: Cursor Agent CLI 2026.10.01-e373342 sessionStart project success and additional_context received; actual /summarize retained tp-49ufgg and todopi prime; after tp-ocwx91, project sessionEnd using branch CLI absolute path succeeded exitCode=0. PRD §17 now records versions, CLI/isolated --user results, old installed 0.2.0 limitation, and IDE 3.22.7 loaded config but no chat because macOS assistive access denied (-1728). AC2 and AC5 checked; IDE AC3 remains open. No personal settings changed.
+- 2026-10-09T00:38:04Z claude-code@Seans-MacBook-Pro.local note: AC2 rule evidence strengthened 2026-10-09: in isolated /tmp/todopi-cursor-verify.4vKlk1 only, appended unique cobalt-orchard-5729 to .cursor/rules/todopi.mdc. Real cursor-agent --print --mode ask --workspace <isolated repo> asked for rule phrase without tools; answer contained exact phrase after reconnect attempts. This phrase is absent from AGENTS.md and prime output; therefore rule content reached CLI context. Existing real session logs prove project sessionStart success/additional_context and project sessionEnd success exitCode=0 using branch CLI. Isolated rule file is temporary; product source and personal configuration untouched.

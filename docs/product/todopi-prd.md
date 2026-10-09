@@ -475,7 +475,10 @@ agent 录，而不是假设六家表现一致。
 
 - **Cursor Agent CLI 2026.10.01-e373342**，在隔离的 git/todopi 项目中装项目级钩子和 `alwaysApply: true` 规则。
   真实交互会话的调试日志显示项目级 `sessionStart` 为 `success`，`additional_context` 被接收；不调用工具询问时，模型说出进行中任务
-  `tp-49ufgg` 与 `todopi prime`。执行真实 `/summarize` 后，下一轮模型仍识别压缩、任务与恢复命令。这证明 CLI 形态的指针活过本次摘要；没有压缩后钩子的重新注入证据。
+  `tp-49ufgg` 与 `todopi prime`。执行真实 `/summarize` 后，下一轮模型仍识别压缩、任务与恢复命令。
+  为区分规则文件与 AGENTS.md / prime 的指针，另在**隔离项目**的规则文件里追加独有短语 `cobalt-orchard-5729`；
+  真实 `cursor-agent --print --mode ask` 在禁止工具调用的提问中原样回答该短语，确认规则内容进入 CLI 上下文。
+  这证明 CLI 形态的指针活过本次摘要；没有压缩后钩子的重新注入证据。
 - 原项目级 `sessionEnd` 命令打印人类可读的 handoff，Cursor 虽记录退出码 0，却判 `invalid_json`。
   tp-ocwx91 给 Cursor 专用命令增加 `--hook-json cursor`，在 `handoff --check --hook` 路径输出 `{}`；旧标准钩子由再次运行 `setup cursor` 就地升级。
   临时项目把结束钩子**单独**指向本分支 CLI 后，真实 Cursor 调试日志显示项目级 `sessionEnd` 为 `success`、退出码 0。
