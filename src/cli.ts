@@ -320,6 +320,9 @@ program
   .option("--hook", "called from an agent hook: read the session id from the JSON on stdin; stay silent without a ledger")
   .option("--hook-json <shape>", "return the hook JSON an agent expects: cursor")
   .action(async (cmdOpts: { check?: boolean; session?: string; hook?: boolean; hookJson?: string }) => {
+    if (cmdOpts.hookJson !== undefined && cmdOpts.hookJson !== "cursor") {
+      throw new CliError(EXIT.usage, `Unknown --hook-json shape ${JSON.stringify(cmdOpts.hookJson)}; expected cursor.`);
+    }
     const { runHandoff } = await import("./commands/handoff.ts");
     const { renderHandoff } = await import("./output/render/handoff.ts");
     const opts = program.opts();
@@ -334,7 +337,6 @@ program
       check: cmdOpts.check,
     });
     if (cmdOpts.hookJson !== undefined) {
-      if (cmdOpts.hookJson !== "cursor") throw new CliError(EXIT.usage, `Unknown --hook-json shape ${JSON.stringify(cmdOpts.hookJson)}; expected cursor.`);
       process.stdout.write("{}\n");
     } else {
       process.stdout.write(opts["json"] === true ? JSON.stringify(report, null, 2) + "\n" : renderHandoff(report));

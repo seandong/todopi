@@ -174,6 +174,25 @@ test("cursor：旧 sessionEnd 标准命令原位升级为 JSON 输出，不生�
   assert.equal(ensureCursorHooks(p).status, "unchanged");
 });
 
+test("cursor：标准与自定义旧 sessionEnd 钩子并存时升级标准项，并提示遗留旧钩子", () => {
+  const d = tmp(), p = join(d, "hooks.json");
+  writeFileSync(p, JSON.stringify({ version: 1, hooks: {
+    sessionEnd: [
+      { command: "todopi --agent cursor handoff --check --hook" },
+      { command: "todopi --agent cursor handoff --check --hook", matcher: "custom" },
+    ],
+  } }));
+  const r = ensureCursorHooks(p);
+  assert.deepEqual(json(p).hooks.sessionEnd, [
+    { command: "todopi --agent cursor handoff --check --hook --hook-json cursor" },
+    { command: "todopi --agent cursor handoff --check --hook", matcher: "custom" },
+  ]);
+  assert.match(r.notes.join("\n"), /old.*runs twice/);
+  const again = ensureCursorHooks(p);
+  assert.equal(again.status, "unchanged");
+  assert.match(again.notes.join("\n"), /still runs the old/);
+});
+
 test("cursor：旧 sessionEnd 钩子自定义了设置时保留并警告，不能偷偷覆盖", () => {
   const d = tmp(), p = join(d, "hooks.json");
   writeFileSync(p, JSON.stringify({ version: 1, hooks: {

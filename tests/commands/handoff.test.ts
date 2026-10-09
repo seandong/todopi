@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,6 +96,19 @@ test("最近一小时有 Log 的不算安静；两小时之后算", () => {
   runClaim({ directory: d, id: t, actor: ME });
   assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true }).quiet, []);
   assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true, now: HOURS_LATER }).quiet.map((x) => x.id), [t]);
+});
+
+test("handoff --hook-json 的非法形状在写交接日志前拒绝", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "t", actor: ME }).id;
+  runClaim({ directory: d, id: t, actor: ME });
+  const before = snapshot(d);
+  const r = spawnSync(process.execPath, [join(process.cwd(), "src", "cli.ts"), "-C", d, "--as", ME,
+    "handoff", "--hook-json", "typo"], { encoding: "utf8" });
+  assert.equal(r.status, EXIT.usage, r.stderr);
+  assert.match(r.stderr, /Unknown --hook-json shape/);
+  assert.equal(r.stdout, "");
+  assert.deepEqual(snapshot(d), before);
 });
 
 test("--check：报告照出，账本与运行时目录逐字节不变", () => {

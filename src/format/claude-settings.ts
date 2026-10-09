@@ -255,7 +255,14 @@ export function ensureCursorHooks(path: string): SettingsResult {
     }
     // 旧版 setup 写的标准命令就地升级；保留用户自己加过设置的处理器。
     const old = entries.find((h) => standard(h, previous) || standard(h, legacy));
-    if (isObject(old)) { old["command"] = command; changed = true; continue; }
+    if (isObject(old)) {
+      old["command"] = command;
+      changed = true;
+      if ([legacy, previous].some((c) => c !== undefined && entries.some((h) => isObject(h) && h["command"] === c))) {
+        notes.push(`${path}: hooks.${event} still runs the old todopi command alongside the current one; if both run, the hook runs twice — remove the old one.`);
+      }
+      continue;
+    }
     const customized = [legacy, previous].find((c) => c !== undefined && entries.some((h) => isObject(h) && h["command"] === c));
     if (customized !== undefined) {
       notes.push(`${path}: hooks.${event} has the old \`${customized}\` with settings of your own; left as is and added the current one. `
