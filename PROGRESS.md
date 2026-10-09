@@ -5,11 +5,11 @@
 
 ## Current State
 
-- Last commit: `44e3a41` —— Cursor CLI `sessionEnd` 的 `invalid_json` 修复 tp-ocwx91 已关闭（`verify=pass commit=1270b7a dirty=false`）；源码提供专用 `--hook-json cursor` 输出 `{}`、旧钩子迁移与两个评审行为规则。真实 Cursor Agent CLI 2026.10.01-e373342 的项目级结束钩子在临时项目调用本分支 CLI 后 `success exitCode=0`。tp-zagvp5 的真实 `/summarize` 后指针、规则文件独有短语与模拟 HOME 用户级定位已记录在 PRD §17；独立评审 Go。IDE 3.22.7 仍无对话证据，任务释放为 open。已安装的 `0.2.0` 不识别新选项，真实用户配置未改；修复尚未发布为新版安装包。
+- Last commit: `b3890b5` —— Cursor CLI `sessionEnd` 的 `invalid_json` 修复 tp-ocwx91 已关闭（`verify=pass commit=1270b7a dirty=false`）；源码提供专用 `--hook-json cursor` 输出 `{}`、旧钩子迁移与两个评审行为规则。真实 Cursor Agent CLI 2026.10.01-e373342 的项目级结束钩子在临时项目调用本分支 CLI 后 `success exitCode=0`。tp-zagvp5 的真实 `/summarize` 后指针、规则文件独有短语与模拟 HOME 用户级定位已记录在 PRD §17；独立评审 Go。IDE 3.22.7 仍无对话证据，任务释放为 open。主线已快进推送，远端 Harness `37866650883`、Install `37866650805` 均成功；已安装的 `0.2.0` 不识别新选项，真实用户配置未改，修复尚未发布为新版安装包。
 - `make check`: `pass`（2026-10-09）—— docs-links / spec-version / prd-present / arch-rules（30/31 通过、1 不适用，新增 ARCH-030/031 行为检查）/ typecheck。
 - `make test`: 本地 `pass`（2026-10-09）—— 全量单元/集成测试通过；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
-- `make e2e`: 本地 `pass`（2026-10-09）—— 完整端到端含 Cursor 的 JSON 输出回归；macOS c14 临时目录 ACL 清理仍提示 Permission denied，门禁退出 0。上一轮 Linux Harness/Install 为安装器修复的证据，本次 Cursor 修复尚未推远端。
-- `make clean-check`: 待本轮收尾提交后运行；上一轮为 `pass`。
+- `make e2e`: 合并后本地与远端 Linux `pass`（2026-10-09）—— 完整端到端含 Cursor 的 JSON 输出回归；macOS c14 临时目录 ACL 清理仍提示 Permission denied，门禁退出 0。远端 Harness `37866650883` 的 Layer 1–3 通过。
+- `make clean-check`: 合回 `main` 后 `pass`（2026-10-09）；本次 CI 证据更新提交后再运行。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
 - 账本: `.todopi/` 56 个任务，53 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
@@ -46,7 +46,7 @@ todopi ls --ready → todopi claim <id> → 干活 → todopi check 逐条勾验
 → git commit（done 的账本改动 + PROGRESS）→ make clean-check
 ```
 
-**remote 状态**：`origin` 是公开的 `github.com/seandong/todopi`。`v0.2.0` 已推送，标签 peeled SHA 为 `6fa0d4b`。主线第二轮修复 `a084667` 的 Harness `37797035128` / Install `37797034995` 均成功；此前第一轮 `2c359f3` 的 Harness `37793859039` 失败于 Linux 已删除 cwd 的 npm 回归，作为已修复历史保留。标签 Release `37406508070` / Harness `37406508071` / Install `37406508057` 均成功。Release 共 7 项资产，匿名可下载四个平台归档与 SHA256SUMS；npm tarball SHA512 与 registry 的 `dist.integrity` 一致。Homebrew tap 更新因无 token 跳过，待单独核实。
+**remote 状态**：`origin` 是公开的 `github.com/seandong/todopi`。`v0.2.0` 已推送，标签 peeled SHA 为 `6fa0d4b`。Cursor 修复主线 `b3890b5` 的 Harness `37866650883` 成功（Layer 1–3），Install `37866650805` 成功（构建、有 Node npm 与无 Node 二进制安装）；此前安装器修复 `a084667` 的 Harness `37797035128` / Install `37797034995` 均成功；第一轮 `2c359f3` 的 Harness `37793859039` 失败于 Linux 已删除 cwd 的 npm 回归，作为已修复历史保留。标签 Release `37406508070` / Harness `37406508071` / Install `37406508057` 均成功。Release 共 7 项资产，匿名可下载四个平台归档与 SHA256SUMS；npm tarball SHA512 与 registry 的 `dist.integrity` 一致。Homebrew tap 更新因无 token 跳过，待单独核实。
 
 ## 里程碑
 
