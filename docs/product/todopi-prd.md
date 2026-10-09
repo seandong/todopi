@@ -471,6 +471,21 @@ agent 录，而不是假设六家表现一致。
 - **Cursor 未实测**：`cursor-agent status` 显示已登录，但无头 `-p` 报「Authentication required」，交互式要求浏览器登录。
   CLI 与 IDE 的手工验证（FR-A2b）拆到单独的任务。
 
+### 2026-10-09 Cursor 实机续验（tp-zagvp5、tp-ocwx91）
+
+- **Cursor Agent CLI 2026.10.01-e373342**，在隔离的 git/todopi 项目中装项目级钩子和 `alwaysApply: true` 规则。
+  真实交互会话的调试日志显示项目级 `sessionStart` 为 `success`，`additional_context` 被接收；不调用工具询问时，模型说出进行中任务
+  `tp-49ufgg` 与 `todopi prime`。执行真实 `/summarize` 后，下一轮模型仍识别压缩、任务与恢复命令。这证明 CLI 形态的指针活过本次摘要；没有压缩后钩子的重新注入证据。
+- 原项目级 `sessionEnd` 命令打印人类可读的 handoff，Cursor 虽记录退出码 0，却判 `invalid_json`。
+  tp-ocwx91 给 Cursor 专用命令增加 `--hook-json cursor`，在 `handoff --check --hook` 路径输出 `{}`；旧标准钩子由再次运行 `setup cursor` 就地升级。
+  临时项目把结束钩子**单独**指向本分支 CLI 后，真实 Cursor 调试日志显示项目级 `sessionEnd` 为 `success`、退出码 0。
+  本机已安装的 `todopi@0.2.0` 不认识这个新参数，因此这次证据只对应本分支代码，不能当作已发布安装包的验收。
+- `setup cursor --user` 只在隔离 HOME 下执行。从模拟的 `~/.cursor/` 目录发起钩子，stdin 的 `workspace_roots` 能定位项目账本；
+  `prime --hook --hook-json cursor` 返回任务，`handoff --check --hook --hook-json cursor` 返回合法 JSON。真实个人 Cursor 配置未改。
+- **Cursor IDE 3.22.7 尚未完成实机交互验证**。用隔离 `--user-data-dir` 打开临时项目，日志显示项目钩子与规则被加载；
+  macOS 拒绝 `osascript` 的辅助功能控制（`-1728`），没有发出真实 IDE 对话。空窗口关闭日志里的
+  `MainThreadShellExec not initialized` 不足以证明 IDE 的 `sessionEnd` 可用。FR-A2b 的 IDE 验收仍未通过。
+
 ### 顺带确认
 
 - **沙箱约束整棵进程树**（Claude Code、Codex 均已确认），所以 README 建议用户
