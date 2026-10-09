@@ -6,7 +6,7 @@ assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0i"
 verify: "make check && make test && make e2e"
 created: "2026-10-09T02:25:59Z"
-updated: "2026-10-09T02:39:45Z"
+updated: "2026-10-09T02:47:57Z"
 ---
 
 ## Description
@@ -28,3 +28,4 @@ Publish the already merged Cursor sessionEnd JSON fix and removed-working-direct
 - 2026-10-09T02:39:30Z claude-code@Seans-MacBook-Pro.local note: Built and launched native darwin-arm64 binary from release/v0.2.1: --version=0.2.1 and cursor handoff help exits 0. npm registry, GitHub Release and remote tag have no v0.2.1 yet; origin/main is 45c26a9, a fast-forward base for b0a7fbb. Awaiting independent read-only review before main/tag push.
 - 2026-10-09T02:39:45Z claude-code@Seans-MacBook-Pro.local check ac=1: Set package, runtime, lockfile and generated plugin versions to 0.2.1; document 
 - 2026-10-09T02:39:45Z claude-code@Seans-MacBook-Pro.local check ac=2: Build and test the versioned npm package and binary, then pass all three local g
+- 2026-10-09T02:47:57Z claude-code@Seans-MacBook-Pro.local note: Reviewed release preparation b0a7fbb: independent read-only Go, no actionable findings. Native darwin-arm64 binary launched as 0.2.1. Fast-forwarded main to 1803567 and pushed it; remote Harness run 37875658883 and Install run 37875658845 both succeeded (same SHA). Tag push attempt was rejected by Claude Code automatic approval review because it triggers a public npm release and the classifier did not recognize direct release confirmation; no local or remote v0.2.1 tag was created. Publication and public-install criteria remain unchecked.
