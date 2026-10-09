@@ -5,13 +5,13 @@
 
 ## Current State
 
-- Last commit: `1270b7a` —— Cursor CLI `sessionEnd` 曾把人类交接报告交给 JSON 钩子而被判 `invalid_json`；tp-ocwx91 改为专用 `--hook-json cursor` 输出 `{}`，升级旧标准配置、保留并提示自定义旧配置；真实 Cursor Agent CLI 2026.10.01-e373342 的项目级结束钩子在临时项目调用本分支 CLI 后报告 `success exitCode=0`。独立评审两轮修复后 Go；`todopi done` 记录 `verify=pass commit=1270b7a dirty=false`。本机安装的 `0.2.0` 仍不识别新选项，用户配置未改；未发布此修复。
+- Last commit: `44e3a41` —— Cursor CLI `sessionEnd` 的 `invalid_json` 修复 tp-ocwx91 已关闭（`verify=pass commit=1270b7a dirty=false`）；源码提供专用 `--hook-json cursor` 输出 `{}`、旧钩子迁移与两个评审行为规则。真实 Cursor Agent CLI 2026.10.01-e373342 的项目级结束钩子在临时项目调用本分支 CLI 后 `success exitCode=0`。tp-zagvp5 的真实 `/summarize` 后指针、规则文件独有短语与模拟 HOME 用户级定位已记录在 PRD §17；独立评审 Go。IDE 3.22.7 仍无对话证据，任务释放为 open。已安装的 `0.2.0` 不识别新选项，真实用户配置未改；修复尚未发布为新版安装包。
 - `make check`: `pass`（2026-10-09）—— docs-links / spec-version / prd-present / arch-rules（30/31 通过、1 不适用，新增 ARCH-030/031 行为检查）/ typecheck。
 - `make test`: 本地 `pass`（2026-10-09）—— 全量单元/集成测试通过；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
 - `make e2e`: 本地 `pass`（2026-10-09）—— 完整端到端含 Cursor 的 JSON 输出回归；macOS c14 临时目录 ACL 清理仍提示 Permission denied，门禁退出 0。上一轮 Linux Harness/Install 为安装器修复的证据，本次 Cursor 修复尚未推远端。
 - `make clean-check`: 待本轮收尾提交后运行；上一轮为 `pass`。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
-- 账本: `.todopi/` 56 个任务，53 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor IDE 实机验证与 PRD 记录）、0 个 `in_progress`。
+- 账本: `.todopi/` 56 个任务，53 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -24,7 +24,7 @@
 
 ## In Progress
 
-**无。** tp-ocwx91 Cursor 结束钩子 JSON 修复已完成并评审 Go。CLI 2026.10.01-e373342 的项目级钩子在临时项目调用本分支 CLI 时 `sessionStart`、`sessionEnd` 均成功；压缩后模型仍说出任务 ID 与 `todopi prime`。Cursor IDE 3.22.7 只证明隔离项目加载了配置和规则，macOS 辅助功能权限阻止了真实 IDE 对话验证；tp-zagvp5 继续保持 open。
+**无。** tp-ocwx91 Cursor 结束钩子 JSON 修复已完成并评审 Go。CLI 2026.10.01-e373342 的项目级钩子在临时项目调用本分支 CLI 时 `sessionStart`、`sessionEnd` 均成功；压缩后模型仍说出任务 ID 与 `todopi prime`，且独有短语证实规则内容进入 CLI 上下文。Cursor IDE 3.22.7 只证明隔离项目加载了配置和规则，macOS 辅助功能权限阻止了真实 IDE 对话验证；tp-zagvp5 已 release 为 open，IDE 验收项保持未勾选。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -60,7 +60,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 Cursor CLI/压缩与模拟 --user 已有证据，仍需真实 IDE 会话和 PRD §17 实测记录；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。Cursor 结束钩子源码修复已关闭，需随下一版安装后才会取代本机 `0.2.0` 的旧命令支持；没有改真实用户配置。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
+按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 Cursor CLI/压缩/模拟 --user 已有证据并写入 PRD §17，**仅 IDE 真实会话未验收**；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。Cursor 结束钩子源码修复已关闭，需随下一版安装后才会取代本机 `0.2.0` 的旧命令支持；没有改真实用户配置。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。
