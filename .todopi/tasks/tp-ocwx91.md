@@ -1,12 +1,13 @@
 ---
 id: "tp-ocwx91"
 title: "Fix Cursor sessionEnd hook JSON output"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0h"
 verify: "make check && make test && bash tools/e2e/f17-setup-cursor-gemini.sh"
 created: "2026-10-08T23:56:02Z"
-updated: "2026-10-09T00:16:33Z"
+updated: "2026-10-09T00:30:38Z"
 ---
 
 ## Description
@@ -30,3 +31,4 @@ Cursor Agent CLI 2026.10.01-e373342 executes sessionEnd but marks todopi handoff
 - 2026-10-09T00:10:54Z claude-code@Seans-MacBook-Pro.local check ac=3: Real Cursor CLI sessionEnd hook reports success with the new command
 - 2026-10-09T00:11:38Z claude-code@Seans-MacBook-Pro.local note: Additional migration case: a customized old sessionEnd hook is preserved and a new standard JSON hook is appended; setup warns that both can run. Focused unit suite 17/17 and f17 e2e passed. Full make check passed; final full make test/e2e pending completion.
 - 2026-10-09T00:16:33Z claude-code@Seans-MacBook-Pro.local note: Independent review No-Go on two paths: invalid handoff --hook-json value wrote before rejecting, and setup cursor failed to warn when a standard and customized old sessionEnd coexisted. Added failing regression cases, moved validation before handoff, and warned after standard migration; focused tests 41/41 pass.
+- 2026-10-09T00:30:38Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=1270b7a dirty=false

@@ -5,14 +5,13 @@
 
 ## Current State
 
-- Last commit: `7869f13` —— `install.sh` 改用外部 `/bin/pwd -P` 检测已删除 cwd（代码 `d93b239`，tp-kbfc4u）；远端 Harness `37797035128` 的 Linux check / test / e2e 均通过，已删除 cwd 的 npm 与二进制回归分别通过。Install `37797034995` 的三个作业均通过；`todopi done` 记录 `commit=7869f13 dirty=false`。`v0.2.0` 标签仍指向 `6fa0d4b`，官网 `/install.sh` 302 到产品仓 `main` 的原始脚本。
-- `make check`: `pass` —— Layer 1 五项：docs-links / spec-version / prd-present /
-  arch-rules（**28/29 条通过、1 条不适用**，ARCH-019/021 与 clean-check 的 no-debug-artifacts 于 2026-09-23 收窄，其中 ARCH-020 有 16 条正反例）/ typecheck（`pass`，tsc --noEmit）
-- `make test`: 本地 `pass`（2026-10-08）；帮助输出子进程与完整单元/集成测试均通过。看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
-- `make e2e`: 本地与远端 Linux 均为 `pass`（2026-10-08）；已删除 cwd 的 npm 与二进制回归明确断言安装器切换到了可用目录。官网脚本与当前 `main` 一致，从已删除 cwd 用临时目录实跑真实 npm 包与经 SHA-256 校验的 Release 二进制，均安装并返回 `0.2.0`。macOS 本地 e2e 末尾仍有 c14 临时目录 ACL 清理权限提示，门禁退出 0。
-- `make clean-check`: 待本轮收尾提交后运行；上一轮帮助高亮提交后为 `pass`。
+- Last commit: `1270b7a` —— Cursor CLI `sessionEnd` 曾把人类交接报告交给 JSON 钩子而被判 `invalid_json`；tp-ocwx91 改为专用 `--hook-json cursor` 输出 `{}`，升级旧标准配置、保留并提示自定义旧配置；真实 Cursor Agent CLI 2026.10.01-e373342 的项目级结束钩子在临时项目调用本分支 CLI 后报告 `success exitCode=0`。独立评审两轮修复后 Go；`todopi done` 记录 `verify=pass commit=1270b7a dirty=false`。本机安装的 `0.2.0` 仍不识别新选项，用户配置未改；未发布此修复。
+- `make check`: `pass`（2026-10-09）—— docs-links / spec-version / prd-present / arch-rules（30/31 通过、1 不适用，新增 ARCH-030/031 行为检查）/ typecheck。
+- `make test`: 本地 `pass`（2026-10-09）—— 全量单元/集成测试通过；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
+- `make e2e`: 本地 `pass`（2026-10-09）—— 完整端到端含 Cursor 的 JSON 输出回归；macOS c14 临时目录 ACL 清理仍提示 Permission denied，门禁退出 0。上一轮 Linux Harness/Install 为安装器修复的证据，本次 Cursor 修复尚未推远端。
+- `make clean-check`: 待本轮收尾提交后运行；上一轮为 `pass`。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
-- 账本: `.todopi/` 55 个任务，52 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor 实机验证）、0 个 `in_progress`。
+- 账本: `.todopi/` 56 个任务，53 个 `closed/done`、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 Cursor IDE 实机验证与 PRD 记录）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -25,7 +24,7 @@
 
 ## In Progress
 
-**无。** tp-kbfc4u 修复了 Linux 内建 `pwd` 缓存导致的 `uv_cwd`；第二轮远端 Harness / Install 均通过。官网安装器从已删除 cwd 的 npm 和强制二进制路径均成功；安装前外层 shell 的 `shell-init/getcwd` 提示仍可能出现，但安装器恢复 cwd 后完成安装。曾提前 `done` 的 `dirty=true` 历史保留在任务日志；任务重开、实际验收后重新关闭，最新记录为 `dirty=false`。
+**无。** tp-ocwx91 Cursor 结束钩子 JSON 修复已完成并评审 Go。CLI 2026.10.01-e373342 的项目级钩子在临时项目调用本分支 CLI 时 `sessionStart`、`sessionEnd` 均成功；压缩后模型仍说出任务 ID 与 `todopi prime`。Cursor IDE 3.22.7 只证明隔离项目加载了配置和规则，macOS 辅助功能权限阻止了真实 IDE 对话验证；tp-zagvp5 继续保持 open。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -61,7 +60,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 Cursor sessionEnd、真实压缩、IDE 和 --user 仍待验证；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。安装器第二轮修复已推送并经 Linux CI 与官网入口实跑，任务已关闭；待提交本次 `done` 记录与进度文档，并执行 `make clean-check` 后将收尾记录推送。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
+按编号保留已完成工作的记录；当前可接手的任务以 `todopi ls --ready` 为准：tp-zagvp5 的 Cursor CLI/压缩与模拟 --user 已有证据，仍需真实 IDE 会话和 PRD §17 实测记录；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装。Cursor 结束钩子源码修复已关闭，需随下一版安装后才会取代本机 `0.2.0` 的旧命令支持；没有改真实用户配置。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。
@@ -309,7 +308,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Blockers
 
-无。
+Cursor IDE 3.22.7 的真实对话与结束钩子尚无可核实日志：在隔离 user-data-dir 打开项目并加载钩子配置后，macOS 拒绝 osascript 的辅助功能控制（`osascript is not allowed assistive access. (-1728)`）。不将配置加载或空窗口关闭算成 IDE 会话验收。
 
 ## 更新约定
 
