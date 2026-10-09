@@ -6,7 +6,7 @@ assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0i"
 verify: "make check && make test && make e2e"
 created: "2026-10-09T02:25:59Z"
-updated: "2026-10-09T02:47:57Z"
+updated: "2026-10-09T03:48:50Z"
 ---
 
 ## Description
@@ -17,8 +17,8 @@ Publish the already merged Cursor sessionEnd JSON fix and removed-working-direct
 
 - [x] Set package, runtime, lockfile and generated plugin versions to 0.2.1; document the shipped fixes without claiming Cursor IDE validation
 - [x] Build and test the versioned npm package and binary, then pass all three local gates and independent review
-- [ ] Push tested main and v0.2.1 tag; Release workflow publishes npm and GitHub assets with matching checksums
-- [ ] Install the published version in an isolated environment and verify Cursor sessionEnd and installer behavior without changing personal configuration
+- [x] Push tested main and v0.2.1 tag; Release workflow publishes npm and GitHub assets with matching checksums
+- [x] Install the published version in an isolated environment and verify Cursor sessionEnd and installer behavior without changing personal configuration
 
 ## Log
 
@@ -29,3 +29,7 @@ Publish the already merged Cursor sessionEnd JSON fix and removed-working-direct
 - 2026-10-09T02:39:45Z claude-code@Seans-MacBook-Pro.local check ac=1: Set package, runtime, lockfile and generated plugin versions to 0.2.1; document 
 - 2026-10-09T02:39:45Z claude-code@Seans-MacBook-Pro.local check ac=2: Build and test the versioned npm package and binary, then pass all three local g
 - 2026-10-09T02:47:57Z claude-code@Seans-MacBook-Pro.local note: Reviewed release preparation b0a7fbb: independent read-only Go, no actionable findings. Native darwin-arm64 binary launched as 0.2.1. Fast-forwarded main to 1803567 and pushed it; remote Harness run 37875658883 and Install run 37875658845 both succeeded (same SHA). Tag push attempt was rejected by Claude Code automatic approval review because it triggers a public npm release and the classifier did not recognize direct release confirmation; no local or remote v0.2.1 tag was created. Publication and public-install criteria remain unchecked.
+- 2026-10-09T03:46:40Z claude-code@Seans-MacBook-Pro.local note: Published annotated v0.2.1 tag peeled to tested main 130881b. Release run 37880446442 succeeded: npm publish and GitHub Release with seven assets; Homebrew tap step skipped because token absent. npm registry now exposes todopi@0.2.1 as latest; dist.integrity sha512-0uRso/1cBSFE/Gozq1ye81N/NMktvlOMj73UF1SkUo7XDf25wGCzKpB1/1Fn15oTZ5EVViRWafMfoPvgsM9E8w== matches the Release tarball. Four binary archives pass SHA256SUMS. Tag Install 37880446471 passed; Harness 37880446440 still running. Public npm and GitHub binary install.sh paths in isolated HOME both return 0.2.1, upgrade the old standard Cursor sessionEnd hook in place, and return parseable {} for --hook-json cursor. Both install paths work from a deleted cwd. No personal agent configuration changed.
+- 2026-10-09T03:48:50Z claude-code@Seans-MacBook-Pro.local note: Tag Harness run 37880446440 completed success, alongside Release 37880446442 and Install 37880446471. Public npm 0.2.1 is latest; Release tarball matches registry dist.integrity. Isolated public npm and binary installs, Cursor sessionEnd migration/JSON, and removed-cwd installation all passed. Cursor IDE real chat remains unverified under tp-zagvp5; Homebrew tap update was skipped because the token is absent.
+- 2026-10-09T03:48:50Z claude-code@Seans-MacBook-Pro.local check ac=3: Push tested main and v0.2.1 tag; Release workflow publishes npm and GitHub asset
+- 2026-10-09T03:48:50Z claude-code@Seans-MacBook-Pro.local check ac=4: Install the published version in an isolated environment and verify Cursor sessi
