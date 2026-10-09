@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- **Cursor session end**: return valid JSON from the read-only handoff hook. Re-run `todopi setup cursor` to upgrade a standard project hook in place; customized old hooks are preserved and reported so they can be reviewed separately. Cursor Agent CLI was verified; Cursor IDE chat remains unverified.
+- **Installer recovery**: when launched from a deleted working directory, `install.sh` switches to a live directory before starting npm or the downloaded binary. Validated on macOS and in Linux installation checks.
+- **CLI help**: color command and option names in an interactive terminal while keeping agent, JSON, and piped output plain.
+
 ## 0.2.0
 
 - **Cargo-style terminal output** across CLI commands: aligned action labels, status colors, readable task listings, and emphasized error and warning messages. Agent, hook, JSON, and ordinary piped output stay plain; `NO_COLOR` is honored.

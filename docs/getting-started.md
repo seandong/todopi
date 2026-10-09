@@ -50,7 +50,7 @@ Writes `.pi/extensions/todopi.ts`, which injects `todopi prime` at session start
 todopi setup cursor
 ```
 
-Writes `sessionStart` and `sessionEnd` hooks to `.cursor/hooks.json` and an always-applied `.cursor/rules/todopi.mdc` rule file. The rule prompts the agent to run `todopi prime` after compaction. Cursor CLI session start and the rule have been tested in isolation; IDE, real compaction and session end still need verification.
+Writes `sessionStart` and `sessionEnd` hooks to `.cursor/hooks.json` and an always-applied `.cursor/rules/todopi.mdc` rule file. The rule prompts the agent to run `todopi prime` after compaction. Cursor Agent CLI session start, rule loading, an actual `/summarize` followed by recovery of the ledger pointer, and the JSON session-end hook were tested in an isolated project. Cursor IDE chat and hooks remain unverified. After upgrading from an earlier version, run `todopi setup cursor` again to update a standard old project hook; review warnings about customized old hooks.
 
 ### Gemini CLI
 

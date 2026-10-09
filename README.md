@@ -4,7 +4,7 @@ A task ledger for AI coding agents. Each task is a Markdown file in your reposit
 
 [Website](https://todopi.com/) · [简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
-**Version 0.2.0.** The on-disk format is version 1: [format specification](spec/todopi-format-v1.md).
+**Version 0.2.1.** The on-disk format is version 1: [format specification](spec/todopi-format-v1.md).
 
 ## Install
 
@@ -43,6 +43,6 @@ Tasks live under `.todopi/tasks/` and can depend on one another. To inspect a sp
 
 todopi itself does not upload tasks or send telemetry. It does not commit or push for you. Its optional `todopi web` board listens only on local loopback while it runs; a task's user-configured `verify` command may access the network. Repository checks cover known source patterns, not every possible form of network access.
 
-Integrations for six agents are implemented. Cursor CLI session start and its rule have been tested in isolation; Cursor IDE, actual context compaction, and session end still need real-world verification.
+Integrations for six agents are implemented. Cursor Agent CLI session start, rule loading, actual `/summarize`, and the JSON session-end hook have been verified in an isolated project. Cursor IDE chat and its hooks still need real-world verification. If you installed Cursor project hooks with an earlier todopi version, run `todopi setup cursor` again after upgrading to update the standard session-end command; review any warning about customized old hooks.
 
 [Agent setup and CLI details](docs/getting-started.md) · [Task format](spec/todopi-format-v1.md) · [Command JSON output](docs/json.md) · [Agent development guide](AGENTS.md) · [MIT license](LICENSE)

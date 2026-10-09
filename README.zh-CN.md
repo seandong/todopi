@@ -4,7 +4,7 @@
 
 [官网](https://todopi.com/) · [English README](README.md) · [更新记录](CHANGELOG.md)
 
-**当前版本 0.2.0。** 磁盘格式版本为 1：[格式规格](spec/todopi-format-v1.md)。
+**当前版本 0.2.1。** 磁盘格式版本为 1：[格式规格](spec/todopi-format-v1.md)。
 
 ## 安装
 
@@ -41,6 +41,6 @@ todopi prime
 
 ## 边界与文档
 
-todopi 自身不上传任务、不发送遥测，也不会替你提交或推送 Git。可选的 `todopi web` 只在运行时监听本机回环地址；任务自定义的 `verify` 命令可能访问网络。六种 Agent 的接入已实现；Cursor CLI 的会话启动和规则做过隔离实测，IDE、真实上下文压缩和会话结束场景仍待验证。
+todopi 自身不上传任务、不发送遥测，也不会替你提交或推送 Git。可选的 `todopi web` 只在运行时监听本机回环地址；任务自定义的 `verify` 命令可能访问网络。六种 Agent 的接入已实现；Cursor Agent CLI 的会话启动、规则加载、真实 `/summarize` 后指针与 JSON 会话结束钩子已在隔离项目实测。Cursor IDE 的真实对话与钩子仍待验证。升级后可重跑 `todopi setup cursor`，就地更新旧的标准项目级结束钩子；若提示自定义旧钩子仍在运行，请审阅该配置。
 
 [Agent 接入与命令详情](docs/getting-started.md) · [任务格式](spec/todopi-format-v1.md) · [命令 JSON 输出](docs/json.md) · [开发指引](AGENTS.md) · [MIT 许可证](LICENSE)

@@ -9,7 +9,7 @@
 # Either way the `todopi` command ends up in ~/.local/bin.
 #
 # Environment:
-#   TODOPI_VERSION         install this version (for example 0.2.0) instead of the latest release
+#   TODOPI_VERSION         install this version (for example 0.2.1) instead of the latest release
 #   TODOPI_INSTALL_DIR     where the command goes (default: ~/.local/bin)
 #   TODOPI_FORCE_BINARY=1  install the binary even when Node.js >= 20 is available
 #   TODOPI_SKIP_CHECKSUM=1 install the binary without verifying it (not recommended; warns)
