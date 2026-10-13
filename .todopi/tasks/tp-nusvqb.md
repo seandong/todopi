@@ -6,7 +6,7 @@ assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0k"
 verify: "make check && make test && make e2e"
 created: "2026-10-13T08:15:24Z"
-updated: "2026-10-13T08:41:34Z"
+updated: "2026-10-13T08:51:43Z"
 ---
 
 ## Description
@@ -30,3 +30,4 @@ Publish the merged explicit verification-pending handoff feature as a patch rele
 - 2026-10-13T08:37:20Z claude-code@Seans-MacBook-Pro.local uncheck ac=2: Build and install the candidate npm package and native binary in isolation; pass
 - 2026-10-13T08:40:34Z claude-code@Seans-MacBook-Pro.local note: Review finding resolved in AGENTS.md: prime and handoff are implemented. Release workflow publishes on tag push, so tag only the exact main SHA after its Harness and Install checks succeed; tag CI is post-publication confirmation, not a pre-publication gate. Second independent review pending.
 - 2026-10-13T08:41:34Z claude-code@Seans-MacBook-Pro.local check ac=2: Build and install the candidate npm package and native binary in isolation; pass
+- 2026-10-13T08:51:43Z claude-code@Seans-MacBook-Pro.local note: Release preparation 71b904d is on main and origin/main; main Harness 38371083972 and Install 38371083981 both succeeded. Attempt to create and push annotated v0.2.2 tag was rejected by Claude Code auto mode: it requires explicit authorization to publish v0.2.2 to public npm. No local or remote tag was created; npm latest remains 0.2.1. Publication, tag CI, public artifacts and public-install criteria are pending; do not claim the release is complete.
