@@ -5,13 +5,13 @@
 
 ## Current State
 
-- Last commit: `29f63dd` —— 已发布 `v0.2.1`（标签 peeled SHA `130881b`）：Release `37880446442`、Harness `37880446440`、Install `37880446471` 全部成功。npm `todopi@0.2.1` 已是 `latest`，其 `dist.integrity` 与 Release 中的 npm tarball 相符；四平台二进制通过 `SHA256SUMS`。公开 npm 包与 GitHub 二进制均在隔离 HOME 实装，旧 Cursor 标准结束钩子升级后输出有效 JSON，从已删除工作目录执行安装器也通过。tp-zapxfh 已关闭（`verify=pass commit=29f63dd dirty=false`），真实用户配置未改。
-- `make check`: `pass`（2026-10-09，v0.2.1 发布后 `todopi done` 的 verify）—— docs-links / spec-version / prd-present / arch-rules（30/31 通过、1 不适用）/ typecheck。
-- `make test`: 本地 `pass`（2026-10-09，发布后 verify）—— 全量单元/集成测试通过；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
-- `make e2e`: 本地与标签远端 Linux `pass`（2026-10-09，发布后 verify）—— 完整端到端含 Cursor JSON 输出回归；macOS c14 临时目录 ACL 清理仍可能提示 Permission denied，门禁退出 0。标签 Harness `37880446440` 的 Layer 1–3 通过。
-- `make clean-check`: 发版准备检查点 `pass`（2026-10-09）；发布后账本与状态提交完成后再运行。
+- Last feature commit: `57e8fff` —— tp-fcnoss 的显式待验证交接已实现并通过独立复审；任务 `done verify=pass commit=57e8fff dirty=false`。`note --verify-pending` / `--clear-verify-pending` 追加 v1 增量 Log 事件，prime/handoff 跨会话展示下一步；预算内短提示、超长最近日志缩略、多持有任务被裁后仍逐项可见。v0.2.1 公开发布仍是最近的发布版本，本次功能尚未发布。
+- `make check`: `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— docs-links / spec-version / prd-present / arch-rules（31/32 通过、1 不适用）/ typecheck。
+- `make test`: 本地 `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— 1029 项通过、0 失败；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
+- `make e2e`: 本地 `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— 完整端到端含 Cursor JSON 输出回归；macOS c14 临时目录 ACL 清理提示 Permission denied，门禁退出 0。远端尚未对本次功能运行 CI。
+- `make clean-check`: 待关闭账本与本文件提交之后运行；上一轮发版准备检查点 `pass`（2026-10-09）。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
-- 账本: `.todopi/` 57 个任务，54 个 `closed/done`（含 tp-zapxfh）、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、0 个 `in_progress`。
+- 账本: `.todopi/` 58 个任务，55 个 `closed/done`（含 tp-fcnoss）、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
   这一行的计数由 `make status` 给出。
 - 代码状态：**F01–F21 已完成（M1、M2 收齐，M3 进行中）**。`doctor` / `init` / `add` / `ls`（及别名 `ready`）/
@@ -24,7 +24,7 @@
 
 ## In Progress
 
-**无。** tp-zapxfh v0.2.1 发版已完成：先前自动审批阻断在维护者明确授权后解除；标签、npm、Release、三条标签 CI 与公开安装验收均通过。Cursor IDE 真实对话验证仍是独立 open 任务 tp-zagvp5。
+**无。** tp-fcnoss 已关闭：显式待验证报告与撤销、prime/handoff 跨会话提示、格式及 JSON 文档、预算回归和 ARCH-032 均落地，独立代码复审 Go，`done` 在 `57e8fff` 上验证通过。该功能尚未作为新版本对外发布。Cursor IDE 真实对话验证仍是独立 open 任务 tp-zagvp5。
 
 **2026-09-23：自举完成。** `feature_list.json` 已删除，21 条 feature 迁进
 `.todopi/tasks/`，todopi 用自己管理自己的开发任务。
@@ -60,7 +60,7 @@ DECISIONS.md 不迁移」的同一理由留在这里。
 
 ## Next Steps
 
-按编号保留已完成工作的记录；`v0.2.1` 已公开发布并验收。tp-zagvp5 的 Cursor CLI/压缩/模拟 --user 已有证据，**仅 IDE 真实会话未验收**；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装与 tap 配置。真实用户配置未改。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
+按编号保留已完成工作的记录；`v0.2.1` 已公开发布并验收。tp-fcnoss 已实现但尚未发布，先完成本分支合并、主分支推送与远端 Harness/Install 检查，再由维护者决定发版时机。tp-zagvp5 的 Cursor CLI/压缩/模拟 --user 已有证据，**仅 IDE 真实会话未验收**；tp-0obw6s 需保留下一次失败的完整堆栈；tp-ujjc6y 待 brew 实装与 tap 配置。真实用户配置未改。官网产品首页已部署，两域新首页和八条旧隐私 URL 的 301 均回读通过；ASC 当前配置未认证回读，不作为官网发布已验证结论。
 
 1. ~~评审格式规格~~ 已完成（2026-09-15）：规格 Stable，PRD 1.1，11 个问题逐条
    落文档。结论见 DECISIONS.md D004。
