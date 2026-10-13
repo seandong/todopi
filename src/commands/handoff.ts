@@ -6,6 +6,7 @@
 
 import { hostname } from "node:os";
 import { currentActor } from "./actor.ts";
+import { verificationHint } from "./verification-view.ts";
 import { isDisplayable } from "./view.ts";
 // 单行字段（标题、assignee、verify……）连换行也转义：里面的换行会让后半截看起来像另一条列表项（F12 评审）
 import { visible as visibleLine } from "../domain/visible.ts";
@@ -48,7 +49,9 @@ function parsedLog(t: TaskFile) {
 /** handoff Log 的摘要：由 CLI 生成（spec §5.3.3：text = summary）。 */
 function summaryOf(t: TaskFile): string {
   const ac = parseAcceptance(t.body);
-  return ac.length === 0 ? "no checkbox criteria" : `${ac.filter((c) => c.checked).length}/${ac.length} criteria checked`;
+  const progress = ac.length === 0 ? "no checkbox criteria" : `${ac.filter((c) => c.checked).length}/${ac.length} criteria checked`;
+  const hint = verificationHint(t);
+  return hint === null ? progress : `${progress}; verification pending: ${hint.nextStep} (reported; full log: ${hint.command})`;
 }
 
 /**
@@ -132,7 +135,10 @@ export function runHandoff(opts: HandoffOptions): HandoffReport {
 
   const report: HandoffReport = {
     actor: visibleLine(actor), primedAt: record?.primedAt ?? null,
-    quiet, created, verifyChanged, logged: [], skipped: [], failed: [], check: opts.check === true,
+    quiet, created, verifyChanged,
+    verificationPending: tasks.filter((t) => statusOf(t) === "in_progress" && isMine(t.frontmatter["assignee"], who))
+      .flatMap((t) => { const hint = verificationHint(t); return hint === null ? [] : [{ ...ref(t), ...hint }]; }),
+    logged: [], skipped: [], failed: [], check: opts.check === true,
     baselineNote: record === null ? "No baseline: no `todopi prime` recorded for this session yet."
       : snap === null ? "No baseline: the last `todopi prime` predates verify snapshots; the next one records one."
         : partial ? "No verify baseline: the last `todopi prime` did not record edit counts; the next one does."

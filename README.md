@@ -37,7 +37,7 @@ todopi ls --ready
 todopi prime
 ```
 
-Tasks live under `.todopi/tasks/` and can depend on one another. To inspect a specific task, run `todopi show` followed by its ID from `todopi ls --ready`. If a task has a `verify` command, `todopi done` runs it before closing; an override requires `--force --reason` and is recorded as unverified. Inspect the command before trusting it: todopi asks for confirmation on first run in a terminal. In a non-interactive agent session, after reviewing the command, explicitly run `todopi done TASK_ID --yes` with the real task ID to approve it; otherwise untrusted verification is refused.
+Tasks live under `.todopi/tasks/` and can depend on one another. To inspect a specific task, run `todopi show` followed by its ID from `todopi ls --ready`. If code is ready but checks remain, record the next step with `todopi note TASK_ID --verify-pending "run the test suite"`; the next session sees it in `prime` and `handoff`. This is a worker report, not proof of a passing run; clear a stale report with `todopi note TASK_ID --clear-verify-pending`. If a task has a `verify` command, `todopi done` runs it before closing; an override requires `--force --reason` and is recorded as unverified. Inspect the command before trusting it: todopi asks for confirmation on first run in a terminal. In a non-interactive agent session, after reviewing the command, explicitly run `todopi done TASK_ID --yes` with the real task ID to approve it; otherwise untrusted verification is refused.
 
 ## Boundaries and documentation
 

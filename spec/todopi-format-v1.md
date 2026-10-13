@@ -1,6 +1,6 @@
 # The `.todopi/` Format, Version 1
 
-Status: Stable · 2026-09-16 · revised 2026-09-26 (see §9.1)
+Status: Stable · 2026-09-16 · revised 2026-10-13 (additive Log verbs under §9)
 Applies to: `version: 1` in `.todopi/config.yml`
 
 This document specifies the on-disk format that todopi reads and writes. It is written so that a third-party tool can read and write a `.todopi/` directory without the todopi CLI. The key words MUST, MUST NOT, SHOULD, and MAY are to be interpreted as described in RFC 2119.
@@ -184,6 +184,8 @@ Verbs and their arguments:
 | `claimed` | `steal=true` (optional; set whenever the claim replaced another actor's `assignee`, whether or not that actor's lease had expired) · text = the replaced actor | `claim` |
 | `released` | — | `release` |
 | `note` | — (text required) | `note`, `handoff` |
+| `verify_pending` | — (text required: the worker's next verification step; a report, not evidence of a run) | `note --verify-pending` |
+| `verify_cleared` | — (withdraws an active worker report; does not mean verification passed) | `note --clear-verify-pending` |
 | `check` / `uncheck` | `ac=<n>` · text = the criterion's text as it read at the time of the event, truncated to 80 characters | `check` |
 | `done` | `verify=pass\|fail\|none` · `commit=<sha7>` · `dirty=true\|false` · `forced=true` (only when forced; text = reason, optionally followed by verify output as indented continuation lines) | `done` |
 | `closed` | `resolution=wontfix\|duplicate\|obsolete` · `forced=true` (when a gate was bypassed) | `close` |
@@ -371,7 +373,7 @@ Write locking: a writer MUST hold an exclusive lock on `<lease-dir>/lock` (or `.
 ## 9. Versioning
 
 - `version` is an integer. This document is version 1.
-- Additive changes (new optional frontmatter keys, new Log verbs, new recognized sections, new config keys) do not change the version; v1 readers already tolerate them.
+- Additive changes (new optional frontmatter keys, new Log verbs, new recognized sections, new config keys) do not change the version; v1 readers already tolerate them. The `verify_pending` and `verify_cleared` verbs are additive: older readers preserve and ignore them. No file migration is needed. CLI handoff hints may use these explicit worker reports; they do not change the format's derived-state rules in §7 or the meaning of `unverified` in §5.3.3.
 - Any change that alters the meaning of an existing key, adds a required key, or changes derived-state rules increments the version.
 - A reader MUST refuse to write a `.todopi/` whose `version` is greater than the highest it implements, and SHOULD still read it.
 

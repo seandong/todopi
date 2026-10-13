@@ -20,6 +20,8 @@ export type HandoffReport = {
   created: HandoffTaskRef[] | null;
   /** 自上次 prime 以来 verify 新出现或变了的任务（所有人的）；没有快照时为 null */
   verifyChanged: (HandoffTaskRef & { verify: string | null; state: HandoffVerifyState })[] | null;
+  /** 当前由操作者报告待验证的进行中任务，独立于 prime 快照 */
+  verificationPending: (HandoffTaskRef & { nextStep: string; command: string })[];
   /** 追加了 handoff Log 的任务（--check 时为空） */
   logged: (HandoffTaskRef & { summary: string })[];
   /** 锁内核验时已经不再是我的进行中任务，跳过的 */

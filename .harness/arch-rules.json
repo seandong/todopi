@@ -311,6 +311,16 @@
       "what": "setup cursor 升级标准旧结束钩子后留下会输出文本的自定义旧钩子，却没有提示它仍会运行。",
       "why": "评审 tp-ocwx91 发现：找到标准项便直接跳过，混合配置的遗留项继续向 Cursor 返回无效 JSON。规则运行真实配置合并用例，检查只升级标准项、保留用户设置、首轮和幂等重跑均提示；匹配不到该用例也失败。",
       "fix": "迁移标准项之后扫描仍存在的旧命令并明确告警，不自动覆盖用户自定义项；保留混合配置与重复运行的断言。"
+    },
+    {
+      "id": "ARCH-032",
+      "description": "待验证事件在 prime 预算裁剪后仍有界且逐项可见",
+      "applies_when": "test -f src/commands/verification-view.ts",
+      "check": "node tools/check-arch-behavior.mjs tests/commands/prime.test.ts '跨会话待验证：最近日志掩盖不了，长文本经转义裁剪且零预算保留详情命令' && node tools/check-arch-behavior.mjs tests/commands/prime.test.ts '多个持有任务被预算裁剪后，仍逐项展示待验证下一步与详情命令'",
+      "expect": "empty",
+      "what": "显式待验证的超长 Log 条目从最近日志绕过有界提示，或预算裁剪后丢掉其他持有任务的待验证下一步。",
+      "why": "tp-fcnoss 独立代码评审分别用 350 KB 的下一步和多个持有任务复现：仅缩短新提示仍把原始 Log 注入上下文；仅保留一个持有任务则其余下一步消失。用真实临时账本检查最终渲染长度和每项的文本与 JSON 指针。",
+      "fix": "对最近 verify_pending 条目做可见转义与有界缩略；预算省略任务详情时仍给每个待验证任务保留短下一步及 show --full 命令，并保持文本与 JSON 同源。"
     }
   ]
 }

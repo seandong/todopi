@@ -24,12 +24,18 @@ function taskLines(t: PrimeTask): string[] {
     out.push("Recent log:");
     out.push(...t.log);
   }
+  if (t.verificationPending !== null) {
+    out.push(`Verification pending: ${t.verificationPending.nextStep} (reported; full log: \`${t.verificationPending.command}\`)`);
+  }
   return out;
 }
 
 export function renderPrime(r: PrimeReport): string {
   const blocks = r.held.map((t) => taskLines(t).join("\n"));
   if (r.moreHeldLine !== null) blocks.push(r.moreHeldLine);
+  for (const hint of r.pendingBeyondBudget) {
+    blocks.push(`+ ${hint.id}: verification pending: ${hint.nextStep} (full log: \`${hint.command}\`)`);
+  }
   // 指针行永不裁剪（FR-P1a），永远是最后一行。
   blocks.push(r.pointer);
   return `${blocks.join("\n\n")}\n`;

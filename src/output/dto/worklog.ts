@@ -1,7 +1,7 @@
 // src/output/dto/worklog.ts
 // note 与 check 的对外契约。两者都只是往一个任务上记一笔，放在一个文件里。
 
-export type NoteReport = { id: string; title: string; text: string };
+export type NoteReport = { id: string; title: string; text: string; changed?: boolean };
 
 export type CheckReport = {
   id: string;

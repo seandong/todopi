@@ -35,7 +35,7 @@ const text = (d: string, budget?: number) => renderPrime(prime(d, budget));
  */
 const LINE_KINDS = [
   /^## tp-[0-9a-z]+: /, /^Acceptance criteria[ :(]/, /^- \[[ x]\] \d+\. /, /^Recent log:$/,
-  /^- \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ /, /^ {2}/, /^\+ \d+ more tasks? you hold: /, /^$/,
+  /^- \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ /, /^ {2}/, /^Verification pending: /, /^\+ \d+ more tasks? you hold: /, /^\+ tp-[0-9a-z]+: verification pending: /, /^$/,
 ];
 function assertShape(out: string): void {
   assert.ok(out.endsWith("\n") && !out.endsWith("\n\n"), "结尾恰好一个换行");
@@ -250,6 +250,52 @@ test("任务内容里的控制字符换成可见转义：输出里没有 ESC（�
   // JSON 与文本是同一份展示值：DTO 里也没有控制字符（第二轮评审：只在渲染时转义，JSON 解码仍带 ESC）。
   assert.doesNotMatch(JSON.stringify(prime(d)), /\\u00(0[0-8]|0[bcef]|1[0-9a-f]|7f)/);
   assert.doesNotMatch(JSON.stringify(fullReport), /\\u001b/);
+});
+
+test("跨会话待验证：最近日志掩盖不了，长文本经转义裁剪且零预算保留详情命令", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "pending", actor: ME }).id;
+  runClaim({ directory: d, id: t, actor: ME });
+  runNote({ directory: d, id: t, verifyPending: `run checks \x1b[2J ${"more ".repeat(100)}`, actor: ME });
+  for (let n = 0; n < 3; n++) runNote({ directory: d, id: t, text: `later ${n}`, actor: ME });
+  const r = prime(d, 0);
+  const task = r.held[0]!;
+  assert.ok(task.verificationPending);
+  assert.ok(task.verificationPending.nextStep.length <= 180);
+  assert.match(task.verificationPending.nextStep, /\\x1b\[2J/);
+  assert.equal(task.verificationPending.command, `todopi show ${t} --full`);
+  assert.ok(r.commands.includes(task.verificationPending.command));
+  assert.doesNotMatch(task.log.join("\n"), /verify_pending/);
+  const out = renderPrime(JSON.parse(JSON.stringify(r)));
+  assert.match(out, /Verification pending: run checks \\x1b\[2J/);
+  assert.ok(out.includes(`\`${task.verificationPending.command}\``));
+  assert.doesNotMatch(out, /\x1b/);
+  assertShape(out);
+  assert.equal(r.overBudget, true);
+  assert.ok(out.length < 1500, `注入内容不应带出完整待验证 Log：${out.length}`);
+  const veryLong = "x".repeat(350_000);
+  runNote({ directory: d, id: t, verifyPending: veryLong, actor: ME });
+  const huge = renderPrime(prime(d, 0));
+  assert.ok(huge.length < 1500, `超长 Log 仍进入上下文：${huge.length}`);
+});
+
+test("多个持有任务被预算裁剪后，仍逐项展示待验证下一步与详情命令", () => {
+  const d = repo();
+  const ids = ["first", "second"].map((name) => {
+    const id = runAdd({ directory: d, title: name, actor: ME }).id;
+    runClaim({ directory: d, id, actor: ME });
+    runNote({ directory: d, id, verifyPending: `run ${name} checks`, actor: ME });
+    return id;
+  });
+  const report = prime(d, 0);
+  const out = renderPrime(report);
+  assert.equal(report.held.length, 1);
+  assert.equal(report.pendingBeyondBudget.length, 1);
+  for (const [index, id] of ids.entries()) {
+    assert.ok(out.includes(`run ${index === 0 ? "first" : "second"} checks`));
+    assert.ok(report.commands.includes(`todopi show ${id} --full`));
+  }
+  assertShape(out);
 });
 
 test("没有持有的任务时无可裁剪：truncated 为假；装不下指针就如实报 overBudget（第一轮评审）", () => {

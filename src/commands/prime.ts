@@ -15,9 +15,10 @@ import { readTasks } from "../format/read.ts";
 import { nowStamp } from "../format/write.ts";
 import { recordPrime } from "../format/session.ts";
 import { verifySnapshot } from "./handoff.ts";
+import { boundedVisible, verificationHint } from "./verification-view.ts";
 import { indexTasks, isBlocked, isReady, statusOf } from "../domain/derive.ts";
 import { parseAcceptance } from "../domain/acceptance.ts";
-import { logEntries, validateFile } from "../domain/validate.ts";
+import { logEntries, parseLogLine, validateFile } from "../domain/validate.ts";
 import { isMine } from "../domain/actor.ts";
 import { sortTasks } from "../domain/order.ts";
 import { estimateTokens } from "../domain/tokens.ts";
@@ -60,14 +61,27 @@ function project(t: TaskFile, level: 0 | 1 | 2): PrimeTask {
   const kept = level >= 1 ? all.filter((c) => !c.checked) : all;
   const every = logEntries(t.body);
   const entries = every.slice(level >= 2 ? -1 : -2);
+  const hint = verificationHint(t);
+  const abbreviatedLog = entries.some((e) => {
+    const parsed = parseLogLine(e.head);
+    return parsed.ok && parsed.verb === "verify_pending";
+  });
   return {
     id: t.idFromFilename,
     title: shown(t, "title"),
+    verificationPending: hint,
     acceptance: kept.map((c) => ({ n: c.n, text: visibleLine(c.text), checked: c.checked })),
     checkedOmitted: all.length - kept.length,
     acceptanceTotal: all.length,
     seeAlso: all.length === 0 ? `todopi show ${t.idFromFilename}` : null,
-    log: entries.map((e) => visibleMultiline([e.head, ...e.continuation.map((l) => `  ${l}`)].join("\n"))),
+    log: entries.map((e) => {
+      const parsed = parseLogLine(e.head);
+      if (parsed.ok && parsed.verb === "verify_pending") {
+        return `${boundedVisible(e.head)} (entry abbreviated; full log: \`todopi show ${t.idFromFilename} --full\`)`;
+      }
+      return visibleMultiline([e.head, ...e.continuation.map((l) => `  ${l}`)].join("\n"));
+    }),
+    abbreviatedLog,
     logOmitted: Math.min(every.length, 2) - entries.length,
   };
 }
@@ -143,8 +157,13 @@ export function runPrime(opts: PrimeOptions): { report: PrimeReport; warnings: s
     const p = pointer(ready, v.others.length, v.held.length > 0);
     const line = moreHeldLine(more);
     const held = v.held.slice(0, count).map((t) => project(t, level));
+    const pendingBeyondBudget = v.held.slice(count).flatMap((t) => {
+      const hint = verificationHint(t);
+      return hint === null ? [] : [{ id: t.idFromFilename, ...hint }];
+    });
     const r: PrimeReport = {
       held,
+      pendingBeyondBudget,
       moreHeld: more,
       ready,
       heldByOthers: v.others.length,
@@ -153,9 +172,12 @@ export function runPrime(opts: PrimeOptions): { report: PrimeReport; warnings: s
       overBudget: false,
       moreHeldLine: line,
       pointer: p.line,
-      // 文本里提到的每条命令，按出现顺序：各任务的 seeAlso、「另有 N 个」、指针。
-      commands: [...held.flatMap((t) => (t.seeAlso === null ? [] : [t.seeAlso])),
-        ...(line === null ? [] : ["todopi ls --mine"]), ...p.commands],
+      // 文本里提到的每条命令，按出现顺序：持有任务、被裁任务的摘要、末尾指针。
+      commands: [...held.flatMap((t) => [
+        ...(t.seeAlso === null ? [] : [t.seeAlso]),
+        ...((t.verificationPending !== null || t.abbreviatedLog) ? [`todopi show ${t.id} --full`] : []),
+      ]), ...(line === null ? [] : ["todopi ls --mine"]),
+      ...pendingBeyondBudget.map((t) => t.command), ...p.commands],
     };
     // truncated 按**实际省略的内容**算：收紧一级不等于真省掉了什么——没有已勾标准、只有一条 Log 的
     // 任务收紧到底也还是原样（第二轮评审：只按级别算会误报）。

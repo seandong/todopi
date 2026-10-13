@@ -11,7 +11,7 @@ export function renderWorklogJson(r: NoteReport | CheckReport): string {
 
 export function renderNote(r: NoteReport, opts: { style?: Style } = {}): string {
   const s = opts.style ?? PLAIN;
-  return `${action(s, "Noted", task(s, r.id, r.title))}\n`;
+  return `${action(s, r.changed === false ? "Unchanged" : "Noted", task(s, r.id, r.title))}\n`;
 }
 
 /** 空操作要说清楚：否则一个以为自己勾上了东西的 agent 看不出其实什么都没写。 */

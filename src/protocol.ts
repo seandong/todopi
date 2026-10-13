@@ -30,12 +30,15 @@ your own todo list for the steps inside this turn, and never copy todopi tasks i
 | Before touching code | \`todopi claim <id>\` |
 | You discover new work | \`todopi add "<title>" --from <current id>\` |
 | You learned something the hard way | \`todopi note <id> "<what and why>"\` |
+| Code changed, checks still to run | \`todopi note <id> --verify-pending "<next step>"\` |
 | The work is finished | \`todopi done <id>\` |
 | Ending the session | \`todopi handoff\` |
 | You notice your context was compacted | \`todopi prime\` — do not wait for a hook |
 
-\`todopi done\` runs the task's verification command. If it fails, fix the work. Forcing past
-it is for the case where the check itself is wrong, and it is recorded permanently.
+A pending report states the next check; it does not prove a pass. If the report is stale,
+withdraw it with \`todopi note <id> --clear-verify-pending\`. \`todopi done\` runs the task's
+verification command. If it fails, fix the work. Forcing past it is for the case where
+the check itself is wrong, and it is recorded permanently.
 
 **Queries.** \`todopi ls --ready\` for what to pick up next. \`todopi show <id>\` for one task's
 detail. \`todopi prime --full\` when you need the whole picture. Add \`--json\` when parsing.

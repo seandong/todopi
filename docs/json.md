@@ -165,6 +165,7 @@ type LogEntryDto =
 | Field | Type | Meaning |
 |---|---|---|
 | `held` | `PrimeTask[]` | the caller's in-progress tasks, most recently updated first, as many as fit the budget |
+| `pendingBeyondBudget` | `{ id: string; nextStep: string; command: string }[]` | brief pending hints for held tasks omitted from the full view |
 | `moreHeld` | `number` | held tasks that did not fit |
 | `ready` | `number` | tasks ready to claim |
 | `heldByOthers` | `number` | tasks in progress under other actors |
@@ -185,8 +186,10 @@ type LogEntryDto =
 | `checkedOmitted` | `number` | |
 | `acceptanceTotal` | `number` | all checkbox criteria of the task; `0` when it has none |
 | `seeAlso` | `string \| null` | when the task has no checkbox criteria, where to read its prose criteria; otherwise `null` |
-| `log` | `string[]` | the most recent Log entries, oldest first, each with its continuation lines |
+| `log` | `string[]` | the most recent Log entries, oldest first; verification pending entries are abbreviated with a full Log pointer |
+| `abbreviatedLog` | `boolean` | a recent pending event was shortened in the Log display |
 | `logOmitted` | `number` | recent entries left out to fit the budget |
+| `verificationPending` | `{ nextStep: string; command: string } \| null` | explicit worker report and command for the full Log; `null` if none |
 
 ### `PrimeFullReport`
 
@@ -209,6 +212,7 @@ type LogEntryDto =
 | `quiet` | `(HandoffTaskRef & { assignee: string; lastLogAt: string \| null })[]` | the caller's in-progress tasks with no Log entry in the last hour |
 | `created` | `HandoffTaskRef[] \| null` | tasks the caller created since the last `prime`; `null` without a baseline |
 | `verifyChanged` | `(HandoffTaskRef & { verify: string \| null; state: HandoffVerifyState })[] \| null` | tasks whose verify command appeared or changed since the last `prime` (anyone's); `null` without a baseline |
+| `verificationPending` | `(HandoffTaskRef & { nextStep: string; command: string })[]` | explicit pending reports on the caller's in-progress tasks, even without a prime baseline |
 | `logged` | `(HandoffTaskRef & { summary: string })[]` | tasks a `handoff` entry was appended to (empty with `--check`) |
 | `skipped` | `(HandoffTaskRef & { reason: string })[]` | tasks that were no longer the caller's when the write happened |
 | `failed` | `(HandoffTaskRef & { message: string; code: number })[]` | tasks the entry could not be written to |
@@ -245,7 +249,8 @@ type HandoffVerifyState = "new" | "changed" | "removed" | "edited" | "unreadable
 |---|---|---|
 | `id` | `string` | |
 | `title` | `string` | |
-| `text` | `string` | the note as appended |
+| `text` | `string` | the note as appended; empty for a clear operation |
+| `changed?` | `boolean` | present for verification handoff modes; `false` if there was no active report to clear |
 
 ### `CheckReport`
 

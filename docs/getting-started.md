@@ -68,6 +68,16 @@ The `--user` option installs shared hooks or extensions in your home directory. 
 
 `--json` is available for commands that return data; its output contract is in [`json.md`](json.md). Piped output is plain text. For a task from Beads Classic, `todopi import beads` reads `.beads/issues.jsonl` and keeps the old ID in `external.beads.id`.
 
+When code has changed but checks are still to run, record the next step explicitly:
+
+```sh
+todopi note TASK_ID --verify-pending "run make check and review the output"
+todopi prime
+todopi handoff --check
+```
+
+The report survives later notes and appears in the next session's `prime` and `handoff`, even without a `prime` baseline. It is the worker's report, not proof that checks ran. To withdraw a stale report without claiming success, run `todopi note TASK_ID --clear-verify-pending`. An active report stays in the Log across release and another claim; closing the task ends that round, and reopening it does not revive it. The full history is available with `todopi show TASK_ID --full`. A normal successful `todopi done` records `verify=pass` when a verify command actually ran and passed. No verify command records `verify=none`; a forced close is marked unverified even if its command happened to pass. A rejected `done` leaves the report in place so the next worker can continue.
+
 A task may set `verify` to a project command. Before the first run, inspect that command and confirm repository trust. In a non-interactive agent session, the user can approve it explicitly with `todopi done TASK_ID --yes`. A command allowlist for todopi does not sandbox `verify`; use an OS-level sandbox if the command needs isolation.
 
 Binaries exist for macOS and Linux on x64 and arm64. The installer checks SHA-256 against the release's `SHA256SUMS` before installing a binary.

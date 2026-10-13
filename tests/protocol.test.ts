@@ -14,6 +14,7 @@ test("覆盖 PRD §9 的七项大纲", () => {
     ["时刻：claim", /todopi claim/],
     ["时刻：add --from", /todopi add .*--from/],
     ["时刻：note", /todopi note/],
+    ["待验证交接", /todopi note <id> --verify-pending/],
     ["时刻：done", /todopi done/],
     ["时刻：handoff", /todopi handoff/],
     ["压缩后主动跑 prime", /compacted/i],

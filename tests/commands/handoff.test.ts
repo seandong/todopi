@@ -9,6 +9,7 @@ import { runAdd } from "../../src/commands/add.ts";
 import { runClaim } from "../../src/commands/claim.ts";
 import { runCheck } from "../../src/commands/check.ts";
 import { runEdit } from "../../src/commands/edit.ts";
+import { runNote } from "../../src/commands/note.ts";
 import { runPrime } from "../../src/commands/prime.ts";
 import { runHandoff, logHandoff } from "../../src/commands/handoff.ts";
 import { runRelease } from "../../src/commands/release.ts";
@@ -128,6 +129,22 @@ test("--check：报告照出，账本与运行时目录逐字节不变", () => {
   assert.deepEqual(snapshot(d), before);
   assert.equal(readFileSync(join(leaseDirFor(ledger), `${t}.json`), "utf8"), lease);
   assert.match(renderHandoff(r), /Check only: nothing was written\.\n$/);
+});
+
+test("无 prime 基线也交接待验证；--check 不写；普通交接摘要保留下一步", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  runClaim({ directory: d, id: t, actor: ME });
+  runNote({ directory: d, id: t, verifyPending: "run test suite", actor: ME });
+  const before = snapshot(d);
+  const checked = runHandoff({ directory: d, actor: ME, check: true });
+  assert.equal(checked.primedAt, null);
+  assert.deepEqual(checked.verificationPending.map((x) => [x.id, x.nextStep]), [[t, "run test suite"]]);
+  assert.match(renderHandoff(checked), /Verification pending \(worker reported\):[\s\S]*run test suite/);
+  assert.deepEqual(snapshot(d), before);
+  const actual = runHandoff({ directory: d, actor: ME });
+  assert.match(actual.logged[0]!.summary, /run test suite/);
+  assert.deepEqual(runHandoff({ directory: d, actor: ME, check: true }).verificationPending.map((x) => x.id), [t]);
 });
 
 test("自上次 prime 以来新建的：只列我建的（宽松匹配），prime 之前就有的不列", () => {

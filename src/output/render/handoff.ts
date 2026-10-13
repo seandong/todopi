@@ -18,6 +18,8 @@ export function renderHandoff(r: HandoffReport): string {
     section("Verify new or changed since last prime:",
       r.verifyChanged === null ? null
         : r.verifyChanged.map((t) => `- ${t.id} ${t.title}: ${t.state}${t.verify === null ? "" : ` \`${t.verify}\``}`), noBase),
+    section("Verification pending (worker reported):",
+      r.verificationPending.map((t) => `- ${t.id} ${t.title}: ${t.nextStep} (full log: \`${t.command}\`)`), ""),
   ];
   if (r.check) blocks.push("Check only: nothing was written.");
   else {

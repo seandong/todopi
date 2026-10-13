@@ -7,6 +7,11 @@ import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
 import { runAdd } from "../../src/commands/add.ts";
 import { runDone } from "../../src/commands/done.ts";
+import { runClaim } from "../../src/commands/claim.ts";
+import { runNote } from "../../src/commands/note.ts";
+import { verificationPending } from "../../src/domain/verification-pending.ts";
+import { discoverLedger } from "../../src/format/discover.ts";
+import { readTasks } from "../../src/format/read.ts";
 import { runClose } from "../../src/commands/close.ts";
 import { runDoctor } from "../../src/commands/doctor.ts";
 import { runLs } from "../../src/commands/ls.ts";
@@ -96,6 +101,22 @@ test("没有 verify 字段 → verify=none，不产生日志文件", () => {
 });
 
 // ---- 失败 ----
+
+test("verify 被拒绝后不伪造通过，显式待验证报告仍留给下一会话", () => {
+  withConfig(() => {
+    const d = repo();
+    const t = runAdd({ directory: d, title: "T", verify: "exit 3", actor: ME });
+    runClaim({ directory: d, id: t.id, actor: ME });
+    runNote({ directory: d, id: t.id, verifyPending: "inspect failure and rerun", actor: ME });
+    const before = read(d, t.id);
+    assert.throws(() => runDone({ directory: d, id: t.id, actor: ME, yes: true }),
+      (e: unknown) => e instanceof GateRefused && e.code === EXIT.gate);
+    assert.equal(read(d, t.id), before);
+    const state = readTasks(discoverLedger(d)).find((x) => x.idFromFilename === t.id)!;
+    assert.equal(verificationPending(state), "inspect failure and rerun");
+    assert.doesNotMatch(read(d, t.id), /done verify=pass/);
+  });
+});
 
 test("verify 失败 → 拒绝，退出 2，**Log 一行都没长**（spec §6.1）", () => {
   withConfig(() => {

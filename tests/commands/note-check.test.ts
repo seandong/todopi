@@ -6,6 +6,12 @@ import { join } from "node:path";
 import { runInit } from "../../src/commands/init.ts";
 import { runAdd } from "../../src/commands/add.ts";
 import { runClaim } from "../../src/commands/claim.ts";
+import { runRelease } from "../../src/commands/release.ts";
+import { runDone } from "../../src/commands/done.ts";
+import { runClose } from "../../src/commands/close.ts";
+import { runReopen } from "../../src/commands/reopen.ts";
+import { verificationPending } from "../../src/domain/verification-pending.ts";
+import { readTasks } from "../../src/format/read.ts";
 import { runNote } from "../../src/commands/note.ts";
 import { runCheck, parseCriterionNumber } from "../../src/commands/check.ts";
 import { runShow } from "../../src/commands/show.ts";
@@ -74,6 +80,94 @@ test("空白的 note 拒绝，文件不动", () => {
   const before = read(d, t.id);
   assert.throws(() => runNote({ directory: d, id: t.id, text: " \n\t\n ", actor: ME }), code(EXIT.usage));
   assert.equal(read(d, t.id), before);
+});
+
+test("显式待验证更新下一步、撤销不等于通过，普通 note 不推断", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  runClaim({ directory: d, id: t, actor: ME });
+  const state = () => verificationPending(readTasks(discoverLedger(d)).find((x) => x.idFromFilename === t)!);
+  assert.equal(state(), null);
+  runNote({ directory: d, id: t, text: "code changed", actor: ME });
+  assert.equal(state(), null);
+  runNote({ directory: d, id: t, verifyPending: "run make check", actor: ME });
+  assert.equal(state(), "run make check");
+  runNote({ directory: d, id: t, text: "another log", actor: ME });
+  runNote({ directory: d, id: t, verifyPending: "run make test", actor: ME });
+  assert.equal(state(), "run make test");
+  const cleared = runNote({ directory: d, id: t, clearVerifyPending: true, actor: ME });
+  assert.equal(cleared.changed, true);
+  assert.equal(state(), null);
+  const before = read(d, t);
+  assert.equal(runNote({ directory: d, id: t, clearVerifyPending: true, actor: ME }).changed, false);
+  assert.equal(read(d, t), before);
+  assert.equal(runDoctor({ directory: d }).ok, true);
+});
+
+test("格式错误的待验证事件不覆盖有效报告，日志按文件顺序而非秒级时间排序", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  runClaim({ directory: d, id: t, actor: ME });
+  runNote({ directory: d, id: t, verifyPending: "run check", actor: ME });
+  const state = () => verificationPending(readTasks(discoverLedger(d)).find((x) => x.idFromFilename === t)!);
+  edit(d, t, (raw) => `${raw.trimEnd()}\n- broken me@host verify_cleared\n- 2020-01-01T00:00:00Z me@host note: verify=pass\n`);
+  assert.equal(state(), "run check");
+});
+
+test("待验证报告在 release 与重新 claim 后保留，关闭和重开后不恢复", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  const state = () => verificationPending(readTasks(discoverLedger(d)).find((x) => x.idFromFilename === t)!);
+  runClaim({ directory: d, id: t, actor: ME });
+  runNote({ directory: d, id: t, verifyPending: "run checks", actor: ME });
+  runRelease({ directory: d, id: t, actor: ME });
+  assert.equal(state(), null, "开放任务暂不显示，历史报告仍在");
+  runClaim({ directory: d, id: t, actor: ME });
+  assert.equal(state(), "run checks");
+  runDone({ directory: d, id: t, actor: ME });
+  assert.equal(state(), null);
+  runReopen({ directory: d, id: t, actor: ME });
+  runClaim({ directory: d, id: t, actor: ME });
+  assert.equal(state(), null);
+});
+
+test("关闭事件终结待验证报告；不能把未运行、强制完成误称为通过", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  const state = () => verificationPending(readTasks(discoverLedger(d)).find((x) => x.idFromFilename === t)!);
+  runClaim({ directory: d, id: t, actor: ME });
+  runNote({ directory: d, id: t, verifyPending: "run checks", actor: ME });
+  runClose({ directory: d, id: t, actor: ME, resolution: "obsolete" });
+  assert.equal(state(), null);
+  runReopen({ directory: d, id: t, actor: ME });
+  runClaim({ directory: d, id: t, actor: ME });
+  assert.equal(state(), null);
+  runNote({ directory: d, id: t, verifyPending: "run checks again", actor: ME });
+  runDone({ directory: d, id: t, actor: ME, force: true, reason: "skipped" });
+  assert.equal(state(), null);
+  assert.match(read(d, t), / done verify=none .*forced=true/);
+});
+
+test("待验证输入仅能写本人持有的进行中任务，错误形状与冲突不写入", () => {
+  const d = repo();
+  const t = runAdd({ directory: d, title: "T", actor: ME }).id;
+  const before = read(d, t);
+  assert.throws(() => runNote({ directory: d, id: t, verifyPending: "next", actor: ME }), code(EXIT.usage));
+  assert.equal(read(d, t), before);
+  runClaim({ directory: d, id: t, actor: OTHER });
+  assert.throws(() => runNote({ directory: d, id: t, verifyPending: "next", actor: ME }), code(EXIT.conflict));
+  runClaim({ directory: d, id: t, actor: ME, steal: true });
+  const claimed = read(d, t);
+  for (const opts of [
+    { text: "note", verifyPending: "next" },
+    { text: "note", clearVerifyPending: true },
+    { verifyPending: "next", clearVerifyPending: true },
+    { verifyPending: " \n " },
+    {},
+  ]) {
+    assert.throws(() => runNote({ directory: d, id: t, actor: ME, ...opts }), code(EXIT.usage));
+    assert.equal(read(d, t), claimed);
+  }
 });
 
 // ── 归属（FR-C6：写入严格匹配）──────────────────────────────────────────

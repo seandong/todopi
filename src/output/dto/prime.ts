@@ -6,6 +6,8 @@
 export type PrimeTask = {
   id: string;
   title: string;
+  /** Explicit worker report, not a verification result. Null means no active report. */
+  verificationPending: { nextStep: string; command: string } | null;
   /** 带状态的验收标准；裁剪时丢掉的已勾项不在这里，计数在 checkedOmitted */
   acceptance: { n: number; text: string; checked: boolean }[];
   checkedOmitted: number;
@@ -13,8 +15,10 @@ export type PrimeTask = {
   acceptanceTotal: number;
   /** 没有勾选项形式的标准时，去哪里看散文判据；有标准时为 null */
   seeAlso: string | null;
-  /** 最近的 Log，旧的在前；每条是头行加续行 */
+  /** 最近的 Log，旧的在前；待验证事件的长条目用有界摘要和完整日志指针表示 */
   log: string[];
+  /** 最近日志包含缩略的待验证事件时，完整日志命令已在 log 中，给 commands 使用 */
+  abbreviatedLog: boolean;
   /** 默认推 2 条，因预算少推了几条 */
   logOmitted: number;
 };
@@ -22,6 +26,8 @@ export type PrimeTask = {
 export type PrimeReport = {
   /** 调用者正在进行的任务，按 updated 由新到旧；装不下的只计数 */
   held: PrimeTask[];
+  /** Brief handoffs for held tasks whose full details exceeded the budget. */
+  pendingBeyondBudget: { id: string; nextStep: string; command: string }[];
   moreHeld: number;
   ready: number;
   heldByOthers: number;

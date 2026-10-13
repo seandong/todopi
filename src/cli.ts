@@ -366,14 +366,17 @@ program
   .alias("log")
   .description("append a line to a task's log; the text may span several lines")
   .argument("<id>", "the task to note on")
-  .argument("<text>", "what happened and why")
-  .action(async (id: string, text: string) => {
+  .argument("[text]", "what happened and why")
+  .option("--verify-pending <next-step>", "record code changed and the next verification step")
+  .option("--clear-verify-pending", "withdraw the active verification handoff; does not mark checks passed")
+  .action(async (id: string, text: string | undefined, cmdOpts: { verifyPending?: string; clearVerifyPending?: boolean }) => {
     const { runNote } = await import("./commands/note.ts");
     const { renderNote, renderWorklogJson } = await import("./output/render/worklog.ts");
     const opts = program.opts();
     const report = runNote({
       directory: (opts["directory"] as string | undefined) ?? process.cwd(),
-      id, text, actor: opts["as"] as string | undefined,
+      id, text, verifyPending: cmdOpts.verifyPending, clearVerifyPending: cmdOpts.clearVerifyPending,
+      actor: opts["as"] as string | undefined,
     });
     process.stdout.write(opts["json"] === true ? renderWorklogJson(report) + "\n" : renderNote(report, { style: await styleFor() }));
   });
