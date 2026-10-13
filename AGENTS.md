@@ -169,14 +169,8 @@ after a compaction, on another machine, or under a different agent.
 somebody could check. Editing a file or running a test is a step, not a task. Keep using
 your own todo list for the steps inside this turn, and never copy todopi tasks into it.
 
-> **本仓库的现状**：下面这张表里，`prime`（F11）与 `handoff`（F12）**还没实现**，
-> 照表敲会得到「命令不存在」。其余都能跑：`init` / `add`（含 `--from`）/ `ls` / `show` /
-> `claim` / `release` / `note` / `check` / `done` / `close` / `reopen` / `doctor`。
-> （此前这里写着 `note` 与 `add --from` 都没实现——前者 F09 才有，后者其实一直都有；
-> `show` 那条在 F08 合并时漏改了。都是 2026-09-24 逐条对着 `todopi --help` 核实后更正。）
->
-> 当前可执行的路径在本文件上方的 clock-in / clock-out 两节，以及
-> 「提交的顺序」那一节。表格随各自的 feature 落地逐条变真。
+> `prime` 与 `handoff` 已实现。当前可执行的路径在本文件上方的
+> clock-in / clock-out 两节，以及「提交的顺序」那一节。
 
 **Do these without deliberating:**
 
@@ -196,9 +190,8 @@ it is for the case where the check itself is wrong, and it is recorded permanent
 **Queries.** `todopi ls --ready` for what to pick up next. `todopi show <id>` for one task's
 detail. `todopi prime --full` when you need the whole picture. Add `--json` when parsing.
 
-> 本仓库现状：`prime`（F11）**尚未实现**，看全局用 `make status`。`show` 已可用，
-> 但它按格式规格忽略未识别小节——自举任务的 `## Repair` 段要用
-> `cat .todopi/tasks/<id>.md` 看（PRD §15）。
+> `prime` 已可用；`make status` 展示本仓库的开发状态。`show` 按格式规格忽略
+> 未识别小节——自举任务的 `## Repair` 段须查看原始任务文件（PRD §15）。
 
 **Commits.** Include the `.todopi/` changes in the same commit as the work they describe,
 and mention the task id in the message.

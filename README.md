@@ -4,7 +4,7 @@ A task ledger for AI coding agents. Each task is a Markdown file in your reposit
 
 [Website](https://todopi.com/) · [简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
-**Version 0.2.1.** The on-disk format is version 1: [format specification](spec/todopi-format-v1.md).
+**Version 0.2.2.** The on-disk format is version 1: [format specification](spec/todopi-format-v1.md).
 
 ## Install
 

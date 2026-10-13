@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- **Verification handoff**: when code is changed but checks are still pending, record the next step with `todopi note TASK_ID --verify-pending "run the checks"`. `prime` and `handoff` carry that worker report into the next session, including when the task summary is shortened to fit the output budget. Withdraw a stale report with `todopi note TASK_ID --clear-verify-pending`.
+- **Passing evidence stays explicit**: a pending report does not claim that checks ran. A normal `todopi done` records `verify=pass` only after its configured verification command succeeds; forced completion remains marked unverified. The task file format stays at version 1.
+
 ## 0.2.1
 
 - **Cursor session end**: return valid JSON from the read-only handoff hook. Re-run `todopi setup cursor` to upgrade a standard project hook in place; customized old hooks are preserved and reported so they can be reviewed separately. Cursor Agent CLI was verified; Cursor IDE chat remains unverified.

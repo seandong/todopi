@@ -4,7 +4,7 @@
 
 [官网](https://todopi.com/) · [English README](README.md) · [更新记录](CHANGELOG.md)
 
-**当前版本 0.2.1。** 磁盘格式版本为 1：[格式规格](spec/todopi-format-v1.md)。
+**当前版本 0.2.2。** 磁盘格式版本为 1：[格式规格](spec/todopi-format-v1.md)。
 
 ## 安装
 
@@ -37,7 +37,7 @@ todopi ls --ready
 todopi prime
 ```
 
-任务文件位于 `.todopi/tasks/`，可以设置依赖。要查看单个任务，在 `todopi show` 后填写 `todopi ls --ready` 列出的实际任务 ID。如果任务配置了 `verify`，`todopi done` 会在关闭前运行该命令；`--force --reason` 的例外会被记录为未经验证。首次执行前先审阅验证命令：交互终端会请求确认；在 Agent 的非交互环境中，审阅后需显式运行 `todopi done TASK_ID --yes`（将 `TASK_ID` 换为实际 ID），否则未信任的验证会被拒绝。
+任务文件位于 `.todopi/tasks/`，可以设置依赖。要查看单个任务，在 `todopi show` 后填写 `todopi ls --ready` 列出的实际任务 ID。代码已改但检查待跑时，可用 `todopi note TASK_ID --verify-pending "运行测试并查看结果"` 记录下一步；新会话的 `prime` 和 `handoff` 会展示这条工作报告。报告过期可用 `todopi note TASK_ID --clear-verify-pending` 撤销，它不代表检查通过。如果任务配置了 `verify`，`todopi done` 会在关闭前运行该命令；`--force --reason` 的例外会被记录为未经验证。首次执行前先审阅验证命令：交互终端会请求确认；在 Agent 的非交互环境中，审阅后需显式运行 `todopi done TASK_ID --yes`（将 `TASK_ID` 换为实际 ID），否则未信任的验证会被拒绝。
 
 ## 边界与文档
 
