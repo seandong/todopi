@@ -8,7 +8,7 @@
 - Last commit: `57e8fff` —— tp-fcnoss 的显式待验证交接已实现并通过独立复审；任务 `done verify=pass commit=57e8fff dirty=false`。`note --verify-pending` / `--clear-verify-pending` 追加 v1 增量 Log 事件，prime/handoff 跨会话展示下一步；预算内短提示、超长最近日志缩略、多持有任务被裁后仍逐项可见。v0.2.1 公开发布仍是最近的发布版本，本次功能尚未发布。
 - `make check`: `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— docs-links / spec-version / prd-present / arch-rules（31/32 通过、1 不适用）/ typecheck。
 - `make test`: 本地 `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— 1029 项通过、0 失败；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
-- `make e2e`: 本地 `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— 完整端到端含 Cursor JSON 输出回归；macOS c14 临时目录 ACL 清理提示 Permission denied，门禁退出 0。远端尚未对本次功能运行 CI。
+- `make e2e`: 本地 `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— 完整端到端含 Cursor JSON 输出回归；macOS c14 临时目录 ACL 清理提示 Permission denied，门禁退出 0。远端 Harness 与 Install 在 `477cefe` 上均通过。
 - `make clean-check`: `pass`（2026-10-13，修复状态文件的 `Last commit` 字段名后在干净提交树重跑）—— 基线、调试残留、状态文件、启动路径四项通过；diff 聚焦已人工核对。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
 - 账本: `.todopi/` 58 个任务，55 个 `closed/done`（含 tp-fcnoss）、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、0 个 `in_progress`。
