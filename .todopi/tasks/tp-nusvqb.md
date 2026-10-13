@@ -1,12 +1,13 @@
 ---
 id: "tp-nusvqb"
 title: "Release v0.2.2 with verification handoff"
-status: "in_progress"
+status: "closed"
+resolution: "done"
 assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0k"
 verify: "make check && make test && make e2e"
 created: "2026-10-13T08:15:24Z"
-updated: "2026-10-13T10:48:13Z"
+updated: "2026-10-13T10:52:19Z"
 ---
 
 ## Description
@@ -34,3 +35,4 @@ Publish the merged explicit verification-pending handoff feature as a patch rele
 - 2026-10-13T10:48:01Z claude-code@Seans-MacBook-Pro.local note: Authorized public release v0.2.2: annotated tag peels to validated main 71b904d. Release 38384943428, tag Harness 38384942609 and Install 38384942489 all succeeded. GitHub Release has seven assets; all four binary archives pass SHA256SUMS. npm todopi@0.2.2 is latest, and registry dist.integrity matches the Release tarball SHA512. Isolated public npm install and verified install.sh binary both report 0.2.2 and doctor passes; npm-written verify_pending appears in prime and binary handoff --check for the same owner. Homebrew tap update skipped (token absent); no personal agent configuration changed.
 - 2026-10-13T10:48:13Z claude-code@Seans-MacBook-Pro.local check ac=3: Push the tested main and v0.2.2 tag; verify npm, GitHub Release assets, checksum
 - 2026-10-13T10:48:13Z claude-code@Seans-MacBook-Pro.local check ac=4: Install the published npm and binary versions in isolation and verify explicit p
+- 2026-10-13T10:52:19Z claude-code@Seans-MacBook-Pro.local done verify=pass commit=bb2612e dirty=false
