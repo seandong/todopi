@@ -6,7 +6,7 @@ assignee: "claude-code@Seans-MacBook-Pro.local"
 rank: "j0k"
 verify: "make check && make test && make e2e"
 created: "2026-10-13T08:15:24Z"
-updated: "2026-10-13T08:51:43Z"
+updated: "2026-10-13T10:48:13Z"
 ---
 
 ## Description
@@ -17,8 +17,8 @@ Publish the merged explicit verification-pending handoff feature as a patch rele
 
 - [x] Synchronize package, runtime, lockfile, generated integration manifests and release documentation at 0.2.2
 - [x] Build and install the candidate npm package and native binary in isolation; pass three local gates and independent review
-- [ ] Push the tested main and v0.2.2 tag; verify npm, GitHub Release assets, checksums and tag CI
-- [ ] Install the published npm and binary versions in isolation and verify explicit pending handoff without touching personal configuration
+- [x] Push the tested main and v0.2.2 tag; verify npm, GitHub Release assets, checksums and tag CI
+- [x] Install the published npm and binary versions in isolation and verify explicit pending handoff without touching personal configuration
 
 ## Log
 
@@ -31,3 +31,6 @@ Publish the merged explicit verification-pending handoff feature as a patch rele
 - 2026-10-13T08:40:34Z claude-code@Seans-MacBook-Pro.local note: Review finding resolved in AGENTS.md: prime and handoff are implemented. Release workflow publishes on tag push, so tag only the exact main SHA after its Harness and Install checks succeed; tag CI is post-publication confirmation, not a pre-publication gate. Second independent review pending.
 - 2026-10-13T08:41:34Z claude-code@Seans-MacBook-Pro.local check ac=2: Build and install the candidate npm package and native binary in isolation; pass
 - 2026-10-13T08:51:43Z claude-code@Seans-MacBook-Pro.local note: Release preparation 71b904d is on main and origin/main; main Harness 38371083972 and Install 38371083981 both succeeded. Attempt to create and push annotated v0.2.2 tag was rejected by Claude Code auto mode: it requires explicit authorization to publish v0.2.2 to public npm. No local or remote tag was created; npm latest remains 0.2.1. Publication, tag CI, public artifacts and public-install criteria are pending; do not claim the release is complete.
+- 2026-10-13T10:48:01Z claude-code@Seans-MacBook-Pro.local note: Authorized public release v0.2.2: annotated tag peels to validated main 71b904d. Release 38384943428, tag Harness 38384942609 and Install 38384942489 all succeeded. GitHub Release has seven assets; all four binary archives pass SHA256SUMS. npm todopi@0.2.2 is latest, and registry dist.integrity matches the Release tarball SHA512. Isolated public npm install and verified install.sh binary both report 0.2.2 and doctor passes; npm-written verify_pending appears in prime and binary handoff --check for the same owner. Homebrew tap update skipped (token absent); no personal agent configuration changed.
+- 2026-10-13T10:48:13Z claude-code@Seans-MacBook-Pro.local check ac=3: Push the tested main and v0.2.2 tag; verify npm, GitHub Release assets, checksum
+- 2026-10-13T10:48:13Z claude-code@Seans-MacBook-Pro.local check ac=4: Install the published npm and binary versions in isolation and verify explicit p
