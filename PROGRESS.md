@@ -9,7 +9,7 @@
 - `make check`: `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— docs-links / spec-version / prd-present / arch-rules（31/32 通过、1 不适用）/ typecheck。
 - `make test`: 本地 `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— 1029 项通过、0 失败；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
 - `make e2e`: 本地 `pass`（2026-10-13，tp-fcnoss 的 `done` verify）—— 完整端到端含 Cursor JSON 输出回归；macOS c14 临时目录 ACL 清理提示 Permission denied，门禁退出 0。远端尚未对本次功能运行 CI。
-- `make clean-check`: 2026-10-13 首次运行 `fail`，状态文件字段名误写为 `Last feature commit`；恢复 `Last commit` 后待在干净提交树重跑。
+- `make clean-check`: `pass`（2026-10-13，修复状态文件的 `Last commit` 字段名后在干净提交树重跑）—— 基线、调试残留、状态文件、启动路径四项通过；diff 聚焦已人工核对。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
 - 账本: `.todopi/` 58 个任务，55 个 `closed/done`（含 tp-fcnoss）、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
