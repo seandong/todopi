@@ -9,7 +9,7 @@
 - `make check`: `pass`（2026-10-13，tp-nusvqb 的 `done` verify）—— docs-links / spec-version / prd-present / arch-rules（31/32 通过、1 不适用）/ typecheck。
 - `make test`: 本地 `pass`（2026-10-13，tp-nusvqb 的 `done` verify）—— 全量测试通过；看板历史偶发失败尚未定位，需在下次复现时保留完整堆栈。
 - `make e2e`: 本地 `pass`（2026-10-13，tp-nusvqb 的 `done` verify）—— 完整端到端通过；macOS c14 临时目录 ACL 清理提示 Permission denied，门禁退出 0。主线 `71b904d` 与标签 `v0.2.2` 的 Harness/Install 均通过。
-- `make clean-check`: 0.2.2 的 `done` 账本与本状态文件提交后在干净树运行；发布阻塞检查点 `412a86a` 上曾通过。
+- `make clean-check`: `pass`（2026-10-13，tp-nusvqb 的 `done` 账本与状态文件提交后）—— 基线、调试残留、状态文件、启动路径通过；发布收尾 diff 已人工核对聚焦。
 - `make audit`（课程校验器）: 本次未重跑；早期结果 58/73 已过期，不能据此判断当前状态。
 - 账本: `.todopi/` 59 个任务，56 个 `closed/done`（含 tp-fcnoss 与 tp-nusvqb）、3 个 `open`（tp-0obw6s 需下一次完整失败堆栈；tp-ujjc6y brew 实测；tp-zagvp5 仅余 Cursor IDE 实机对话验收）、0 个 `in_progress`。
   **`make vcr` 已随 `feature_list.json` 一起删除**（迁移损失表第十一条）；
